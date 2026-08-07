@@ -509,21 +509,92 @@ public final class CampaignManager {
     }
 
     private static String validatePeaceTerms(ServerLevel level, Campaign23Data.PeaceOfferRecord offer, CampaignData.WarRecord war) {
-        Campaign23Data extra = Campaign23Data.get(level); PrototypeData settlements = PrototypeData.get(level);
-        String loserFaction = offer.targetFaction(); PrototypeData.SettlementRecord loserSettlement = settlements.getSettlement(offer.targetSettlement());
+        Campaign23Data extra = Campaign23Data.get(level);
+        PrototypeData settlements = PrototypeData.get(level);
+        String winnerFaction = offer.proposerFaction();
+        String loserFaction = offer.targetFaction();
+        PrototypeData.SettlementRecord winnerSettlement = settlements.getSettlement(offer.proposerSettlement());
+        PrototypeData.SettlementRecord loserSettlement = settlements.getSettlement(offer.targetSettlement());
         int wealthNeed = 0, manpowerNeed = 0;
+
         for (Campaign23Data.PeaceTerm term : offer.terms()) {
-            if (term.type().equals("WEALTH")) wealthNeed += term.amount();
-            if (term.type().equals("MANPOWER")) manpowerNeed += term.amount();
-            if (term.type().equals("TRANSFER_SETTLEMENT") && settlements.getSettlement(term.targetId()) == null) return "a transferred settlement no longer exists";
-            if (term.type().equals("TRANSFER_CLAIM")) { try { UUID.fromString(term.targetId()); } catch (IllegalArgumentException e) { return "an invalid claim was requested"; } }
+            switch (term.type()) {
+                case "WEALTH" -> wealthNeed += term.amount();
+                case "MANPOWER" -> manpowerNeed += term.amount();
+                case "REPARATIONS" -> {
+                    if (winnerFaction.isBlank() || loserFaction.isBlank()) return "recurring reparations require two factions";
+                }
+                case "NAP" -> {
+                    if (winnerFaction.isBlank() || loserFaction.isBlank()) return "a forced NAP requires two factions";
+                }
+                case "CONVERT_FAITH" -> {
+                    if (!CampaignDefinitions.isValidReligion(term.text())) return "the demanded faith is not a valid configured religion";
+                }
+                case "TRANSFER_SETTLEMENT" -> {
+                    PrototypeData.SettlementRecord transferred = settlements.getSettlement(term.targetId());
+                    if (transferred == null) return "a transferred settlement no longer exists";
+                    if (!settlementBelongsToLosingSide(transferred, loserFaction, loserSettlement)) {
+                        return transferred.getName() + " does not belong to the side receiving these demands";
+                    }
+                    if (war.type() == CampaignData.WarType.SETTLEMENT_WAR && loserSettlement != null
+                            && !transferred.getId().equals(loserSettlement.getId())) {
+                        return "a Settlement War may only transfer its defending/negotiating settlement, not unrelated territory";
+                    }
+                }
+                case "TRANSFER_CLAIM" -> {
+                    UUID claimId;
+                    try { claimId = UUID.fromString(term.targetId()); }
+                    catch (IllegalArgumentException e) { return "an invalid claim was requested"; }
+                    PrototypeData.SettlementRecord source = settlementContainingClaim(settlements, claimId);
+                    if (source == null) return "the demanded claim is no longer linked to a settlement";
+                    if (!settlementBelongsToLosingSide(source, loserFaction, loserSettlement)) {
+                        return "the demanded claim is not controlled by the side receiving these demands";
+                    }
+                    PrototypeData.SettlementRecord destination = settlements.getSettlement(term.text());
+                    if (destination == null) return "the destination settlement for a transferred claim no longer exists";
+                    if (!settlementBelongsToWinningSide(destination, winnerFaction, winnerSettlement)) {
+                        return "the claim destination is not controlled by the side proposing these terms";
+                    }
+                    if (source.getId().equals(destination.getId())) return "a claim cannot be transferred back into the same settlement";
+                }
+                case "RECOGNIZE_INDEPENDENCE" -> {
+                    PrototypeData.SettlementRecord released = settlements.getSettlement(term.targetId());
+                    if (released == null) return "the settlement requested for independence no longer exists";
+                    if (loserFaction.isBlank() || !loserFaction.equals(released.getFactionTeam())) {
+                        return "the side receiving these demands does not rule the settlement requested for independence";
+                    }
+                }
+                default -> { }
+            }
         }
+
         int availableWealth = !loserFaction.isBlank() ? extra.factionWealth(loserFaction) : loserSettlement == null ? 0 : loserSettlement.getWealth();
         int availableMp = !loserFaction.isBlank() ? settlements.settlementsForFaction(loserFaction).stream().mapToInt(PrototypeData.SettlementRecord::getAvailableManpower).sum()
                 : loserSettlement == null ? 0 : loserSettlement.getAvailableManpower();
         if (wealthNeed > availableWealth) return "the losing side no longer has the demanded wealth";
         if (manpowerNeed > availableMp) return "the losing side no longer has the demanded manpower";
         return null;
+    }
+
+    private static PrototypeData.SettlementRecord settlementContainingClaim(PrototypeData settlements, UUID claimId) {
+        if (claimId == null) return null;
+        return settlements.getSettlements().stream()
+                .filter(value -> value.getClaimLinks().stream().anyMatch(link -> claimId.equals(link.id())))
+                .findFirst().orElse(null);
+    }
+
+    private static boolean settlementBelongsToLosingSide(PrototypeData.SettlementRecord settlement, String loserFaction,
+                                                          PrototypeData.SettlementRecord loserSettlement) {
+        if (settlement == null) return false;
+        if (loserFaction != null && !loserFaction.isBlank()) return loserFaction.equals(settlement.getFactionTeam());
+        return loserSettlement != null && loserSettlement.getId().equals(settlement.getId());
+    }
+
+    private static boolean settlementBelongsToWinningSide(PrototypeData.SettlementRecord settlement, String winnerFaction,
+                                                           PrototypeData.SettlementRecord winnerSettlement) {
+        if (settlement == null) return false;
+        if (winnerFaction != null && !winnerFaction.isBlank()) return winnerFaction.equals(settlement.getFactionTeam());
+        return winnerSettlement != null && winnerSettlement.getId().equals(settlement.getId());
     }
 
     private static void applyPeaceTerms(ServerLevel level, Campaign23Data.PeaceOfferRecord offer, CampaignData.WarRecord war, long day) {
