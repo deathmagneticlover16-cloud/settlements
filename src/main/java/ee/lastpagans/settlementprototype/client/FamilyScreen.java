@@ -19,7 +19,9 @@ public final class FamilyScreen extends Screen {
     private int top;
     private DropdownWidget candidateDrop;
     private DropdownWidget genderDrop;
+    private DropdownWidget playerDrop;
     private int candidateIndex;
+    private int playerIndex;
 
     public FamilyScreen(FamilySnapshot snapshot) {
         super(Component.literal("Family and Marriage"));
@@ -44,6 +46,14 @@ public final class FamilyScreen extends Screen {
                     .bounds(left + 244, top + 236, 168, 20).build());
             addRenderableWidget(Button.builder(Component.literal("Reject"), button -> rejectSelected())
                     .bounds(left + 418, top + 236, 64, 20).build());
+            if (snapshot.pendingProposer() == null && !snapshot.playerCandidates().isEmpty()) {
+                List<String> players = snapshot.playerCandidates().stream().map(FamilySnapshot.PlayerCandidate::name).toList();
+                playerIndex = Math.max(0, Math.min(playerIndex, players.size() - 1));
+                playerDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 174, 132, 20, players, playerIndex,
+                        value -> playerIndex = Math.max(0, players.indexOf(value))));
+                addRenderableWidget(Button.builder(Component.literal("Propose"), button -> proposePlayer())
+                        .bounds(left + 160, top + 174, 64, 20).build());
+            }
             Button refresh = addRenderableWidget(Button.builder(Component.literal("Generate new candidates"), button -> send("REFRESH"))
                     .bounds(left + 318, top + 292, 164, 18).build());
             refresh.active = snapshot.canRefresh();
@@ -75,6 +85,12 @@ public final class FamilyScreen extends Screen {
         PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket("REJECT_CANDIDATE", candidate.id(), null));
     }
 
+    private void proposePlayer() {
+        if (snapshot.playerCandidates().isEmpty()) return;
+        FamilySnapshot.PlayerCandidate target = snapshot.playerCandidates().get(Math.min(playerIndex, snapshot.playerCandidates().size() - 1));
+        PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket("PROPOSE_PLAYER", "", target.id()));
+    }
+
     private void send(String action) {
         PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket(action, "", null));
     }
@@ -82,6 +98,7 @@ public final class FamilyScreen extends Screen {
     @Override
     public boolean mouseClicked(double x, double y, int button) {
         if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseClicked(x, y, button)) return true;
+        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseClicked(x, y, button)) return true;
         if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseClicked(x, y, button)) return true;
         return super.mouseClicked(x, y, button);
     }
@@ -89,6 +106,7 @@ public final class FamilyScreen extends Screen {
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
         if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseScrolled(x, y, delta)) return true;
+        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseScrolled(x, y, delta)) return true;
         if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseScrolled(x, y, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
@@ -122,6 +140,7 @@ public final class FamilyScreen extends Screen {
                 graphics.drawWordWrap(font, Component.literal(
                         "AI spouse candidates are generated from cultural first-name and family-name pools. Candidate sets persist for seven Minecraft days."
                 ), left + 22, top + 92, 198, 0xFFAAAAAA);
+                if (!snapshot.playerCandidates().isEmpty()) graphics.drawString(font, "PLAYER MARRIAGE", left + 22, top + 157, 0xFFE7D8B0, false);
             }
         }
 

@@ -66,12 +66,13 @@ public final class CharacterSheetScreen extends Screen {
         int x = left + 186;
         int y = top + 68;
         line(graphics, "Faith", snapshot.faith(), x, y);
-        line(graphics, "Faction", snapshot.faction(), x, y + 16);
-        line(graphics, "Faction rank", snapshot.factionRank(), x, y + 32);
-        line(graphics, "Dynasty", blank(snapshot.dynasty()), x, y + 48);
-        line(graphics, "Main house", blank(snapshot.house()), x, y + 64);
-        line(graphics, "Primary seat", blank(snapshot.primarySeat()), x, y + 80);
-        line(graphics, "Spouse", blank(snapshot.spouse()), x, y + 96);
+        line(graphics, "Devotion", snapshot.devotion() + "/100 — " + snapshot.devotionTier(), x, y + 16);
+        line(graphics, "Faction", snapshot.faction(), x, y + 32);
+        line(graphics, "Faction rank", snapshot.factionRank(), x, y + 48);
+        line(graphics, "Dynasty", blank(snapshot.dynasty()), x, y + 64);
+        line(graphics, "Main house", blank(snapshot.house()), x, y + 80);
+        line(graphics, "Primary seat", blank(snapshot.primarySeat()), x, y + 96);
+        line(graphics, "Spouse", blank(snapshot.spouse()), x, y + 112);
 
         graphics.drawString(font, "CHARACTER TRAITS", x, top + 191, 0xFFE7D8B0, false);
         CharacterSnapshot.TraitEntry hovered = null;

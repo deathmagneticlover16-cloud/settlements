@@ -20,6 +20,7 @@ public record FamilySnapshot(
         String preferredGender,
         UUID pendingProposer,
         String pendingProposerName,
+        List<PlayerCandidate> playerCandidates,
         List<Candidate> candidates,
         long currentDay,
         long nextRefreshDay,
@@ -70,6 +71,18 @@ public record FamilySnapshot(
             pendingName = proposer != null && proposer.isCreated() ? proposer.getDisplayName() : pending.toString();
         }
 
+        List<PlayerCandidate> playerCandidates = player.getServer().getPlayerList().getPlayers().stream()
+                .filter(other -> !other.getUUID().equals(player.getUUID()))
+                .filter(other -> campaign.getMarriage(other.getUUID()) == null)
+                .map(other -> {
+                    PrototypeData.CharacterRecord otherCharacter = characters.getCharacter(other.getUUID());
+                    return otherCharacter != null && otherCharacter.isCreated()
+                            ? new PlayerCandidate(other.getUUID(), otherCharacter.getDisplayName()) : null;
+                })
+                .filter(java.util.Objects::nonNull)
+                .sorted(java.util.Comparator.comparing(PlayerCandidate::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+
         List<Candidate> candidates = campaign.candidatesFor(player.getUUID(), day).stream()
                 .filter(value -> !history.rejectedIds().contains(value.id()))
                 .filter(value -> preferredGender.equals("ANY") || value.gender().equalsIgnoreCase(preferredGender))
@@ -91,6 +104,7 @@ public record FamilySnapshot(
                 preferredGender,
                 pending,
                 pendingName,
+                playerCandidates,
                 candidates,
                 day,
                 campaign.nextCandidateRefreshDay(player.getUUID()),
@@ -120,6 +134,8 @@ public record FamilySnapshot(
         buffer.writeBoolean(pendingProposer != null);
         if (pendingProposer != null) buffer.writeUUID(pendingProposer);
         buffer.writeUtf(pendingProposerName, 80);
+        buffer.writeVarInt(playerCandidates.size());
+        playerCandidates.forEach(candidate -> candidate.encode(buffer));
         buffer.writeVarInt(candidates.size());
         candidates.forEach(candidate -> candidate.encode(buffer));
         buffer.writeLong(currentDay);
@@ -141,6 +157,9 @@ public record FamilySnapshot(
         String preferredGender = buffer.readUtf(12);
         UUID pending = buffer.readBoolean() ? buffer.readUUID() : null;
         String pendingName = buffer.readUtf(80);
+        int playerCount = Math.min(64, buffer.readVarInt());
+        List<PlayerCandidate> playerCandidates = new ArrayList<>(playerCount);
+        for (int i = 0; i < playerCount; i++) playerCandidates.add(PlayerCandidate.decode(buffer));
         int count = Math.min(64, buffer.readVarInt());
         List<Candidate> candidates = new ArrayList<>(count);
         for (int i = 0; i < count; i++) candidates.add(Candidate.decode(buffer));
@@ -148,8 +167,13 @@ public record FamilySnapshot(
         long nextRefreshDay = buffer.readLong();
         boolean canRefresh = buffer.readBoolean();
         return new FamilySnapshot(name, married, spouseName, spouseFaith, spouseCulture, spouseTraits,
-                spouseEffect, playerSpouse, canDivorce, preferredGender, pending, pendingName, candidates, currentDay, nextRefreshDay,
+                spouseEffect, playerSpouse, canDivorce, preferredGender, pending, pendingName, playerCandidates, candidates, currentDay, nextRefreshDay,
                 canRefresh, buffer.readUtf(256));
+    }
+
+    public record PlayerCandidate(UUID id, String name) {
+        private void encode(FriendlyByteBuf buffer) { buffer.writeUUID(id); buffer.writeUtf(name, 80); }
+        private static PlayerCandidate decode(FriendlyByteBuf buffer) { return new PlayerCandidate(buffer.readUUID(), buffer.readUtf(80)); }
     }
 
     public record Candidate(

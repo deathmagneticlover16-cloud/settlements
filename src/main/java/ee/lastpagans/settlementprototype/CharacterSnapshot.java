@@ -13,6 +13,8 @@ public record CharacterSnapshot(
         String displayName,
         String titleLine,
         String faith,
+        int devotion,
+        String devotionTier,
         String address,
         String dynasty,
         String house,
@@ -26,11 +28,13 @@ public record CharacterSnapshot(
     public static CharacterSnapshot from(PrototypeData data, ServerPlayer player) {
         PrototypeData.CharacterRecord character = data.getCharacter(player.getUUID());
         if (character == null) {
-            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", "", "", "",
+            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", 0, "Uncommitted", "", "", "",
                     "Independent", "", "", "", List.of(), List.of());
         }
 
         CampaignData campaign = CampaignData.get(player.serverLevel());
+        int devotion = Campaign23Data.get(player.serverLevel()).devotion(player.getUUID());
+        String devotionTier = devotion >= 90 ? "Exalted" : devotion >= 70 ? "Devout" : devotion >= 45 ? "Faithful" : devotion >= 20 ? "Observant" : "Uncommitted";
         String factionId = player.getTeam() == null ? "" : player.getTeam().getName();
         String factionName = "Independent";
         boolean factionLeader = false;
@@ -84,6 +88,8 @@ public record CharacterSnapshot(
                 character.getDisplayName(),
                 titleLine,
                 character.getFaith(),
+                devotion,
+                devotionTier,
                 character.getAddress(),
                 character.getDynasty(),
                 character.getHouse(),
@@ -101,6 +107,8 @@ public record CharacterSnapshot(
         buffer.writeUtf(displayName, 80);
         buffer.writeUtf(titleLine, 96);
         buffer.writeUtf(faith, 48);
+        buffer.writeInt(devotion);
+        buffer.writeUtf(devotionTier, 24);
         buffer.writeUtf(address, 16);
         buffer.writeUtf(dynasty, 32);
         buffer.writeUtf(house, 32);
@@ -119,6 +127,8 @@ public record CharacterSnapshot(
         String displayName = buffer.readUtf(80);
         String titleLine = buffer.readUtf(96);
         String faith = buffer.readUtf(48);
+        int devotion = buffer.readInt();
+        String devotionTier = buffer.readUtf(24);
         String address = buffer.readUtf(16);
         String dynasty = buffer.readUtf(32);
         String house = buffer.readUtf(32);
@@ -132,7 +142,7 @@ public record CharacterSnapshot(
         int traitCount = Math.min(32, buffer.readVarInt());
         List<TraitEntry> traits = new ArrayList<>(traitCount);
         for (int i = 0; i < traitCount; i++) traits.add(TraitEntry.decode(buffer));
-        return new CharacterSnapshot(accountName, displayName, titleLine, faith, address, dynasty, house,
+        return new CharacterSnapshot(accountName, displayName, titleLine, faith, devotion, devotionTier, address, dynasty, house,
                 faction, factionRank, primarySeat, spouse, holdings, traits);
     }
 

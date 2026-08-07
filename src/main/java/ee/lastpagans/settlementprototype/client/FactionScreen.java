@@ -25,6 +25,7 @@ public final class FactionScreen extends Screen {
     private DropdownWidget memberDrop;
     private DropdownWidget rankDrop;
     private DropdownWidget titleRankDrop;
+    private DropdownWidget settlementDrop;
     private EditBox titleEdit;
     private EditBox factionNameEdit;
     private DropdownWidget teamColorDrop;
@@ -34,6 +35,7 @@ public final class FactionScreen extends Screen {
     private int memberIndex;
     private int rankIndex;
     private int titleRankIndex;
+    private int settlementIndex;
 
     public FactionScreen(FactionSnapshot snapshot) {
         super(Component.literal("Faction"));
@@ -62,6 +64,7 @@ public final class FactionScreen extends Screen {
         memberDrop = null;
         rankDrop = null;
         titleRankDrop = null;
+        settlementDrop = null;
         titleEdit = null;
         factionNameEdit = null;
         teamColorDrop = null;
@@ -134,6 +137,18 @@ public final class FactionScreen extends Screen {
             addRenderableWidget(Button.builder(Component.literal("Rename"), button -> renameRank())
                     .bounds(left + 432, top + 276, 106, 20).build());
         }
+        if (tab == Tab.SETTLEMENTS && snapshot.viewerLeader() && !snapshot.settlements().isEmpty()) {
+            List<String> names = snapshot.settlements().stream().map(FactionSnapshot.SettlementEntry::name).toList();
+            settlementIndex = Math.max(0, Math.min(settlementIndex, names.size() - 1));
+            settlementDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 276, 190, 20, names, settlementIndex,
+                    value -> settlementIndex = Math.max(0, names.indexOf(value))));
+            addRenderableWidget(Button.builder(Component.literal("Set Capital"), button -> factionSettlementAction("SET_CAPITAL"))
+                    .bounds(left + 218, top + 276, 96, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("+100 Treasury"), button -> factionSettlementAction("TREASURY_DEPOSIT"))
+                    .bounds(left + 320, top + 276, 104, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("-100 Treasury"), button -> factionSettlementAction("TREASURY_WITHDRAW"))
+                    .bounds(left + 430, top + 276, 108, 20).build());
+        }
     }
 
     private void createFaction() {
@@ -143,6 +158,12 @@ public final class FactionScreen extends Screen {
         String[] formatting = {"WHITE","RED","DARK_RED","GOLD","YELLOW","GREEN","DARK_GREEN","AQUA","DARK_AQUA","BLUE","DARK_BLUE","LIGHT_PURPLE","DARK_PURPLE","GRAY","DARK_GRAY","BLACK"};
         String teamColor = formatting[Math.max(0, Math.min(teamColorIndex, formatting.length - 1))];
         PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("CREATE_FACTION", null, Math.max(0, Math.min(15, unitColorIndex)), teamColor + "|" + name));
+    }
+
+    private void factionSettlementAction(String action) {
+        if (snapshot.settlements().isEmpty()) return;
+        FactionSnapshot.SettlementEntry settlement = snapshot.settlements().get(Math.min(settlementIndex, snapshot.settlements().size() - 1));
+        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket(action, null, 100, settlement.id()));
     }
 
     private void renameRank() {
@@ -169,6 +190,7 @@ public final class FactionScreen extends Screen {
         if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseClicked(x, y, button)) return true;
         if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseClicked(x, y, button)) return true;
         if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseClicked(x, y, button)) return true;
+        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseClicked(x, y, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
@@ -179,6 +201,7 @@ public final class FactionScreen extends Screen {
         if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseScrolled(x, y, delta)) return true;
         if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseScrolled(x, y, delta)) return true;
         if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseScrolled(x, y, delta)) return true;
+        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseScrolled(x, y, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
 
@@ -222,8 +245,9 @@ public final class FactionScreen extends Screen {
         stat(graphics, "Settlements", snapshot.settlements().size(), 24, 130);
         stat(graphics, "Realm population", snapshot.realmPopulation(), 24, 150);
         stat(graphics, "Settlement wealth", snapshot.realmWealth(), 24, 170);
-        stat(graphics, "Military roster", fit(snapshot.rosterName(), 150), 24, 190);
-        stat(graphics, "Active wars", snapshot.activeWars(), 24, 210);
+        stat(graphics, "Faction treasury", snapshot.factionTreasury(), 24, 190);
+        stat(graphics, "Military roster", fit(snapshot.rosterName(), 150), 24, 210);
+        stat(graphics, "Active wars", snapshot.activeWars(), 24, 230);
         graphics.drawString(font, "Allies", left + 300, top + 110, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal(snapshot.allies().isEmpty() ? "None" : String.join(", ", snapshot.allies())),
                 left + 300, top + 128, 226, 0xFFCCCCCC);

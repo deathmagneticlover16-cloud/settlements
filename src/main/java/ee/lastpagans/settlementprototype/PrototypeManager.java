@@ -119,19 +119,26 @@ public final class PrototypeManager {
 
     public static boolean canView(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
         if (player.createCommandSourceStack().hasPermission(2)) return true;
-        if (settlement.getRole(player.getUUID()) != PrototypeData.SettlementRole.OUTSIDER) return true;
-        Team team = player.getTeam();
-        return team != null && team.getName().equals(settlement.getFactionTeam());
+
+        String factionId = settlement.getFactionTeam();
+        if (factionId != null && !factionId.isBlank()) {
+            Team team = player.getTeam();
+            return team != null && team.getName().equals(factionId);
+        }
+
+        return settlement.getRole(player.getUUID()) != PrototypeData.SettlementRole.OUTSIDER;
     }
 
     public static boolean canManage(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
-        return player.createCommandSourceStack().hasPermission(2)
-                || settlement.getRole(player.getUUID()).canManage();
+        if (player.createCommandSourceStack().hasPermission(2)) return true;
+        return canView(player, settlement) && settlement.getRole(player.getUUID()).canManage();
     }
 
     public static boolean canContribute(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
-        return canManage(player, settlement)
-                || settlement.getRole(player.getUUID()) == PrototypeData.SettlementRole.CITIZEN;
+        if (player.createCommandSourceStack().hasPermission(2)) return true;
+        if (!canView(player, settlement)) return false;
+        PrototypeData.SettlementRole role = settlement.getRole(player.getUUID());
+        return role.canManage() || role == PrototypeData.SettlementRole.CITIZEN;
     }
 
     public static void handleAction(ServerPlayer player, String settlementId, SettlementAction action) {
@@ -795,6 +802,14 @@ public final class PrototypeManager {
                 applySettlementMorale(recruit, settlement, settlements, campaign);
             }
         }
+        if (SettlementConfig.ENABLE_RECRUIT_LEVEL_OVERRIDE.get()) {
+            int cap = SettlementConfig.RECRUIT_LEVEL_CAP.get();
+            for (ServerLevel level : server.getAllLevels()) {
+                for (Entity entity : level.getAllEntities()) {
+                    if (entity instanceof AbstractRecruitEntity recruit && recruit.getXpLevel() > cap) recruit.setXpLevel(cap);
+                }
+            }
+        }
     }
 
     /** Admin/debug hook: makes every loaded tracked mercenary in a faction immediately due and processes payment once. */
@@ -918,6 +933,8 @@ public final class PrototypeManager {
         if (marriage != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)) target += marriage.moraleBonus();
         if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())
                 && recruit.blockPosition().closerThan(settlement.getBarracks(), settlement.getBarracksRadius())) target += 8;
+        Campaign23Data extra = Campaign23Data.get((ServerLevel) recruit.level());
+        for (Campaign23Data.ModifierRecord modifier : extra.modifiers(settlement.getId())) target += modifier.morale;
         if (recruit.getPersistentData().getBoolean(TAG_MERCENARY)) {
             target -= recruit.getPersistentData().getInt(TAG_MERCENARY_MISSED_PAYMENTS) * 12;
         }

@@ -94,6 +94,7 @@ public final class Campaign23Manager {
         Campaign23Data extra = Campaign23Data.get(server.overworld());
         for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
             extra.expireModifiers(settlement.getId());
+            updateReligiousUnrest(server, settlement, extra, settlements);
             int prosperity = recalculateProsperity(settlement, extra);
             applyDailyModifierEffects(settlement, extra, day);
             updateSettlementTier(server.overworld(), settlement, prosperity, extra);
@@ -104,6 +105,34 @@ public final class Campaign23Manager {
         processReparations(server, extra, day);
         processForcedNapExpiry(server, extra, day);
         processDevotionSites(server, extra, settlements, day);
+    }
+
+    private static void updateReligiousUnrest(MinecraftServer server, PrototypeData.SettlementRecord settlement, Campaign23Data extra, PrototypeData settlements) {
+        String factionId = settlement.getFactionTeam();
+        boolean unrest = false;
+        if (!factionId.isBlank()) {
+            String ownFaith = factionLeaderFaith(factionId, settlements);
+            CampaignData campaign = CampaignData.get(server.overworld());
+            for (CampaignData.DiplomacyRecord relation : campaign.getDiplomacy()) {
+                if (!relation.state().isAlliance()) continue;
+                String other = factionId.equals(relation.firstFaction()) ? relation.secondFaction()
+                        : factionId.equals(relation.secondFaction()) ? relation.firstFaction() : "";
+                if (other.isBlank()) continue;
+                String otherFaith = factionLeaderFaith(other, settlements);
+                if (CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith) <= -8) { unrest = true; break; }
+            }
+        }
+        boolean present = extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals("local_religious_unrest"));
+        if (unrest && !present) extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), "local_religious_unrest", 0));
+        else if (!unrest && present) extra.removeModifier(settlement.getId(), "local_religious_unrest");
+    }
+
+    private static String factionLeaderFaith(String factionId, PrototypeData settlements) {
+        if (factionId == null || factionId.isBlank() || com.talhanation.recruits.FactionEvents.recruitsFactionManager == null) return "";
+        com.talhanation.recruits.world.RecruitsFaction faction = com.talhanation.recruits.FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (faction == null || faction.getTeamLeaderUUID() == null) return "";
+        PrototypeData.CharacterRecord leader = settlements.getCharacter(faction.getTeamLeaderUUID());
+        return leader == null ? "" : leader.getFaith();
     }
 
     private static void processDevotionSites(MinecraftServer server, Campaign23Data extra, PrototypeData settlements, long day) {
@@ -208,15 +237,17 @@ public final class Campaign23Manager {
                 ? PrototypeManager.SMALL_LEVY_SHARE : PrototypeManager.NORMAL_LEVY_SHARE;
         int desiredManpower = Math.max(1, (int)Math.floor(available * share));
         int desiredUnits = desiredManpower * 2;
-        int playerRemaining = Math.max(0, PLAYER_LEVY_CAP - deployedForPlayer(extra, player.getUUID()));
-        int factionRemaining = Math.max(0, FACTION_LEVY_CAP - deployedForFaction(extra, settlement.getFactionTeam()));
+        int playerCap = SettlementConfig.PLAYER_LEVY_CAP.get();
+        int factionCap = SettlementConfig.FACTION_LEVY_CAP.get();
+        int playerRemaining = Math.max(0, playerCap - deployedForPlayer(extra, player.getUUID()));
+        int factionRemaining = Math.max(0, factionCap - deployedForFaction(extra, settlement.getFactionTeam()));
         int groundRemaining = (int)Math.min(Integer.MAX_VALUE, area.horizontalArea());
         int allowedUnits = Math.min(desiredUnits, Math.min(playerRemaining, Math.min(factionRemaining, groundRemaining)));
         allowedUnits -= allowedUnits % 2;
         if (allowedUnits <= 0) {
             if (groundRemaining <= 0) return "Your Muster Ground has no usable capacity.";
-            if (playerRemaining <= 0) return "You already have the maximum 300 deployed levymen.";
-            if (factionRemaining <= 0) return "Your faction already has the maximum 500 deployed levymen.";
+            if (playerRemaining <= 0) return "You already have the maximum " + playerCap + " deployed levymen.";
+            if (factionRemaining <= 0) return "Your faction already has the maximum " + factionCap + " deployed levymen.";
             return "This levy cannot be raised right now.";
         }
         int manpowerSpent = allowedUnits / 2;
@@ -274,11 +305,17 @@ public final class Campaign23Manager {
                         mobilization.spawnedUnits, team, true, mobilization.batchId);
                 if (recruit == null) break;
                 assignLevyOwner(recruit, owner, group, level);
-                int maxHealth = mobilization.totalUnits < 100 ? 12 : 10;
+                int traitHealth = 0;
+                PrototypeData.CharacterRecord commander = settlements.getCharacter(owner.getUUID());
+                if (commander != null) traitHealth = CampaignDefinitions.totalEffect(commander.getTraits(), CampaignDefinitions.EffectKind.LEVY_HEALTH);
+                int maxHealth = (mobilization.totalUnits < 100 ? SettlementConfig.SMALL_LEVY_HEALTH.get() : SettlementConfig.LARGE_LEVY_HEALTH.get()) + traitHealth;
                 AttributeInstance health = recruit.getAttribute(Attributes.MAX_HEALTH);
                 if (health != null) health.setBaseValue(maxHealth);
                 recruit.setHealth(maxHealth);
-                if (recruit.getXpLevel() > LEVY_LEVEL_CAP) recruit.setXpLevel(LEVY_LEVEL_CAP);
+                int startXp = commander == null ? 0 : CampaignDefinitions.totalEffect(commander.getTraits(), CampaignDefinitions.EffectKind.LEVY_XP);
+                if (startXp > 0) recruit.addXp(startXp);
+                int levyCap = SettlementConfig.effectiveLevyLevelCap();
+                if (recruit.getXpLevel() > levyCap) recruit.setXpLevel(levyCap);
                 settlement.addLevymanToBatch(mobilization.batchId, recruit.getUUID());
                 mobilization.spawnedUnits++;
             }
@@ -369,7 +406,7 @@ public final class Campaign23Manager {
             // Enforce the low level cap while preserving XP earned in real combat below that cap.
             for (UUID unitId : settlement.getLevyUnitsForBatch(deployment.batchId)) {
                 Entity entity = findEntity(server, unitId);
-                if (entity instanceof AbstractRecruitEntity recruit && recruit.getXpLevel() > LEVY_LEVEL_CAP) recruit.setXpLevel(LEVY_LEVEL_CAP);
+                if (entity instanceof AbstractRecruitEntity recruit) { int cap = SettlementConfig.effectiveLevyLevelCap(); if (recruit.getXpLevel() > cap) recruit.setXpLevel(cap); }
             }
         }
     }

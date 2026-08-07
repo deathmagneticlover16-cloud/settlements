@@ -23,6 +23,7 @@ public record FactionSnapshot(
         String viewerRank,
         String rosterName,
         int realmWealth,
+        int factionTreasury,
         int realmPopulation,
         int activeWars,
         List<MemberEntry> members,
@@ -36,13 +37,13 @@ public record FactionSnapshot(
         String factionId = player.getTeam() == null ? "" : player.getTeam().getName();
         if (factionId.isBlank() || FactionEvents.recruitsFactionManager == null) {
             return new FactionSnapshot("", "Independent", new CompoundTag(), "None", false, "Independent",
-                    "None", 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(),
+                    "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(),
                     message == null ? "" : message);
         }
         RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
         if (faction == null) {
             return new FactionSnapshot(factionId, factionId, new CompoundTag(), "Unknown", false, "Commoner",
-                    "None", 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(),
+                    "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(),
                     message == null ? "" : message);
         }
 
@@ -107,6 +108,7 @@ public record FactionSnapshot(
                 viewerRank,
                 owned.isEmpty() ? campaign.getDefaultRosterId() : campaign.assignedRosterName(owned.get(0)),
                 owned.stream().mapToInt(PrototypeData.SettlementRecord::getWealth).sum(),
+                Campaign23Data.get(player.serverLevel()).factionWealth(factionId),
                 owned.stream().mapToInt(PrototypeData.SettlementRecord::getDisplayedPopulation).sum(),
                 campaign.activeWarsFor(factionId).size(),
                 members,
@@ -133,6 +135,7 @@ public record FactionSnapshot(
         buffer.writeUtf(viewerRank, 32);
         buffer.writeUtf(rosterName, 64);
         buffer.writeVarInt(realmWealth);
+        buffer.writeVarInt(factionTreasury);
         buffer.writeVarInt(realmPopulation);
         buffer.writeVarInt(activeWars);
         writeList(buffer, members, MemberEntry::encode);
@@ -153,6 +156,7 @@ public record FactionSnapshot(
         String viewerRank = buffer.readUtf(32);
         String rosterName = buffer.readUtf(64);
         int wealth = buffer.readVarInt();
+        int treasury = buffer.readVarInt();
         int population = buffer.readVarInt();
         int activeWars = buffer.readVarInt();
         List<MemberEntry> members = readList(buffer, MemberEntry::decode, 512);
@@ -165,7 +169,7 @@ public record FactionSnapshot(
         for (int i = 0; i < enemyCount; i++) enemies.add(buffer.readUtf(64));
         List<RankEntry> ranks = readList(buffer, RankEntry::decode, 16);
         return new FactionSnapshot(factionId, factionName, banner, leaderName, viewerLeader, viewerRank, rosterName,
-                wealth, population, activeWars, members, settlements, allies, enemies, ranks, buffer.readUtf(256));
+                wealth, treasury, population, activeWars, members, settlements, allies, enemies, ranks, buffer.readUtf(256));
     }
 
     private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, Encoder<T> encoder) {

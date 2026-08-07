@@ -28,6 +28,7 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, Integer> devotion = new HashMap<>();
     private final Map<UUID, Long> lastHolyVisitDay = new HashMap<>();
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
+    private final Map<UUID, Integer> divorceCount = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
     private final Map<String, Long> debugTimeOffsetMillis = new HashMap<>();
     private final Map<String, Long> lastModifierDay = new HashMap<>();
@@ -60,6 +61,7 @@ public final class Campaign23Data extends SavedData {
         readUuidIntMap(tag, "Devotion", data.devotion);
         readUuidLongMap(tag, "LastHolyVisitDay", data.lastHolyVisitDay);
         readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
+        readUuidIntMap(tag, "DivorceCount", data.divorceCount);
         readStringIntMap(tag, "Prosperity", data.prosperity);
         readStringLongMap(tag, "DebugOffsets", data.debugTimeOffsetMillis);
         readStringLongMap(tag, "LastModifierDay", data.lastModifierDay);
@@ -145,6 +147,7 @@ public final class Campaign23Data extends SavedData {
         writeUuidIntMap(tag, "Devotion", devotion);
         writeUuidLongMap(tag, "LastHolyVisitDay", lastHolyVisitDay);
         writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
+        writeUuidIntMap(tag, "DivorceCount", divorceCount);
         writeStringIntMap(tag, "Prosperity", prosperity);
         writeStringLongMap(tag, "DebugOffsets", debugTimeOffsetMillis);
         writeStringLongMap(tag, "LastModifierDay", lastModifierDay);
@@ -196,6 +199,8 @@ public final class Campaign23Data extends SavedData {
     public long lastPrayerDay(UUID player) { return lastPrayerDay.getOrDefault(player, Long.MIN_VALUE / 4); }
     public void markHolyVisit(UUID player, long day) { if (player != null) { lastHolyVisitDay.put(player, day); setDirty(); } }
     public void markPrayer(UUID player, long day) { if (player != null) { lastPrayerDay.put(player, day); setDirty(); } }
+    public int divorceCount(UUID player) { return divorceCount.getOrDefault(player, 0); }
+    public int incrementDivorceCount(UUID player) { if (player == null) return 0; int value = divorceCount(player) + 1; divorceCount.put(player, value); setDirty(); return value; }
 
     public int prosperity(String settlement) { return prosperity.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setProsperity(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
@@ -276,6 +281,9 @@ public final class Campaign23Data extends SavedData {
     public void resetPlayerData(UUID player) {
         if (player == null) return;
         devotion.remove(player);
+        divorceCount.remove(player);
+        lastHolyVisitDay.remove(player);
+        lastPrayerDay.remove(player);
         levyCooldownUntil.remove(player);
         levyMobilizations.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
         levyDeployments.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));

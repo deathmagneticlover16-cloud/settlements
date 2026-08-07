@@ -139,7 +139,24 @@ public record PrototypeSnapshot(
             String tone = marriage.stabilityBonus() + marriage.wealthPerDay() + marriage.moraleBonus() >= 0 ? "POSITIVE" : "NEGATIVE";
             values.add(new EffectEntry("Spouse: " + marriage.spouseName(), "Marriage", "minecraft:rose_bush", tone, details, "While married"));
         }
-        return values.stream().limit(24).toList();
+
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        for (Campaign23Data.ModifierRecord modifier : extra.modifiers(settlement.getId())) {
+            long remaining = modifier.expiresAtMillis <= 0L ? -1L : Math.max(0L, modifier.expiresAtMillis - extra.nowMillis(settlement.getId()));
+            String duration = remaining < 0L ? "Persistent" : formatDuration(remaining);
+            String detail = modifier.detail;
+            List<String> mechanical = new ArrayList<>();
+            if (modifier.stabilityPerDay != 0) mechanical.add(signed(modifier.stabilityPerDay) + " daily stability");
+            if (modifier.prosperity != 0) mechanical.add(signed(modifier.prosperity) + " prosperity");
+            if (modifier.morale != 0) mechanical.add(signed(modifier.morale) + " recruit morale");
+            if (!mechanical.isEmpty()) detail = detail.isBlank() ? String.join(", ", mechanical) : detail + " — " + String.join(", ", mechanical);
+            values.add(new EffectEntry(modifier.name, modifier.source, modifier.iconItem, modifier.tone, detail, duration));
+        }
+        int prosperity = extra.prosperity(settlement.getId());
+        values.add(new EffectEntry("Prosperity: " + prosperity + "/100", "Settlement economy", "minecraft:emerald",
+                prosperity >= 65 ? "POSITIVE" : prosperity < 30 ? "NEGATIVE" : "MIXED",
+                prosperity >= 65 ? "A strong economy supports settlement growth and advancement." : prosperity < 30 ? "Weak economic activity is holding the settlement back." : "The settlement economy is stable but unexceptional.", "Current"));
+        return values.stream().limit(32).toList();
     }
 
     private static String joinEffects(int stability, int wealth, int morale) {
@@ -148,6 +165,16 @@ public record PrototypeSnapshot(
         if (wealth != 0) parts.add(signed(wealth) + " daily wealth");
         if (morale != 0) parts.add(signed(morale) + " recruit morale target");
         return String.join(", ", parts);
+    }
+
+    private static String formatDuration(long millis) {
+        long totalMinutes = Math.max(1L, millis / 60000L);
+        long days = totalMinutes / (24L * 60L);
+        long hours = (totalMinutes / 60L) % 24L;
+        long minutes = totalMinutes % 60L;
+        if (days > 0) return days + "d " + hours + "h";
+        if (hours > 0) return hours + "h " + minutes + "m";
+        return minutes + "m";
     }
 
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }

@@ -94,7 +94,7 @@ public final class PrototypeCommands {
                 .then(Commands.literal("clearclaims")
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .executes(context -> clearClaims(context.getSource(), StringArgumentType.getString(context, "id")))))
-                .then(Commands.literal("rank")
+                .then(Commands.literal("rank").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .then(Commands.argument("rank", StringArgumentType.word())
                                         .executes(context -> setRank(
@@ -102,7 +102,7 @@ public final class PrototypeCommands {
                                                 StringArgumentType.getString(context, "id"),
                                                 StringArgumentType.getString(context, "rank")
                                         )))))
-                .then(Commands.literal("housing")
+                .then(Commands.literal("housing").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .then(Commands.argument("capacity", IntegerArgumentType.integer(0))
                                         .executes(context -> setHousing(

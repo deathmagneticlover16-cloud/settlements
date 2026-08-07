@@ -122,6 +122,40 @@ public final class CampaignManager {
                     result = "Tier " + Math.max(0, Math.min(4, tier)) + " title updated.";
                 }
             }
+            case "SET_CAPITAL" -> {
+                if (!leader) result = "Only the faction leader may designate the capital.";
+                else {
+                    PrototypeData settlements = PrototypeData.get(player.serverLevel());
+                    PrototypeData.SettlementRecord target = settlements.getSettlement(value);
+                    if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
+                    else {
+                        for (PrototypeData.SettlementRecord settlement : settlements.settlementsForFaction(factionId)) {
+                            if (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL && settlement != target) settlement.setRank(PrototypeData.SettlementRank.TOWN);
+                        }
+                        target.setRank(PrototypeData.SettlementRank.CAPITAL);
+                        target.addChronicle("Designated as the faction capital.");
+                        result = target.getName() + " is now the faction capital.";
+                    }
+                }
+            }
+            case "TREASURY_DEPOSIT" -> {
+                PrototypeData.SettlementRecord target = PrototypeData.get(player.serverLevel()).getSettlement(value);
+                int amount = Math.max(1, tier);
+                if (!leader) result = "Only the faction leader may manage the faction treasury.";
+                else if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
+                else if (!PrototypeManager.canManage(player, target)) result = "You must manage that settlement to move its wealth into the faction treasury.";
+                else if (!target.spendWealth(amount)) result = target.getName() + " does not have " + amount + " wealth available.";
+                else { Campaign23Data.get(player.serverLevel()).changeFactionWealth(factionId, amount); result = amount + " wealth moved from " + target.getName() + " to the faction treasury."; }
+            }
+            case "TREASURY_WITHDRAW" -> {
+                PrototypeData.SettlementRecord target = PrototypeData.get(player.serverLevel()).getSettlement(value);
+                int amount = Math.max(1, tier);
+                Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+                if (!leader) result = "Only the faction leader may manage the faction treasury.";
+                else if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
+                else if (!extra.spendFactionWealth(factionId, amount)) result = "The faction treasury does not contain " + amount + " wealth.";
+                else { target.changeWealth(amount); result = amount + " wealth moved from the faction treasury to " + target.getName() + "."; }
+            }
             default -> result = "Unknown faction action.";
         }
         openFaction(player, result);
@@ -723,6 +757,17 @@ public final class CampaignManager {
                     String firstFaction = factionId(player);
                     String secondFaction = spouseId == null ? "" : factionForPlayerId(player.getServer(), spouseId);
                     data.divorce(player.getUUID());
+                    Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+                    int divorces = extra.incrementDivorceCount(player.getUUID());
+                    PrototypeData.SettlementRecord capital = PrototypeData.get(player.serverLevel()).getOwnedSettlements(player.getUUID()).stream()
+                            .filter(s -> s.getRank() == PrototypeData.SettlementRank.CAPITAL || s.getRank() == PrototypeData.SettlementRank.CITY_STATE)
+                            .findFirst().orElse(null);
+                    if (capital != null) {
+                        int penalty = -Math.min(8, 2 * divorces);
+                        long expires = extra.nowMillis(capital.getId()) + 3L * 24L * 60L * 60L * 1000L;
+                        extra.addModifier(capital.getId(), new Campaign23Data.ModifierRecord("marital_scandal", "Marital Scandal", "minecraft:torn_banner_pattern", "NEGATIVE",
+                                "Repeated divorce", "Repeated political marriages and divorces have damaged confidence in the ruler.", penalty, penalty / 2, 0, expires));
+                    }
                     if (!firstFaction.isBlank() && !secondFaction.isBlank() && !firstFaction.equals(secondFaction)) {
                         Campaign23Data.get(player.serverLevel()).removeMarriageAlliance(firstFaction, secondFaction);
                         CampaignToastSender.faction(player.getServer(), firstFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(secondFaction) + " has ended.");
