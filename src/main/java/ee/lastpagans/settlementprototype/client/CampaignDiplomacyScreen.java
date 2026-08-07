@@ -172,29 +172,36 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             boolean viewerJoinedSettlementWar = settlementWar
                     && ((war.viewerIsAttackerParent() && war.attackerFactionJoined())
                     || (war.viewerIsDefenderParent() && war.defenderFactionJoined()));
+            long recurringAid = snapshot.aid().stream().filter(aid -> war.id().equals(aid.warId()) && aid.recurring()).count();
+            boolean viewerIsParent = war.viewerIsAttackerParent() || war.viewerIsDefenderParent();
+            boolean maySendAid = snapshot.canManage() && viewerIsParent;
+
             if (settlementWar && !fullFactionConflict) {
-                int actionX = left + 300;
                 if (!viewerJoinedSettlementWar && war.viewerIsDefenderParent()) {
                     Button ignore = addRenderableWidget(Button.builder(Component.literal(war.viewerIgnoredIntervention() ? "Ignored" : "Ignore"), b -> sendToFaction("IGNORE_SETTLEMENT_WAR", snapshot.ownFactionId(), null, war.id(), ""))
-                            .bounds(actionX, y, 58, 20).build());
+                            .bounds(left + 286, y, 52, 20).build());
                     ignore.active = snapshot.canManage() && !war.viewerIgnoredIntervention();
-                    actionX += 64;
                 }
-                Button aid = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> minecraft.setScreen(new WarAidScreen(this, snapshot, war)))
-                        .bounds(actionX, y, 72, 20).build());
-                aid.active = snapshot.canManage();
-                if (!viewerJoinedSettlementWar) {
+                Button aid = addRenderableWidget(Button.builder(Component.literal("Aid / Ledger"), b -> minecraft.setScreen(new WarAidScreen(this, snapshot, war)))
+                        .bounds(left + 342, y, 64, 20).build());
+                aid.active = maySendAid || recurringAid > 0;
+                if (!viewerJoinedSettlementWar && viewerIsParent) {
                     Button join = addRenderableWidget(Button.builder(Component.literal("Join War"), b -> sendToFaction("JOIN_SETTLEMENT_WAR", snapshot.ownFactionId(), null, war.id(), ""))
-                            .bounds(actionX + 78, y, 78, 20).build());
+                            .bounds(left + 410, y, 64, 20).build());
                     join.active = snapshot.canManage();
                 }
             } else {
+                if (settlementWar && (maySendAid || recurringAid > 0)) {
+                    Button aid = addRenderableWidget(Button.builder(Component.literal("Aid / Ledger"), b -> minecraft.setScreen(new WarAidScreen(this, snapshot, war)))
+                            .bounds(left + 286, y, 82, 20).build());
+                    aid.active = true;
+                }
                 Button call = addRenderableWidget(Button.builder(Component.literal("Call Ally"), b -> sendToFaction("CALL_TO_WAR", selectedWarAllyId(), null, war.id(), ""))
-                        .bounds(left + 330, y, 72, 20).build());
+                        .bounds(left + 374, y, 72, 20).build());
                 call.active = snapshot.canManage() && !allies.isEmpty();
             }
             Button peace = addRenderableWidget(Button.builder(Component.literal("Peace Terms"), b -> minecraft.setScreen(new PeaceTreatyScreen(this, snapshot, war)))
-                    .bounds(left + 492, y, 58, 20).build());
+                    .bounds(left + 478, y, 72, 20).build());
             boolean managesWarSettlement = manageableSettlements().stream().anyMatch(s -> s.settlementId().equals(war.attackerSettlementId()) || s.settlementId().equals(war.targetSettlementId()));
             boolean factionMayNegotiate = snapshot.canManage() && (!settlementWar || fullFactionConflict || viewerJoinedSettlementWar);
             peace.active = managesWarSettlement || factionMayNegotiate;

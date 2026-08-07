@@ -24,12 +24,15 @@ public final class WarAidScreen extends ScaledCampaignScreen {
     }
     @Override protected void init() {
         setupCampaignScale(460, 370); left = campaignLeft(460); top = campaignTop(370);
+        boolean maySend = canSendAid();
         manpower = numberField(left + 200, top + 78, manpowerValue);
         wealth = numberField(left + 200, top + 108, wealthValue);
         food = numberField(left + 200, top + 138, foodValue);
-        addRenderableWidget(Button.builder(Component.literal(recurring ? "Frequency: Daily" : "Frequency: One-time"), b -> { preserveValues(); recurring = !recurring; rebuildWidgets(); })
+        manpower.setEditable(maySend); wealth.setEditable(maySend); food.setEditable(maySend);
+        Button frequency = addRenderableWidget(Button.builder(Component.literal(recurring ? "Frequency: Daily" : "Frequency: One-time"), b -> { preserveValues(); recurring = !recurring; rebuildWidgets(); })
                 .bounds(left + 30, top + 175, 170, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> send()).bounds(left + 210, top + 175, 100, 20).build());
+        Button send = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> send()).bounds(left + 210, top + 175, 100, 20).build());
+        frequency.active = maySend; send.active = maySend;
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 320, top + 175, 100, 20).build());
 
         java.util.List<DiplomacySnapshot.AidEntry> commitments = commitments();
@@ -58,6 +61,11 @@ public final class WarAidScreen extends ScaledCampaignScreen {
         PrototypeNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket("SEND_AID", "", null, war.id(), extra));
         minecraft.setScreen(parent);
     }
+    private boolean canSendAid() {
+        String own = snapshot.ownFactionId();
+        return snapshot.canManage() && !own.isBlank()
+                && (own.equals(war.attackerFactionId()) || own.equals(war.defenderFactionId()));
+    }
     private void cancel(DiplomacySnapshot.AidEntry aid) {
         PrototypeNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket("CANCEL_AID", "", aid.id(), war.id(), ""));
         minecraft.setScreen(parent);
@@ -70,9 +78,10 @@ public final class WarAidScreen extends ScaledCampaignScreen {
         int uiMx = campaignMouseX(mx);
         int uiMy = campaignMouseY(my);
         beginCampaignRender(g); g.fill(left, top, left + 460, top + 360, 0xF0181818); g.fill(left + 3, top + 3, left + 457, top + 40, 0xFF3B3023);
-        g.drawCenteredString(font, "SEND AID", left + 230, top + 14, 0xFFE7D8B0);
+        g.drawCenteredString(font, canSendAid() ? "SEND AID / AID LEDGER" : "WAR AID LEDGER", left + 230, top + 14, 0xFFE7D8B0);
         g.drawCenteredString(font, war.attackerSettlementName() + " vs " + war.targetSettlementName(), left + 230, top + 49, 0xFFBBBBBB);
         g.drawString(font, "Manpower", left + 30, top + 84, 0xFFFFFFFF, false); g.drawString(font, "Wealth", left + 30, top + 114, 0xFFFFFFFF, false); g.drawString(font, "Food", left + 30, top + 144, 0xFFFFFFFF, false);
+        if (!canSendAid()) g.drawString(font, "Read-only: only a parent faction may authorize aid.", left + 30, top + 184, 0xFFAAAAAA, false);
         g.drawString(font, "ACTIVE DAILY AID", left + 30, top + 208, 0xFFE7D8B0, false);
         java.util.List<DiplomacySnapshot.AidEntry> commitments = commitments();
         if (commitments.isEmpty()) {
