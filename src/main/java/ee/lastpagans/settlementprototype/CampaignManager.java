@@ -510,6 +510,14 @@ public final class CampaignManager {
             }
         }
         if (!goal.appliesTo(type)) return "The selected Casus Belli does not match the conflict tier.";
+        if (goal == CampaignData.WarGoal.HOLY_WAR) {
+            String ownFaith = factionFaith(player.serverLevel(), own);
+            String targetFaith = factionFaith(player.serverLevel(), target);
+            if (ownFaith.isBlank() || targetFaith.isBlank()) return "Holy War requires both factions to have a recognized leader faith.";
+            if (CampaignDefinitions.religionRelationModifier(ownFaith, targetFaith) > -8) {
+                return "Holy War requires strongly incompatible faiths. " + ownFaith + " and " + targetFaith + " are not religiously hostile enough for this Casus Belli.";
+            }
+        }
 
         CampaignData.WarRecord war = data.createWar(type, goal, own, target, settlementId, player.getUUID(), day);
         if (goal == CampaignData.WarGoal.CUSTOM) data.setWarCustomCasusBelli(war.id(), customCasusBelli);
@@ -1313,6 +1321,14 @@ public final class CampaignManager {
     }
 
     public static String factionId(ServerPlayer player) { return player.getTeam() == null ? "" : player.getTeam().getName(); }
+
+    private static String factionFaith(ServerLevel level, String factionId) {
+        if (level == null || factionId == null || factionId.isBlank() || FactionEvents.recruitsFactionManager == null) return "";
+        RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (faction == null || faction.getTeamLeaderUUID() == null) return "";
+        PrototypeData.CharacterRecord leader = PrototypeData.get(level).getCharacter(faction.getTeamLeaderUUID());
+        return leader == null || !leader.isCreated() ? "" : leader.getFaith();
+    }
 
     public static String factionName(String id) {
         if (id == null || id.isBlank()) return "Independent";
