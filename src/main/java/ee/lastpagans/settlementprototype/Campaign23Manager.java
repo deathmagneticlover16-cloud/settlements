@@ -123,6 +123,17 @@ public final class Campaign23Manager {
                 String otherFaith = factionLeaderFaith(other, settlements);
                 if (CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith) <= -8) { unrest = true; break; }
             }
+            // Marriage Alliances are intentionally a separate diplomatic bond rather than a
+            // full military alliance, but the population still notices a ruler marrying into
+            // a strongly incompatible faith. Include those political marriages in unrest too.
+            if (!unrest && com.talhanation.recruits.FactionEvents.recruitsFactionManager != null) {
+                for (com.talhanation.recruits.world.RecruitsFaction otherFaction : com.talhanation.recruits.FactionEvents.recruitsFactionManager.getFactions()) {
+                    if (otherFaction == null || otherFaction.getStringID().equals(factionId)
+                            || !extra.marriageAlliance(factionId, otherFaction.getStringID())) continue;
+                    String otherFaith = factionLeaderFaith(otherFaction.getStringID(), settlements);
+                    if (CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith) <= -8) { unrest = true; break; }
+                }
+            }
         }
         boolean present = extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals("local_religious_unrest"));
         if (unrest && !present) extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), "local_religious_unrest", 0));
