@@ -210,6 +210,7 @@ public final class CampaignManager {
         data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL,
                 "Diplomatic proposal", factionName(own) + " sent a " + pretty(type.name()) + " proposal to " + factionName(target) + ".",
                 day, target, "", CampaignData.NewsVisibility.FACTION);
+        CampaignToastSender.faction(player.getServer(), target, "DIPLOMATIC PROPOSAL", factionName(own) + " sent a " + pretty(type.name()) + " proposal.");
         return "Proposal sent to " + factionName(target) + ".";
     }
 
@@ -581,6 +582,7 @@ public final class CampaignManager {
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || !war.involves(own)) return "That war is not active.";
         String target = own.equals(war.attackerFaction()) ? war.defenderFaction() : war.attackerFaction();
         data.createProposal(CampaignData.ProposalType.PEACE, own, target, player.getUUID(), war.id(), day);
+        CampaignToastSender.faction(player.getServer(), target, "PEACE OFFER RECEIVED", factionName(own) + " has offered peace.");
         return "Peace offer sent to " + factionName(target) + ".";
     }
 
@@ -597,6 +599,7 @@ public final class CampaignManager {
             return "A defensive ally can only be called when your side is defending.";
         }
         data.createProposal(CampaignData.ProposalType.CALL_TO_WAR, own, target, player.getUUID(), war.id(), day);
+        CampaignToastSender.faction(player.getServer(), target, "CALL TO WAR", factionName(own) + " requests your aid in " + war.displayConflictType() + ".");
         return "Call to war sent to " + factionName(target) + ".";
     }
 
@@ -619,6 +622,8 @@ public final class CampaignManager {
             data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR,
                     "Faction joined a war", factionName(own) + " answered " + factionName(proposal.fromFaction()) + "'s call to war.",
                     day, own, war.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);
+            CampaignToastSender.faction(player.getServer(), proposal.fromFaction(), "CALL TO WAR ACCEPTED", factionName(own) + " has joined your war.");
+            CampaignToastSender.faction(player.getServer(), own, "WAR JOINED", "Your faction joined " + factionName(proposal.fromFaction()) + "'s war.");
             return "Call to war accepted. Your faction has joined the conflict.";
         }
         data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
@@ -654,6 +659,7 @@ public final class CampaignManager {
         if (proposal == null || proposal.status() != CampaignData.ProposalStatus.PENDING || !own.equals(proposal.toFaction())) return "That proposal is unavailable.";
         data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.REJECTED);
         data.relation(proposal.fromFaction(), proposal.toFaction()).changeRelationship(-5);
+        CampaignToastSender.faction(player.getServer(), proposal.fromFaction(), "PROPOSAL REJECTED", factionName(own) + " rejected your " + pretty(proposal.type().name()) + " proposal.");
         return "Proposal rejected.";
     }
 
