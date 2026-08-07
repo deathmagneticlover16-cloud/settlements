@@ -966,6 +966,9 @@ public final class CampaignManager {
             relation.changeRelationship(-30);
             syncRelation(player.serverLevel(), own, enemy, CampaignData.TreatyState.WAR);
             data.relation(proposal.fromFaction(), own).changeRelationship(15);
+            // Reliability is earned from actual diplomatic conduct. Answering an ally's
+            // legitimate call to war is one of the clearest positive signals.
+            data.changeFactionReliability(own, 8);
             data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR,
                     "Faction joined a war", factionName(own) + " answered " + factionName(proposal.fromFaction()) + "'s call to war.",
                     day, own, war.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);

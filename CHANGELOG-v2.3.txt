@@ -50,6 +50,7 @@ DIPLOMACY / WAR
 - War Goal renamed Casus Belli; Custom CB limited to 100 chars; Holy War added.
 - Political relations, religious compatibility and reliability shown separately.
 - Reliability changes from actual diplomatic conduct rather than random character trait selection.
+- Reliability now rewards answering calls to war, completing reparations, and honouring forced non-aggression periods; treaty-breaking, aggressive declarations and missed reparations reduce it.
 - Recruits diplomacy relation is synchronized and verified for formal faction wars.
 - Custom diplomatic toasts for declarations, escalation, aid, treaties, peace, marriage alliances and other major changes.
 - War score and ±90 capitulation threshold; battlefield recruit casualties alter score.
