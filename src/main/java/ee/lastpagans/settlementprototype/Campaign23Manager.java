@@ -434,7 +434,19 @@ public final class Campaign23Manager {
         }
         int losses = Math.max(0, totalInitial - totalSurvivors);
         double lossRate = totalInitial <= 0 ? 0 : (double) losses / totalInitial;
-        applyLevyCasualtyModifier(player.serverLevel(), settlement, extra, lossRate);
+        Campaign23Data.ModifierRecord casualtyModifier = applyLevyCasualtyModifier(player.serverLevel(), settlement, extra, lossRate);
+        if (casualtyModifier != null) {
+            int percentLost = (int) Math.round(lossRate * 100.0D);
+            CampaignToastSender.settlementManagers(player.getServer(), settlement.getId(), casualtyModifier.name.toUpperCase(Locale.ROOT),
+                    losses + " of " + totalInitial + " levymen were lost (" + percentLost + "%). " + casualtyModifier.detail);
+            if (lossRate >= 0.50D) {
+                CampaignData.get(player.serverLevel()).addNews(CampaignData.NewsCategory.MILITARY,
+                        lossRate >= 0.75D ? CampaignData.NewsImportance.MAJOR : CampaignData.NewsImportance.NORMAL,
+                        casualtyModifier.name, settlement.getName() + " returned from levy service after losing " + losses + " of " + totalInitial + " men.",
+                        player.serverLevel().getDayTime() / 24000L, settlement.getFactionTeam(), settlement.getId(),
+                        lossRate >= 0.75D ? CampaignData.NewsVisibility.PUBLIC : CampaignData.NewsVisibility.FACTION);
+            }
+        }
         settleLevyServicePenaltyAfterReturn(player.serverLevel(), settlement, extra, oldestServiceAge);
         int traditionGain = levyTraditionGain(totalInitial, totalSurvivors, oldestServiceAge);
         int tradition = extra.levyTradition(settlement.getId());
@@ -459,16 +471,18 @@ public final class Campaign23Manager {
         return survivalRate < 0.50D ? 2 : 5;
     }
 
-    private static void applyLevyCasualtyModifier(ServerLevel level, PrototypeData.SettlementRecord settlement, Campaign23Data extra, double lossRate) {
+    private static Campaign23Data.ModifierRecord applyLevyCasualtyModifier(ServerLevel level, PrototypeData.SettlementRecord settlement, Campaign23Data extra, double lossRate) {
         String modifier;
         long duration;
-        if (lossRate < 0.10D) return;
+        if (lossRate < 0.10D) return null;
         if (lossRate < 0.25D) { modifier = "families_in_mourning"; duration = 24L * 60L * 60L * 1000L; }
         else if (lossRate < 0.50D) { modifier = "heavy_levy_losses"; duration = 2L * 24L * 60L * 60L * 1000L; }
         else if (lossRate < 0.75D) { modifier = "devastating_losses"; duration = 3L * 24L * 60L * 60L * 1000L; }
         else if (lossRate < 0.90D) { modifier = "a_generation_lost"; duration = 5L * 24L * 60L * 60L * 1000L; }
         else { modifier = "levy_massacre"; duration = 7L * 24L * 60L * 60L * 1000L; }
-        extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), modifier, duration));
+        Campaign23Data.ModifierRecord record = standardModifier(level, settlement.getId(), modifier, duration);
+        extra.addModifier(settlement.getId(), record);
+        return record;
     }
 
     private static final List<String> LEVY_SERVICE_MODIFIER_IDS = List.of(
