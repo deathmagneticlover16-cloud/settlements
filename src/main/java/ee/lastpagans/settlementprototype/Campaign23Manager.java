@@ -507,7 +507,8 @@ public final class Campaign23Manager {
                 String error = CampaignManager.transferFactionAid(server.overworld(), aid.fromFaction(), target, aid.manpower(), aid.wealth(), aid.food());
                 if (error == null) {
                     next.add(new Campaign23Data.AidRecord(aid.id(), aid.fromFaction(), aid.targetSettlement(), aid.manpower(), aid.wealth(), aid.food(), true, day + 1));
-                    CampaignToastSender.faction(server, target.getFactionTeam(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
+                    if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(server, target.getId(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
+                    else CampaignToastSender.faction(server, target.getFactionTeam(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
                 } else {
                     CampaignToastSender.faction(server, aid.fromFaction(), "AID SUSPENDED", "Recurring aid to " + target.getName() + " stopped: " + error);
                 }

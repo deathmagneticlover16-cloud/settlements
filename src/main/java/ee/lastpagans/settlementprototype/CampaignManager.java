@@ -382,7 +382,8 @@ public final class CampaignManager {
                 new Campaign23Data.AidRecord(UUID.randomUUID(), own, targetSettlement, manpower, wealth, food, true, day + 1));
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.NORMAL, "War aid sent",
                 factionName(own) + " sent aid to " + target.getName() + ".", day, own, targetSettlement, CampaignData.NewsVisibility.PUBLIC);
-        CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
+        if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(player.getServer(), target.getId(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
+        else CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
         return "Aid delivered to " + target.getName() + (recurring ? " and scheduled daily." : ".");
     }
 

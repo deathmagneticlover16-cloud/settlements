@@ -6,6 +6,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.PacketDistributor;
 
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
 public final class CampaignToastSender {
     private CampaignToastSender() {}
 
@@ -40,8 +44,35 @@ public final class CampaignToastSender {
                                      PrototypeData.SettlementRecord defender, String casusBelli) {
         String body = attacker.getName() + " has declared a Settlement War on " + defender.getName()
                 + ".\nCasus Belli: " + casusBelli;
-        faction(server, defender.getFactionTeam(), "SETTLEMENT WAR", body);
-        faction(server, attacker.getFactionTeam(), "SETTLEMENT WAR", body);
+        Set<UUID> notified = new HashSet<>();
+        notifyFaction(server, defender.getFactionTeam(), "SETTLEMENT WAR", body, notified);
+        notifyFaction(server, attacker.getFactionTeam(), "SETTLEMENT WAR", body, notified);
+        notifySettlementManagers(server, attacker, "SETTLEMENT WAR", body, notified);
+        notifySettlementManagers(server, defender, "SETTLEMENT WAR", body, notified);
+    }
+
+    public static void settlementManagers(MinecraftServer server, String settlementId, String title, String body) {
+        if (server == null || settlementId == null || settlementId.isBlank()) return;
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(server.overworld()).getSettlement(settlementId);
+        if (settlement == null) return;
+        notifySettlementManagers(server, settlement, title, body, new HashSet<>());
+    }
+
+    private static void notifyFaction(MinecraftServer server, String factionId, String title, String body, Set<UUID> notified) {
+        if (server == null || factionId == null || factionId.isBlank()) return;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player.getTeam() != null && factionId.equals(player.getTeam().getName()) && notified.add(player.getUUID())) {
+                send(player, title, body);
+            }
+        }
+    }
+
+    private static void notifySettlementManagers(MinecraftServer server, PrototypeData.SettlementRecord settlement,
+                                                 String title, String body, Set<UUID> notified) {
+        if (server == null || settlement == null) return;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (PrototypeManager.canManage(player, settlement) && notified.add(player.getUUID())) send(player, title, body);
+        }
     }
 
     public static void relationChanged(MinecraftServer server, String first, String second, String state) {
