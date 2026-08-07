@@ -26,6 +26,7 @@ CHARACTERS / FAMILY
 - Generated AI spouse candidates: at least 5 female + 5 male, cultural-ish first/surnames, faiths, traits and effects.
 - Male/Female/Any candidate filter, rejection history and 7-day refresh.
 - Player-to-player marriage and Marriage Alliances.
+- Player spouses contribute their live character trait effects to the ruler's Capital/City-State, matching AI spouse settlement effects.
 - Seven-day minimum before voluntary divorce; repeated divorce creates Marital Scandal.
 - Spouse settlement effects apply to capitals/City-States.
 - Islam multi-spouse easter egg: up to four total spouses; additional NPC-wife settlement effects diminish to 50%, 25%, then 10%.
