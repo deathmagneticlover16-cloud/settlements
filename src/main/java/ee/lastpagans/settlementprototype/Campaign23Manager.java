@@ -642,12 +642,43 @@ public final class Campaign23Manager {
                     || (!faction.isBlank() && (faction.equals(war.defenderFaction()) && (war.type() != CampaignData.WarType.SETTLEMENT_WAR || war.defenderFactionJoined())
                     || war.supportingDefenders().contains(faction)));
             if (attacker == defender) continue;
+            int before = extra.warScore(war.id());
             extra.changeWarScore(war.id(), attacker ? -impact : impact);
             int score = extra.warScore(war.id());
-            if (Math.abs(score) >= 90) {
-                String winner = score > 0 ? war.attackerFaction() : war.defenderFaction();
-                if (!winner.isBlank()) CampaignToastSender.faction(level.getServer(), winner, "ENEMY CAPITULATING", "War score has reached " + score + ". Compulsory peace terms are now available.");
+            if (before < 90 && score >= 90) {
+                notifyWarSide(level.getServer(), war, true, "ENEMY CAPITULATING", "War score has reached +" + score + ". Compulsory peace terms are now available.");
+                notifyWarSide(level.getServer(), war, false, "CAPITULATION", "Your side has been decisively defeated. The opposing side may now enforce valid peace terms.");
+                campaign.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "War reaches capitulation",
+                        war.attackerSettlement().isBlank() ? "The attacking side has forced its enemy to capitulate." : settlementDisplayName(level, war.attackerSettlement()) + " has forced the opposing side to capitulate.",
+                        level.getDayTime() / 24000L, participatingWarFaction(war, true), war.attackerSettlement(), CampaignData.NewsVisibility.PUBLIC);
+            } else if (before > -90 && score <= -90) {
+                notifyWarSide(level.getServer(), war, false, "ENEMY CAPITULATING", "War score has reached " + score + ". Compulsory peace terms are now available.");
+                notifyWarSide(level.getServer(), war, true, "CAPITULATION", "Your side has been decisively defeated. The opposing side may now enforce valid peace terms.");
+                campaign.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "War reaches capitulation",
+                        war.defenderSettlement().isBlank() ? "The defending side has forced its enemy to capitulate." : settlementDisplayName(level, war.defenderSettlement()) + " has forced the opposing side to capitulate.",
+                        level.getDayTime() / 24000L, participatingWarFaction(war, false), war.defenderSettlement(), CampaignData.NewsVisibility.PUBLIC);
             }
+        }
+    }
+
+    private static String settlementDisplayName(ServerLevel level, String settlementId) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(level).getSettlement(settlementId);
+        return settlement == null ? settlementId : settlement.getName();
+    }
+
+    private static String participatingWarFaction(CampaignData.WarRecord war, boolean attackerSide) {
+        boolean factionJoined = war.type() != CampaignData.WarType.SETTLEMENT_WAR
+                || (attackerSide ? war.attackerFactionJoined() : war.defenderFactionJoined());
+        return factionJoined ? (attackerSide ? war.attackerFaction() : war.defenderFaction()) : "";
+    }
+
+    private static void notifyWarSide(MinecraftServer server, CampaignData.WarRecord war, boolean attackerSide, String title, String body) {
+        String faction = participatingWarFaction(war, attackerSide);
+        if (faction != null && !faction.isBlank()) {
+            CampaignToastSender.faction(server, faction, title, body);
+        } else {
+            String settlement = attackerSide ? war.attackerSettlement() : war.defenderSettlement();
+            if (settlement != null && !settlement.isBlank()) CampaignToastSender.settlementManagers(server, settlement, title, body);
         }
     }
 
