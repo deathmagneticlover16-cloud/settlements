@@ -1073,10 +1073,13 @@ public final class PrototypeCommands {
         PrototypeData data = PrototypeData.get(source.getLevel()); PrototypeData.SettlementRecord s = data.getSettlement(id); if (s == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
         Campaign23Data extra = Campaign23Data.get(source.getLevel());
         String modifiers = extra.modifiers(s.getId()).stream().map(m -> m.name + "(" + m.stabilityPerDay + " stab/day)").reduce((a,b) -> a + ", " + b).orElse("none");
+        List<Campaign23Data.LevyDeployment> activeLevies = extra.levyDeployments().stream().filter(value -> s.getId().equals(value.settlementId)).toList();
+        int activeLevyUnits = activeLevies.stream().mapToInt(value -> Math.max(0, value.initialUnits - value.returnedUnits)).sum();
         source.sendSuccess(() -> Component.literal("[Settlement inspect] " + s.getName() + " [" + s.getId() + "] | faction=" + (s.getFactionTeam().isBlank() ? "Independent" : s.getFactionTeam())
                 + " | rank=" + s.getRank().displayName() + " | pop=" + s.getDisplayedPopulation() + " | villagers=" + s.getVillagerCount() + " | housing=" + s.getHousingCapacity()
                 + " | stability=" + s.getStability() + " | prosperity=" + extra.prosperity(s.getId()) + " | food=" + s.getFood() + " | wealth=" + s.getWealth()
                 + " | manpower=" + s.getAvailableManpower() + "/" + s.getMaximumManpower() + " used=" + s.getUsedManpower() + " levyReserved=" + s.getLevyReservedManpower()
+                + " | levyTradition=" + extra.levyTradition(s.getId()) + "/50 | activeLevyBatches=" + activeLevies.size() + " units≈" + activeLevyUnits
                 + " | claims=" + s.getClaimCount() + " | protected=" + extra.settlementProtected(s.getId()) + " | modifiers=" + modifiers), false); return 1;
     }
 
