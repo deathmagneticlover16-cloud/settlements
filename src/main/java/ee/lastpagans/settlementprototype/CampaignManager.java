@@ -1001,6 +1001,9 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot offer peace.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || !war.involves(own)) return "That war is not active.";
+        if (war.type() == CampaignData.WarType.SETTLEMENT_WAR) {
+            return "Settlement Wars use negotiated Peace Terms. A parent faction cannot end a local war with the legacy one-click peace action.";
+        }
         String target = own.equals(war.attackerFaction()) ? war.defenderFaction() : war.attackerFaction();
         data.createProposal(CampaignData.ProposalType.PEACE, own, target, player.getUUID(), war.id(), day);
         CampaignToastSender.faction(player.getServer(), target, "PEACE OFFER RECEIVED", factionName(own) + " has offered peace.");
@@ -1059,6 +1062,12 @@ public final class CampaignManager {
             CampaignToastSender.faction(player.getServer(), proposal.fromFaction(), "CALL TO WAR ACCEPTED", factionName(own) + " has joined your war.");
             CampaignToastSender.faction(player.getServer(), own, "WAR JOINED", "Your faction joined " + factionName(proposal.fromFaction()) + "'s war.");
             return "Call to war accepted. Your faction has joined the conflict.";
+        }
+        if (proposal.type() == CampaignData.ProposalType.PEACE && proposal.linkedWar() != null) {
+            CampaignData.WarRecord linked = data.getWar(proposal.linkedWar());
+            if (linked != null && linked.type() == CampaignData.WarType.SETTLEMENT_WAR) {
+                return "This Settlement War must be resolved through negotiated Peace Terms, not a legacy one-click faction peace proposal.";
+            }
         }
         data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
         CampaignData.TreatyState state = switch (proposal.type()) {
