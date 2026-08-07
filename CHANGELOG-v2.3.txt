@@ -113,3 +113,4 @@ WORLD NEWS / UI
 - Capitulation alerts now trigger only when war score actually crosses ±90, notify the real participating settlement/faction side (not an observing parent faction), and create a major World News entry without repeated toast spam on every later casualty.
 - Returning a bloodied levy now immediately notifies settlement managers of the casualty modifier; losses of 50%+ create Military news, and 75%+ catastrophes become public major news.
 - Settlements' replacement faction creator now preserves Recruits' configured creation requirements/cost, rejects duplicate display names/banners, and verifies that Recruits actually created the faction before reporting success.
+- Ending a local Settlement War no longer resets diplomacy between parent factions that never joined the conflict; only actual faction belligerents/supporters are synchronized back to Neutral.

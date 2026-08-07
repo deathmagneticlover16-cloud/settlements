@@ -1110,8 +1110,17 @@ public final class CampaignManager {
     }
 
     private static void synchronizeWarPeace(ServerLevel level, CampaignData data, CampaignData.WarRecord war, long day) {
-        List<String> attackers = new ArrayList<>(); attackers.add(war.attackerFaction()); attackers.addAll(war.supportingAttackers());
-        List<String> defenders = new ArrayList<>(); defenders.add(war.defenderFaction()); defenders.addAll(war.supportingDefenders());
+        // A local Settlement War stores parent faction ids so they can observe/escalate, but those ids are
+        // not belligerents until Join War is used. Ending a local war must therefore never reset an
+        // uninvolved parent faction's existing Recruits/campaign relation.
+        List<String> attackers = new ArrayList<>();
+        String attackerParent = participatingFaction(war, true);
+        if (!attackerParent.isBlank()) attackers.add(attackerParent);
+        attackers.addAll(war.supportingAttackers().stream().filter(value -> value != null && !value.isBlank()).toList());
+        List<String> defenders = new ArrayList<>();
+        String defenderParent = participatingFaction(war, false);
+        if (!defenderParent.isBlank()) defenders.add(defenderParent);
+        defenders.addAll(war.supportingDefenders().stream().filter(value -> value != null && !value.isBlank()).toList());
         for (String attacker : attackers) for (String defender : defenders) {
             data.relation(attacker, defender).setState(CampaignData.TreatyState.NEUTRAL, day);
             syncRelation(level, attacker, defender, CampaignData.TreatyState.NEUTRAL);
