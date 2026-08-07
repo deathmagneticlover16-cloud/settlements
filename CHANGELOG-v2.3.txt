@@ -1,0 +1,106 @@
+LAST PAGANS SETTLEMENTS 2.3.0 — CAMPAIGN OVERHAUL
+
+SECURITY / MULTIPLAYER
+- Strict server-side settlement visibility, contribution, and management permissions.
+- Foreign-faction settlement management is blocked even with forged client packets.
+- Settlement switcher only exposes settlements the viewer may access.
+- Independent settlement ownership limit: 2.
+- Full admin player/character/subsystem reset and inspection tools.
+
+SETTLEMENTS
+- Multiple Recruits claims can be linked to one settlement.
+- Claims GUI: Link Current, Unlink Current, confirmation for Unlink All.
+- GUI settlement creation, rename, ownership transfer and point/region setup.
+- Physical housing regions (pos1/pos2); valid bed heads contribute housing.
+- Physical Muster Ground regions; horizontal usable area limits levy size.
+- Town Square, Barracks, Muster Ground and Prayer Site separated.
+- Dynamic Prosperity.
+- Automatic Village -> Town progression; independent high-tier settlements can become City-States.
+- Civic Pride and icon-based active settlement modifier display.
+
+CHARACTERS / FAMILY
+- Full live 3D player portrait restored.
+- Dynasty and Main House can be edited later from the character sheet.
+- Three-round trait-card character creation: 3 random choices per round, choose 1, total 3 traits; one reroll.
+- Expanded leader traits including charismatic/military/levy-oriented traits.
+- Generated AI spouse candidates: at least 5 female + 5 male, cultural-ish first/surnames, faiths, traits and effects.
+- Male/Female/Any candidate filter, rejection history and 7-day refresh.
+- Player-to-player marriage and Marriage Alliances.
+- Seven-day minimum before voluntary divorce; repeated divorce creates Marital Scandal.
+- Spouse settlement effects apply to capitals/City-States.
+
+FACTIONS
+- Dedicated faction management screen.
+- Faction creator restored inside Settlements.
+- Recruits team color + unit color selection.
+- Held banner is mandatory; blank/unpatterned banners are rejected.
+- Faction ranks/titles with permission tiers.
+- Faction treasury, including settlement <-> treasury transfer controls.
+- Protected admin factions/settlements.
+
+DIPLOMACY / WAR
+- Guided diplomacy redesign.
+- Settlement War declaration: choose YOUR settlement -> TARGET settlement -> Casus Belli.
+- Settlement Wars are settlement-vs-settlement; parent factions begin as observers.
+- Defender parent: Ignore / Send Aid / Join War. Attacker parent: Send Aid / Join War.
+- Explicit escalation to Faction-v-Settlement and finally Faction-v-Faction.
+- One-time or recurring Food / Wealth / Manpower war aid.
+- War Goal renamed Casus Belli; Custom CB limited to 100 chars; Holy War added.
+- Political relations, religious compatibility and reliability shown separately.
+- Reliability changes from actual diplomatic conduct rather than random character trait selection.
+- Recruits diplomacy relation is synchronized and verified for formal faction wars.
+- Custom diplomatic toasts for declarations, escalation, aid, treaties, peace, marriage alliances and other major changes.
+- War score and ±90 capitulation threshold; battlefield recruit casualties alter score.
+
+PEACE TREATIES
+- Structured peace offers with acceptance/rejection.
+- Lump wealth.
+- Manpower transfer (temporary Foreign Soldiers consequences on receiver).
+- Daily reparations for a duration.
+- Forced non-aggression pact.
+- Forced faith conversion.
+- Whole settlement transfer.
+- Individual linked-claim transfer into a receiving settlement.
+- Recognition of independence.
+- Capitulated side cannot reject terms from the dominant side.
+
+RELIGION
+- Catholic Christianity, Orthodox Christianity, Finnic/Baltic/Norse/Slavic Paganism, Islam, Judaism and Other.
+- Personal Devotion / faith standing.
+- Admin-defined Holy Site regions.
+- Settlement Prayer Site regions.
+- Holy-site/prayer devotion gains.
+- Religious compatibility in diplomacy.
+- Local Religious Unrest modifiers for politically allied but strongly incompatible faiths.
+- Holy War Casus Belli and faith-conversion peace term.
+
+MILITARY / LEVIES
+- Reusable global roster, faction roster and settlement overrides from full configured spawn-egg ItemStacks.
+- Professionals remain unhired for faction members to hire normally.
+- Levies spawn already owned by the player who raised them; Recruits hiring limit is therefore not used for levy spawning.
+- Automatic/reused Recruits Levy group when API permits.
+- Default deployed limits: 300/player, 500/faction.
+- Levy size constrained by manpower and Muster Ground area.
+- Staggered levy arrival; larger levy = longer mobilization, approximately 4 sec/unit up to 15 minutes default.
+- Long real-world cooldown with emergency hostile-action relief.
+- Default levy health: 12 under 100, 10 at 100+; configurable.
+- Levy recruit level cap default 3; global Recruits level override default 5; configurable/removable.
+- Return Levy action.
+- Multi-day service unrest stages: Extended Service, Weary Levies, Levy Exhaustion, Popular Outrage.
+- Casualty percentage produces escalating settlement mourning penalties, up to Levy Massacre.
+- Leader traits can alter levy health, XP, morale and muster time.
+- Villager Recruits morale is used rather than a competing morale system.
+
+MERCENARIES
+- Rewritten persistent mercenary contract ledger.
+- Template-marked mercenaries register even when units unload.
+- Faction treasury pays faction mercenaries; independent mercs use home-settlement wealth.
+- Military summaries show persistent mercenary count/wage data.
+- Missed payments progress toward desertion; deserters become neutral when loaded.
+- Admin can force a payment check for testing.
+
+WORLD NEWS / UI
+- Separate World News screen remains integrated with major campaign events.
+- Character/settlement traits and active modifiers use clearer icon-based summaries.
+- More campaign actions moved out of commands and into GUIs.
+- Screen layouts substantially reorganized to reduce 2.0.x overlap.

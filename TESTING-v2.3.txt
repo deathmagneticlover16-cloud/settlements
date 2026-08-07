@@ -1,0 +1,112 @@
+SETTLEMENTS 2.3 — PRIORITY MULTIPLAYER TEST CHECKLIST
+Test on a COPY. Server and clients must use exactly the same 2.3.0 JAR.
+
+A. SECURITY FIRST (do this before anything else)
+[ ] Player A creates/owns Settlement A; Player B is in another faction.
+[ ] B cannot select A in Settlement Manager.
+[ ] B cannot withdraw silver/wealth, recruit, edit stats, banner, claims, regions or roles in A.
+[ ] Same-faction outsider can only see the intended read-only information.
+[ ] Citizen can contribute but cannot withdraw/manage.
+[ ] Co-owner can manage but cannot perform owner-only transfer/delete operations.
+[ ] Owner has expected control.
+
+B. FACTION CREATION
+[ ] No banner in hand -> creation fails with explicit message.
+[ ] Plain unpatterned banner -> creation fails.
+[ ] Patterned banner -> succeeds.
+[ ] Team color changes scoreboard/faction identity.
+[ ] Unit color is carried into Recruits faction configuration.
+[ ] Custom faction rank title appears for members.
+
+C. SETTLEMENTS / CLAIMS / HOUSING
+[ ] Switch between two authorized settlements.
+[ ] Link several Recruits claims to one city.
+[ ] Claim cannot be linked to two settlements.
+[ ] Unlink current removes only current claim; Unlink All asks for confirmation.
+[ ] Define Housing pos1/pos2; recalc counts bed heads once.
+[ ] Define Muster pos1/pos2; military screen reports capacity.
+[ ] Define Prayer Site pos1/pos2.
+[ ] Independent owner cannot create/receive a third settlement.
+
+D. CHARACTER / TRAITS / FAMILY
+[ ] New character uses full 3D model.
+[ ] Trait screen offers 3 cards; select 3 traits in 3 rounds.
+[ ] Reroll usable once only.
+[ ] Dynasty/Main House can be edited later.
+[ ] Candidate filter gives Female/Male/Any and pool contains >=5 of each before filtering/rejection.
+[ ] Player marriage proposal/accept creates Marriage Alliance when factions differ.
+[ ] Divorce blocked before 7 Minecraft days.
+[ ] Repeated divorce produces Marital Scandal on capital/City-State.
+
+E. SETTLEMENT WAR / ESCALATION
+[ ] Settlement War screen asks YOUR settlement then TARGET settlement, no target-faction selector.
+[ ] Declaration toast reaches both sides with Casus Belli.
+[ ] Defending parent faction sees Ignore / Send Aid / Join.
+[ ] Attacking parent sees Send Aid / Join but no Ignore.
+[ ] Ignore acknowledges the conflict without joining; faction may still change its mind later.
+[ ] Send Aid transfers specified food/wealth/manpower without joining.
+[ ] Recurring aid attempts again next campaign day.
+[ ] First parent joining changes escalation text to Faction-v-Settlement or Settlement-v-Faction.
+[ ] Second parent joining produces Faction-v-Faction and Recruits ENEMY relation both ways.
+
+F. FACTION WAR RELATION SYNC
+[ ] Declare faction war.
+[ ] Both factions receive custom toast.
+[ ] Recruits diplomacy actually reads ENEMY in both directions.
+[ ] If sync fails, declaration reports failure rather than silently pretending hostility worked.
+
+G. PEACE TREATY
+Test each separately on disposable claims/settlements:
+[ ] Wealth transfer.
+[ ] Manpower transfer + Foreign Soldiers modifier.
+[ ] Reparations/day and duration.
+[ ] Forced NAP.
+[ ] Faith conversion.
+[ ] Whole settlement transfer.
+[ ] Individual claim transfer into chosen receiving settlement.
+[ ] Recognize independence.
+[ ] Reject ordinary terms.
+[ ] /settlements admin debug war_score <war> 90 then confirm capitulated defender cannot reject attacker terms.
+
+H. LEVIES
+[ ] Define Muster Ground large enough for requested levy.
+[ ] Too-small ground refuses/reduces request clearly.
+[ ] Levy starts mobilizing rather than spawning all units in one tick.
+[ ] Levies spawn already owned by raising player and are grouped as Levy when Recruits group API permits.
+[ ] 300 player limit enforced.
+[ ] 500 total faction limit enforced; request over remaining cap is reduced/refused appropriately.
+[ ] Under-100 levy gets default 12 HP; >=100 gets default 10 HP.
+[ ] Levy level cap is enforced.
+[ ] Return Levy despawns/returns only levy-tagged units from the relevant deployment.
+[ ] Casualties are compared against original deployed strength and create mourning modifier.
+[ ] Debug advance tests 3/5/7/10-day prolonged-service stages.
+[ ] Cooldown exists; emergency hostile action reduces remaining cooldown/mobilization but does not zero it.
+
+I. MERCENARIES
+[ ] Hold configured recruit egg, run mercenary sethand, then save as roster/settlement template.
+[ ] Recruit resulting unit; Military screen immediately counts it as mercenary.
+[ ] Faction treasury shows its wage obligation.
+[ ] /settlements admin debug mercenary_payment <faction> forces payment processing.
+[ ] With adequate treasury: payment succeeds, missed count clears.
+[ ] With empty treasury: missed stages increase.
+[ ] After desert threshold, loaded merc becomes neutral/untracked rather than hostile.
+[ ] Unload/reload chunk: merc contract still exists and payment schedule persists.
+
+J. RELIGION / DEVOTION
+[ ] Expanded faith list includes Orthodox Christianity and other configured defaults.
+[ ] Holy Site visit changes devotion once per intended interval.
+[ ] Prayer Site changes devotion.
+[ ] Strongly incompatible allied faiths can produce Local Religious Unrest.
+[ ] Holy War appears as Casus Belli.
+[ ] Forced conversion peace term updates the target ruler where applicable.
+
+K. ADMIN / DEBUG
+[ ] reset character forces creation again without deleting settlement.
+[ ] reset traits / marriage / religion / levy / cooldowns affect only named subsystem.
+[ ] reset player requires explicit confirm.
+[ ] inspect player/settlement output is useful for bug reports.
+[ ] protected admin settlement/faction cannot enter ordinary player war actions.
+[ ] debug modifier add/remove/clear works.
+[ ] debug advance does not move vanilla world time.
+
+When reporting a failure, include: exact button/command, both players' faction + settlement roles, visible error/toast, server log snippet, and /settlements admin inspect output for the affected settlement/player.

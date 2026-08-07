@@ -1,0 +1,14 @@
+SETTLEMENTS 2.3 — SOURCE VALIDATION NOTES
+
+Validated in the supplied source package:
+- Version metadata = 2.3.0.
+- Network protocol = 23.
+- Minecraft 1.20.1 / Forge 47.2.0 / Recruits >=1.15.2 metadata present.
+- JSON resources parsed as valid JSON.
+- Java sources parse through javac far enough to reach expected missing Minecraft/Forge classpath errors; a command-tree parenthesis error found during validation was repaired.
+- git diff whitespace validation clean at packaging time.
+- Villager Recruits 1.15.2 JAR was inspected for the APIs used by faction creation, diplomacy, groups, claims and recruit ownership/morale.
+- Final ZIP integrity checked after packaging.
+
+NOT RUNTIME-COMPILED HERE
+This environment does not contain the ForgeGradle/Minecraft dependency cache and cannot reach Gradle's distribution/dependency servers. Therefore the authoritative compile test is your local `BUILD-V2.3.bat` run. A successful local ForgeGradle compile is still required before installation.
