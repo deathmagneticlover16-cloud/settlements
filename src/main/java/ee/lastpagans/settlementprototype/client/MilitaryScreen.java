@@ -125,12 +125,12 @@ public final class MilitaryScreen extends Screen {
         graphics.drawCenteredString(font, "MILITARY — " + fit(snapshot.settlementName().toUpperCase(Locale.ROOT), 420), left + W / 2, top + 13, 0xFFE7D8B0);
         graphics.drawCenteredString(font, fit(snapshot.factionName() + " · " + snapshot.rosterName(), 440), left + W / 2, top + 31, 0xFFB8B0A0);
 
-        stat(graphics, "Available manpower", snapshot.availableManpower() + " / " + snapshot.maximumManpower(), 26, 78);
-        stat(graphics, "Professional soldiers", snapshot.professionals(), 26, 98);
-        stat(graphics, "Levymen", snapshot.levymen(), 26, 118);
+        stat(graphics, "Native manpower", snapshot.availableManpower() + " / " + snapshot.maximumManpower(), 26, 78);
+        stat(graphics, "Foreign manpower", snapshot.foreignManpower(), 26, 98);
+        stat(graphics, "Professional soldiers", snapshot.professionals(), 26, 118);
+        stat(graphics, "Levymen", snapshot.levymen(), 286, 118);
         stat(graphics, "Recruit morale", snapshot.averageMorale() == 0 ? "No loaded troops" : snapshot.averageMorale() + "%", 286, 78);
         stat(graphics, "Mercenaries", snapshot.mercenaries(), 286, 98);
-        stat(graphics, "Wage obligation", snapshot.mercenaryWages() + " wealth / cycle", 286, 118);
 
         graphics.drawString(font, "UNIT TEMPLATE", left + 24, top + 132, 0xFFE7D8B0, false);
         List<PrototypeSnapshot.UnitTemplateEntry> templates = professionalTemplates();
@@ -150,6 +150,7 @@ public final class MilitaryScreen extends Screen {
             graphics.drawString(font, "No professional unit types are available.", left + 24, top + 174, 0xFFFFA080, false);
         }
 
+        graphics.drawString(font, "Faction/settlement wage obligation: " + snapshot.mercenaryWages() + " wealth / cycle", left + 286, top + 214, 0xFFB8B0A0, false);
         status(graphics, "Town Square", snapshot.townSquareSet(), 24, 230);
         status(graphics, "Muster Ground", snapshot.musterGroundSet(), 190, 230);
         status(graphics, "Barracks", snapshot.barracksSet(), 374, 230);

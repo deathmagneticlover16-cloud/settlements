@@ -257,7 +257,10 @@ public final class PrototypeManager {
         if (validation != null) return validation;
         int wealthPerUnit = professionalCost(unitType);
         int wealthCost = amount * wealthPerUnit;
-        if (settlement.getAvailableManpower() < amount) return "Not enough available manpower.";
+        Campaign23Data campaign23 = Campaign23Data.get(player.serverLevel());
+        int foreignAvailable = campaign23.foreignManpower(settlement.getId());
+        if (settlement.getAvailableManpower() + foreignAvailable < amount)
+            return "Not enough recruitable manpower. Available: " + settlement.getAvailableManpower() + " native + " + foreignAvailable + " foreign.";
         if (settlement.getWealth() < wealthCost) return "Not enough wealth. Required: " + wealthCost + ".";
 
         ServerLevel level = resolveMusterGroundLevel(player.getServer(), settlement);
@@ -269,7 +272,13 @@ public final class PrototypeManager {
             if (recruit == null) { discardSpawned(level, spawned); return "Recruit spawning failed; no MP or wealth was charged."; }
             spawned.add(recruit.getUUID());
         }
-        settlement.spendAvailableManpower(amount);
+        // Use treaty-transferred foreign manpower first so its stability penalty disappears once those soldiers
+        // have actually been absorbed into the army. Native manpower remains governed by the normal MP ceiling.
+        int foreignSpent = Math.min(amount, campaign23.foreignManpower(settlement.getId()));
+        if (foreignSpent > 0) campaign23.spendForeignManpower(settlement.getId(), foreignSpent);
+        int nativeSpent = amount - foreignSpent;
+        if (nativeSpent > 0) settlement.spendAvailableManpower(nativeSpent);
+        if (campaign23.foreignManpower(settlement.getId()) <= 0) campaign23.removeModifier(settlement.getId(), "foreign_soldiers");
         settlement.spendWealth(wealthCost);
         spawned.forEach(settlement::addProfessional);
         settlement.addChronicle("Recruited " + amount + " " + unitType.displayName() + (amount == 1 ? "" : "s") + ".");

@@ -30,6 +30,8 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<UUID, Integer> divorceCount = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
+    /** Temporary manpower awarded by peace terms. It is recruitable, but never raises a settlement's native MP ceiling. */
+    private final Map<String, Integer> foreignManpower = new HashMap<>();
     private final Map<String, Long> debugTimeOffsetMillis = new HashMap<>();
     private final Map<String, Long> lastModifierDay = new HashMap<>();
     private final Map<String, Boolean> protectedSettlements = new HashMap<>();
@@ -65,6 +67,7 @@ public final class Campaign23Data extends SavedData {
         readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
         readUuidIntMap(tag, "DivorceCount", data.divorceCount);
         readStringIntMap(tag, "Prosperity", data.prosperity);
+        readStringIntMap(tag, "ForeignManpower", data.foreignManpower);
         readStringLongMap(tag, "DebugOffsets", data.debugTimeOffsetMillis);
         readStringLongMap(tag, "LastModifierDay", data.lastModifierDay);
         readStringBooleanMap(tag, "ProtectedSettlements", data.protectedSettlements);
@@ -162,6 +165,7 @@ public final class Campaign23Data extends SavedData {
         writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
         writeUuidIntMap(tag, "DivorceCount", divorceCount);
         writeStringIntMap(tag, "Prosperity", prosperity);
+        writeStringIntMap(tag, "ForeignManpower", foreignManpower);
         writeStringLongMap(tag, "DebugOffsets", debugTimeOffsetMillis);
         writeStringLongMap(tag, "LastModifierDay", lastModifierDay);
         writeStringBooleanMap(tag, "ProtectedSettlements", protectedSettlements);
@@ -225,6 +229,22 @@ public final class Campaign23Data extends SavedData {
 
     public int prosperity(String settlement) { return prosperity.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setProsperity(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
+
+    public int foreignManpower(String settlement) { return foreignManpower.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
+    public void setForeignManpower(String settlement, int value) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (id.isBlank()) return;
+        int safe = Math.max(0, value);
+        if (safe == 0) foreignManpower.remove(id); else foreignManpower.put(id, safe);
+        setDirty();
+    }
+    public void addForeignManpower(String settlement, int amount) { if (amount > 0) setForeignManpower(settlement, foreignManpower(settlement) + amount); }
+    public boolean spendForeignManpower(String settlement, int amount) {
+        int cost = Math.max(0, amount);
+        if (foreignManpower(settlement) < cost) return false;
+        setForeignManpower(settlement, foreignManpower(settlement) - cost);
+        return true;
+    }
 
     public long nowMillis(String settlement) { return System.currentTimeMillis() + debugTimeOffsetMillis.getOrDefault(PrototypeData.normalizeId(settlement), 0L); }
     public void advanceDebugTime(String settlement, long millis) { String id = PrototypeData.normalizeId(settlement); debugTimeOffsetMillis.put(id, debugTimeOffsetMillis.getOrDefault(id, 0L) + Math.max(0L, millis)); setDirty(); }

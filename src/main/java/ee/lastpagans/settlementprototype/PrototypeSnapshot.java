@@ -23,7 +23,7 @@ public record PrototypeSnapshot(
         String bannerMode, CompoundTag settlementBannerStack, String rosterName, List<UnitTemplateEntry> unitTemplates,
         int villagerCount, double populationMultiplier, int civilianPopulation, int militaryPopulation, int totalPopulation,
         int housingCapacity, int freeHousing, int stability, int food, int wealth,
-        int maximumManpower, int availableManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
+        int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
         int professionals, int levymen, int pendingContracts,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet,
         int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages,
@@ -62,7 +62,7 @@ public record PrototypeSnapshot(
                 campaign.assignedRosterName(settlement), templates,
                 settlement.getVillagerCount(), settlement.getPopulationMultiplier(), settlement.getCivilianPopulation(), settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
                 settlement.getHousingCapacity(), settlement.getFreeHousing(), settlement.getStability(), settlement.getFood(), settlement.getWealth(),
-                settlement.getMaximumManpower(), settlement.getAvailableManpower(), settlement.getUsedManpower(), settlement.getLevyReservedManpower(), settlement.getSupportedManpower(),
+                settlement.getMaximumManpower(), settlement.getAvailableManpower(), Campaign23Data.get(player.serverLevel()).foreignManpower(settlement.getId()), settlement.getUsedManpower(), settlement.getLevyReservedManpower(), settlement.getSupportedManpower(),
                 settlement.getProfessionalCount(), settlement.getLivingLevymen(), settlement.getPendingContracts(),
                 settlement.hasTownSquare(), settlement.hasMusterGround(), settlement.hasBarracks(), settlement.getBarracksChest() != null,
                 settlement.getBarracksRadius(), settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(),
@@ -151,6 +151,11 @@ public record PrototypeSnapshot(
         }
 
         Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        int foreignMp = extra.foreignManpower(settlement.getId());
+        if (foreignMp > 0) {
+            values.add(new EffectEntry("Foreign manpower: " + foreignMp, "Peace treaty", "minecraft:iron_sword", "MIXED",
+                    "Treaty-transferred manpower can be used for professional recruitment. It does not increase native maximum manpower and causes Local Foreign Soldiers unrest until spent.", "Until recruited"));
+        }
         for (Campaign23Data.ModifierRecord modifier : extra.modifiers(settlement.getId())) {
             long remaining = modifier.expiresAtMillis <= 0L ? -1L : Math.max(0L, modifier.expiresAtMillis - extra.nowMillis(settlement.getId()));
             String duration = remaining < 0L ? "Persistent" : formatDuration(remaining);
@@ -200,7 +205,7 @@ public record PrototypeSnapshot(
         writeList(buffer, unitTemplates, UnitTemplateEntry::encode);
         buffer.writeVarInt(villagerCount); buffer.writeDouble(populationMultiplier); buffer.writeVarInt(civilianPopulation); buffer.writeVarInt(militaryPopulation); buffer.writeVarInt(totalPopulation);
         buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(wealth);
-        buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
+        buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
         buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet);
         buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages);
@@ -214,7 +219,7 @@ public record PrototypeSnapshot(
                 buffer.readUtf(64), buffer.readUtf(64), safe(buffer.readNbt()), buffer.readUtf(16), safe(buffer.readNbt()), buffer.readUtf(64),
                 readList(buffer, UnitTemplateEntry::decode, 16),
                 buffer.readVarInt(), buffer.readDouble(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),

@@ -538,8 +538,10 @@ public final class CampaignManager {
                 case "MANPOWER" -> {
                     int moved = takeManpower(settlements, loserFaction, loserSettlement, term.amount());
                     if (winnerSettlement != null && moved > 0) {
-                        winnerSettlement.changeMaximumManpower(moved); winnerSettlement.changeAvailableManpower(moved);
-                        extra.addModifier(winnerSettlement.getId(), Campaign23Manager.standardModifier(level, winnerSettlement.getId(), "foreign_soldiers", 3L * 24L * 60L * 60L * 1000L));
+                        extra.addForeignManpower(winnerSettlement.getId(), moved);
+                        // Foreign manpower is a temporary recruitable pool. It deliberately does NOT increase the
+                        // settlement's native maximum manpower, and the social penalty persists until the pool is used.
+                        extra.addModifier(winnerSettlement.getId(), Campaign23Manager.standardModifier(level, winnerSettlement.getId(), "foreign_soldiers", 0L));
                     }
                 }
                 case "REPARATIONS" -> { if (!loserFaction.isBlank() && !winnerFaction.isBlank() && term.amount() > 0 && term.durationDays() > 0) extra.addReparation(new Campaign23Data.ReparationRecord(UUID.randomUUID(), loserFaction, winnerFaction, term.amount(), term.durationDays(), day + 1)); }
