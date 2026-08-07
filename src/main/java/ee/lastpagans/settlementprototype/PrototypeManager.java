@@ -1,6 +1,8 @@
 package ee.lastpagans.settlementprototype;
 
 import com.talhanation.recruits.FactionEvents;
+import com.talhanation.recruits.ClaimEvents;
+import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.init.ModEntityTypes;
 import ee.lastpagans.settlementprototype.item.ModItems;
@@ -33,6 +35,7 @@ import net.minecraft.world.item.BannerItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraft.world.scores.Team;
@@ -184,6 +187,9 @@ public final class PrototypeManager {
             case SET_CUSTOM_BANNER -> requireManager(player, settlement, () -> setSettlementBanner(player, settlement));
             case USE_FACTION_BANNER -> requireManager(player, settlement, () -> useFactionBanner(player, settlement));
             case CLEAR_BANNER -> requireManager(player, settlement, () -> clearSettlementBanner(player, settlement));
+            case LINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> linkCurrentClaim(player, settlement));
+            case UNLINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> unlinkCurrentClaim(player, settlement));
+            case CLEAR_CLAIMS -> requireManager(player, settlement, () -> clearClaims(settlement));
             case OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT -> "Screen opened.";
             case REFRESH -> "Stats refreshed.";
         };
@@ -360,6 +366,34 @@ public final class PrototypeManager {
         root.put("EntityTag", entity);
     }
 
+    public static String linkCurrentClaim(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
+        if (ClaimEvents.recruitsClaimManager == null) return "Recruits claim manager is not ready.";
+        RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(new ChunkPos(player.blockPosition()));
+        if (claim == null) return "Stand inside the Recruits claim you want to link.";
+        String dimension = player.serverLevel().dimension().location().toString();
+        PrototypeData.SettlementRecord existing = PrototypeData.get(player.serverLevel()).findSettlementByClaim(dimension, claim.getUUID());
+        if (existing != null && existing != settlement) return "That claim is already linked to " + existing.getName() + ".";
+        boolean added = settlement.linkClaim(dimension, claim.getUUID(), claim.getName());
+        if (claim.getOwnerFactionStringID() != null && settlement.getFactionTeam().isBlank()) settlement.setFactionTeam(claim.getOwnerFactionStringID());
+        return added ? "Linked claim " + claim.getName() + ". Total claims: " + settlement.getClaimCount() + "."
+                : "That claim is already linked to this settlement.";
+    }
+
+    public static String unlinkCurrentClaim(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
+        if (ClaimEvents.recruitsClaimManager == null) return "Recruits claim manager is not ready.";
+        RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(new ChunkPos(player.blockPosition()));
+        if (claim == null) return "Stand inside the linked Recruits claim you want to remove.";
+        boolean removed = settlement.unlinkClaim(player.serverLevel().dimension().location().toString(), claim.getUUID());
+        return removed ? "Unlinked claim " + claim.getName() + ". Remaining claims: " + settlement.getClaimCount() + "."
+                : "That claim is not linked to this settlement.";
+    }
+
+    public static String clearClaims(PrototypeData.SettlementRecord settlement) {
+        int count = settlement.getClaimCount();
+        settlement.clearClaimLink();
+        return "Removed all " + count + " linked claim(s).";
+    }
+
     private static String setSettlementBanner(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
         ItemStack held = player.getMainHandItem();
         if (!(held.getItem() instanceof BannerItem)) return "Hold a placed-style Minecraft banner item in your main hand.";
@@ -526,7 +560,9 @@ public final class PrototypeManager {
             String faith,
             String address,
             String title,
-            String dynasty
+            String dynasty,
+            List<String> selectedTraits,
+            int rerollRound
     ) {
         PrototypeData data = PrototypeData.get(player.serverLevel());
         PrototypeData.CharacterRecord existingCharacter = data.getCharacter(player.getUUID());
@@ -561,8 +597,15 @@ public final class PrototypeManager {
             return;
         }
 
+        if (!CampaignDefinitions.validateTraitSelection(player.getUUID(), proposed, selectedTraits, rerollRound)) {
+            player.sendSystemMessage(Component.literal("Invalid character trait selection. Reopen character creation and choose from the offered cards."));
+            promptCharacterCreation(player);
+            return;
+        }
+
         PrototypeData.CharacterRecord character = data.getOrCreateCharacter(player.getUUID());
         character.create(cleanFirst, cleanMiddle, cleanLast, faith, address, title, cleanDynasty);
+        character.setTraits(selectedTraits);
         data.setDirty();
         player.refreshDisplayName();
         player.refreshTabListName();
@@ -901,7 +944,7 @@ public final class PrototypeManager {
         RECRUIT_ONE, RECRUIT_FIVE, RECRUIT_TEN, RECRUIT_TWENTY_FIVE, RECRUIT_UNIT,
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_SILVER,
         WITHDRAW_SILVER_ONE, WITHDRAW_SILVER_TEN, CLAIM_CONTRACT,
-        SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER,
+        SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
         OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
 

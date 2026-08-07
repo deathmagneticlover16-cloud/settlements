@@ -25,6 +25,7 @@ public final class PrototypeScreen extends Screen {
     private int left, top;
     private Tab tab = Tab.OVERVIEW;
     private BannerRenderer factionBanner, settlementBanner;
+    private boolean confirmClearClaims;
 
     public PrototypeScreen(PrototypeSnapshot snapshot) {
         super(Component.literal("Settlement"));
@@ -76,19 +77,25 @@ public final class PrototypeScreen extends Screen {
     }
 
     private void residentButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Claim Settler Contract"), button -> send(PrototypeManager.SettlementAction.CLAIM_CONTRACT))
-                .bounds(left + 20, top + 260, 170, 20).build());
+        if (snapshot.canContribute()) {
+            addRenderableWidget(Button.builder(Component.literal("Claim Settler Contract"), button -> send(PrototypeManager.SettlementAction.CLAIM_CONTRACT))
+                    .bounds(left + 20, top + 260, 170, 20).build());
+        }
     }
 
     private void treasuryButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Deposit Held Food"), button -> send(PrototypeManager.SettlementAction.DEPOSIT_FOOD))
-                .bounds(left + 20, top + 232, 154, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Deposit Held Silver"), button -> send(PrototypeManager.SettlementAction.DEPOSIT_SILVER))
-                .bounds(left + 180, top + 232, 154, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Withdraw 1 Silver"), button -> send(PrototypeManager.SettlementAction.WITHDRAW_SILVER_ONE))
-                .bounds(left + 20, top + 260, 154, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Withdraw 10 Silver"), button -> send(PrototypeManager.SettlementAction.WITHDRAW_SILVER_TEN))
-                .bounds(left + 180, top + 260, 154, 20).build());
+        if (snapshot.canContribute()) {
+            addRenderableWidget(Button.builder(Component.literal("Deposit Held Food"), button -> send(PrototypeManager.SettlementAction.DEPOSIT_FOOD))
+                    .bounds(left + 20, top + 232, 154, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Deposit Held Silver"), button -> send(PrototypeManager.SettlementAction.DEPOSIT_SILVER))
+                    .bounds(left + 180, top + 232, 154, 20).build());
+        }
+        if (snapshot.canManage()) {
+            addRenderableWidget(Button.builder(Component.literal("Withdraw 1 Silver"), button -> send(PrototypeManager.SettlementAction.WITHDRAW_SILVER_ONE))
+                    .bounds(left + 20, top + 260, 154, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Withdraw 10 Silver"), button -> send(PrototypeManager.SettlementAction.WITHDRAW_SILVER_TEN))
+                    .bounds(left + 180, top + 260, 154, 20).build());
+        }
     }
 
     private void effectButtons() {
@@ -97,12 +104,21 @@ public final class PrototypeScreen extends Screen {
     }
 
     private void managementButtons() {
+        if (!snapshot.canManage()) return;
         addRenderableWidget(Button.builder(Component.literal("Set held banner"), button -> send(PrototypeManager.SettlementAction.SET_CUSTOM_BANNER))
                 .bounds(left + 20, top + 244, 132, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Use faction banner"), button -> send(PrototypeManager.SettlementAction.USE_FACTION_BANNER))
                 .bounds(left + 158, top + 244, 142, 20).build());
         addRenderableWidget(Button.builder(Component.literal("No banner"), button -> send(PrototypeManager.SettlementAction.CLEAR_BANNER))
                 .bounds(left + 306, top + 244, 110, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Link Claim Here"), button -> send(PrototypeManager.SettlementAction.LINK_CURRENT_CLAIM))
+                .bounds(left + 20, top + 266, 132, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Unlink Current"), button -> send(PrototypeManager.SettlementAction.UNLINK_CURRENT_CLAIM))
+                .bounds(left + 158, top + 266, 142, 18).build());
+        addRenderableWidget(Button.builder(Component.literal(confirmClearClaims ? "CONFIRM UNLINK ALL" : "Unlink All Claims"), button -> {
+                    if (confirmClearClaims) { send(PrototypeManager.SettlementAction.CLEAR_CLAIMS); confirmClearClaims = false; }
+                    else { confirmClearClaims = true; buildWidgets(); }
+                }).bounds(left + 306, top + 266, 154, 18).build());
     }
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
@@ -239,6 +255,10 @@ public final class PrototypeScreen extends Screen {
     }
 
     private void renderManagement(GuiGraphics graphics) {
+        if (!snapshot.canManage()) {
+            graphics.drawWordWrap(font, Component.literal("Read-only faction view. Only the settlement owner, co-owners, or administrators can change banners, claims, housing, military locations, resources, or recruitment."), left + 22, top + 112, W - 44, 0xFFFFC080);
+            return;
+        }
         stat(graphics, "Banner mode", pretty(snapshot.bannerMode()), 22, 110);
         stat(graphics, "Faction banner", snapshot.factionId().isBlank() ? "none" : fit(snapshot.factionName(), 180), 22, 132);
         stat(graphics, "Military roster", fit(snapshot.rosterName(), 180), 22, 154);

@@ -18,7 +18,7 @@ import java.util.UUID;
 
 /** Compact server-authoritative settlement state used by the settlement and military screens. */
 public record PrototypeSnapshot(
-        String settlementId, String settlementName, String rank, String rankSubtitle, String role,
+        String settlementId, String settlementName, String rank, String rankSubtitle, String role, boolean canManage, boolean canContribute,
         String factionId, String factionName, CompoundTag factionBanner,
         String bannerMode, CompoundTag settlementBannerStack, String rosterName, List<UnitTemplateEntry> unitTemplates,
         int villagerCount, double populationMultiplier, int civilianPopulation, int militaryPopulation, int totalPopulation,
@@ -57,6 +57,7 @@ public record PrototypeSnapshot(
 
         return new PrototypeSnapshot(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(), settlement.getRank().subtitle(), settlement.getRole(player.getUUID()).name(),
+                PrototypeManager.canManage(player, settlement), PrototypeManager.canContribute(player, settlement),
                 factionId, factionName, factionBanner, visual.getBannerMode().name(), settlementBanner,
                 campaign.assignedRosterName(settlement), templates,
                 settlement.getVillagerCount(), settlement.getPopulationMultiplier(), settlement.getCivilianPopulation(), settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
@@ -155,7 +156,7 @@ public record PrototypeSnapshot(
     }
 
     public void encode(FriendlyByteBuf buffer) {
-        buffer.writeUtf(settlementId, 64); buffer.writeUtf(settlementName, 64); buffer.writeUtf(rank, 32); buffer.writeUtf(rankSubtitle, 48); buffer.writeUtf(role, 16);
+        buffer.writeUtf(settlementId, 64); buffer.writeUtf(settlementName, 64); buffer.writeUtf(rank, 32); buffer.writeUtf(rankSubtitle, 48); buffer.writeUtf(role, 16); buffer.writeBoolean(canManage); buffer.writeBoolean(canContribute);
         buffer.writeUtf(factionId, 64); buffer.writeUtf(factionName, 64); buffer.writeNbt(factionBanner);
         buffer.writeUtf(bannerMode, 16); buffer.writeNbt(settlementBannerStack); buffer.writeUtf(rosterName, 64);
         writeList(buffer, unitTemplates, UnitTemplateEntry::encode);
@@ -171,7 +172,7 @@ public record PrototypeSnapshot(
 
     public static PrototypeSnapshot decode(FriendlyByteBuf buffer) {
         return new PrototypeSnapshot(
-                buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32), buffer.readUtf(48), buffer.readUtf(16),
+                buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32), buffer.readUtf(48), buffer.readUtf(16), buffer.readBoolean(), buffer.readBoolean(),
                 buffer.readUtf(64), buffer.readUtf(64), safe(buffer.readNbt()), buffer.readUtf(16), safe(buffer.readNbt()), buffer.readUtf(64),
                 readList(buffer, UnitTemplateEntry::decode, 16),
                 buffer.readVarInt(), buffer.readDouble(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),

@@ -1148,7 +1148,7 @@ public final class PrototypeData extends SavedData {
             this.title = cleanText(title, "Lord", 32);
             this.dynasty = cleanText(dynasty, "", 32);
             this.created = !this.firstName.isBlank() && !this.lastName.isBlank();
-            if (this.created && traits.isEmpty()) traits.addAll(CampaignDefinitions.assignStartingTraits(playerId, getDisplayName()));
+            // Starting traits are selected explicitly in the 2.3 three-card creation flow. Legacy saves retain their existing traits.
         }
 
         public void setDynastyAndHouse(String dynasty, String house) {

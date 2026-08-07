@@ -1,7 +1,5 @@
 package ee.lastpagans.settlementprototype.client;
 
-import ee.lastpagans.settlementprototype.network.PrototypeNetwork;
-import ee.lastpagans.settlementprototype.network.SubmitCharacterPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -30,9 +28,7 @@ public final class CharacterPreviewScreen extends Screen {
     }
 
     private void confirm() {
-        PrototypeNetwork.CHANNEL.sendToServer(new SubmitCharacterPacket(
-                draft.first(), draft.middle(), draft.last(), draft.faith(), draft.address(), draft.title(), draft.dynasty()
-        ));
+        minecraft.setScreen(new TraitSelectionScreen(draft));
     }
 
     @Override
@@ -52,7 +48,7 @@ public final class CharacterPreviewScreen extends Screen {
         line(graphics, "Form of address", draft.address(), x, y + 25);
         line(graphics, "Dynasty", draft.dynasty().isBlank() ? "None" : draft.dynasty(), x, y + 50);
         graphics.drawWordWrap(font, Component.literal(
-                "Two starting character traits will be generated when you confirm. They will be shown clearly on your character sheet."
+                "After this preview you will choose three starting traits from three random cards per round."
         ), x, y + 83, 195, 0xFFAAAAAA);
         graphics.drawWordWrap(font, Component.literal(
                 "This is the one-time correction screen. Use Go Back before confirming."

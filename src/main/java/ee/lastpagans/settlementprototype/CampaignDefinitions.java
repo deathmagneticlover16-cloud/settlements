@@ -71,6 +71,25 @@ public final class CampaignDefinitions {
         register(new TraitDefinition("merciful", "Merciful", "minecraft:white_wool", TraitTone.POSITIVE,
                 "A restrained ruler whose subjects are less fearful of punishment.",
                 List.of(new TraitEffect("Settlement stability", "+1 per day", 1, EffectKind.STABILITY))));
+        register(new TraitDefinition("charismatic", "Charismatic", "minecraft:emerald", TraitTone.POSITIVE,
+                "Naturally persuasive and more likely to attract desirable political marriage candidates.",
+                List.of(new TraitEffect("Spouse candidate quality", "+1 tier", 1, EffectKind.SPOUSE_QUALITY))));
+        register(new TraitDefinition("healthy", "Healthy", "minecraft:apple", TraitTone.POSITIVE,
+                "Robust and energetic; useful for future health and event systems.", List.of()));
+        register(new TraitDefinition("rousing_orator", "Rousing Orator", "minecraft:goat_horn", TraitTone.POSITIVE,
+                "Can mobilise the population faster through forceful speeches.",
+                List.of(new TraitEffect("Levy muster time", "-20%", -20, EffectKind.LEVY_MUSTER))));
+        register(new TraitDefinition("war_leader", "War Leader", "minecraft:iron_helmet", TraitTone.POSITIVE,
+                "Experienced at preparing irregular troops for battle.",
+                List.of(new TraitEffect("Levy maximum health", "+1", 1, EffectKind.LEVY_HEALTH),
+                        new TraitEffect("Levy starting XP", "+20", 20, EffectKind.LEVY_XP))));
+        register(new TraitDefinition("beloved_commander", "Beloved Commander", "minecraft:white_banner", TraitTone.POSITIVE,
+                "Soldiers are more willing to endure hardship under this leader.",
+                List.of(new TraitEffect("Recruit morale", "+5", 5, EffectKind.MORALE))));
+        register(new TraitDefinition("ferocious_leader", "Ferocious Leader", "minecraft:netherite_sword", TraitTone.MIXED,
+                "A frightening battlefield presence who drives levies into action quickly.",
+                List.of(new TraitEffect("Recruit morale", "+4", 4, EffectKind.MORALE),
+                        new TraitEffect("Levy muster time", "-20%", -20, EffectKind.LEVY_MUSTER))));
     }
 
     private CampaignDefinitions() {}
@@ -87,17 +106,48 @@ public final class CampaignDefinitions {
         return List.copyOf(TRAITS.values());
     }
 
-    public static List<String> assignStartingTraits(UUID playerId, String seedText) {
-        List<String> pool = new ArrayList<>(List.of(
-                "responsible", "brave", "diplomatic", "frugal", "warlike",
-                "reserved", "extravagant", "frail", "reliable", "merciful", "zealous"
-        ));
+    /** Traits offered to newly-created player characters. Legacy reliability/fertility remain readable but are not rolled. */
+    public static List<TraitDefinition> playableTraits() {
+        return TRAITS.values().stream()
+                .filter(value -> !value.id().equals("reliable") && !value.id().equals("fertile"))
+                .toList();
+    }
+
+    /** Deterministic three-card roll. The server uses the same method to reject modified-client trait cheating. */
+    public static List<String> traitChoices(UUID playerId, String seedText, int round, boolean rerolled, List<String> excluded) {
+        List<TraitDefinition> pool = new ArrayList<>(playableTraits());
+        if (excluded != null) pool.removeIf(value -> excluded.stream().anyMatch(id -> value.id().equals(normalize(id))));
         long seed = playerId == null ? 0L : playerId.getMostSignificantBits() ^ playerId.getLeastSignificantBits();
-        if (seedText != null) seed ^= seedText.toLowerCase(Locale.ROOT).hashCode() * 31L;
-        Random random = new Random(seed);
-        String first = pool.remove(random.nextInt(pool.size()));
-        String second = pool.remove(random.nextInt(pool.size()));
-        return List.of(first, second);
+        if (seedText != null) seed ^= (long) seedText.toLowerCase(Locale.ROOT).hashCode() * 31L;
+        seed ^= 0x9E3779B97F4A7C15L * (Math.max(0, round) + 1L);
+        if (rerolled) seed ^= 0xD1B54A32D192ED03L;
+        java.util.Collections.shuffle(pool, new Random(seed));
+        List<TraitDefinition> picked = new ArrayList<>(pool.stream().limit(3).toList());
+        boolean allBad = !picked.isEmpty() && picked.stream().allMatch(value -> value.tone() == TraitTone.NEGATIVE);
+        if (allBad) {
+            TraitDefinition safer = pool.stream().filter(value -> value.tone() != TraitTone.NEGATIVE && !picked.contains(value)).findFirst().orElse(null);
+            if (safer != null) picked.set(0, safer);
+        }
+        return picked.stream().map(TraitDefinition::id).toList();
+    }
+
+    public static boolean validateTraitSelection(UUID playerId, String seedText, List<String> selected, int rerollRound) {
+        if (selected == null || selected.size() != 3 || selected.stream().map(CampaignDefinitions::normalize).distinct().count() != 3) return false;
+        List<String> previous = new ArrayList<>();
+        for (int round = 0; round < 3; round++) {
+            String choice = normalize(selected.get(round));
+            List<String> options = traitChoices(playerId, seedText, round, rerollRound == round, previous);
+            if (!options.contains(choice)) return false;
+            previous.add(choice);
+        }
+        return rerollRound >= -1 && rerollRound <= 2;
+    }
+
+    /** Legacy fallback for old callers; new character creation uses the three-card chooser. */
+    public static List<String> assignStartingTraits(UUID playerId, String seedText) {
+        List<String> selected = new ArrayList<>();
+        for (int round = 0; round < 3; round++) selected.add(traitChoices(playerId, seedText, round, false, selected).get(0));
+        return List.copyOf(selected);
     }
 
     public static int totalEffect(List<String> traitIds, EffectKind kind) {
@@ -160,7 +210,7 @@ public final class CampaignDefinitions {
     }
 
     public enum TraitTone { POSITIVE, NEGATIVE, MIXED, NEUTRAL }
-    public enum EffectKind { STABILITY, WEALTH, MORALE, RELATIONS, RELIABILITY }
+    public enum EffectKind { STABILITY, WEALTH, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER }
 
     public record TraitEffect(String label, String displayValue, int amount, EffectKind kind) {}
 
