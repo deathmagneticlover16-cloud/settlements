@@ -112,3 +112,4 @@ WORLD NEWS / UI
 - Peace Terms are now available to actual settlement managers in local wars (including independents), while joined faction leadership can negotiate faction territory after escalation; observer parent factions cannot use the treaty UI before joining.
 - Capitulation alerts now trigger only when war score actually crosses ±90, notify the real participating settlement/faction side (not an observing parent faction), and create a major World News entry without repeated toast spam on every later casualty.
 - Returning a bloodied levy now immediately notifies settlement managers of the casualty modifier; losses of 50%+ create Military news, and 75%+ catastrophes become public major news.
+- Settlements' replacement faction creator now preserves Recruits' configured creation requirements/cost, rejects duplicate display names/banners, and verifies that Recruits actually created the faction before reporting success.

@@ -1279,6 +1279,12 @@ public final class CampaignManager {
         if (RecruitsFactionManager.isBannerBlank(banner)) {
             return "Faction creation failed: Your faction banner must contain at least one pattern.";
         }
+        if (FactionEvents.recruitsFactionManager.isDisplayNameInUse(displayName)) {
+            return "Faction creation failed: that faction display name is already in use.";
+        }
+        if (FactionEvents.recruitsFactionManager.isBannerInUse(banner.serializeNBT())) {
+            return "Faction creation failed: that banner is already used by another faction.";
+        }
         String baseId = PrototypeData.normalizeId(displayName);
         if (baseId.isBlank()) return "That faction name cannot produce a valid internal ID.";
         String factionId = baseId;
@@ -1289,10 +1295,16 @@ public final class CampaignManager {
             if (suffix > 99) return "Too many factions already use that name.";
         }
         try {
-            FactionEvents.createTeam(false, player, player.serverLevel(), factionId, displayName,
+            // Preserve the base Recruits faction-creation rules (including its configured emerald cost)
+            // rather than bypassing them just because Settlements provides the replacement GUI.
+            FactionEvents.createTeam(true, player, player.serverLevel(), factionId, displayName,
                     player.getScoreboardName(), banner, teamColor == null ? ChatFormatting.WHITE : teamColor, unitColor);
         } catch (RuntimeException exception) {
             return "Faction creation failed: " + exception.getClass().getSimpleName();
+        }
+        RecruitsFaction created = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (created == null) {
+            return "Faction creation failed: Recruits did not confirm creation. Check its configured creation requirements/cost and try again.";
         }
         CampaignData campaign = CampaignData.get(player.serverLevel());
         campaign.factionProfile(factionId);
