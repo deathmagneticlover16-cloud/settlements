@@ -6,6 +6,7 @@ import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.recruits.world.RecruitsDiplomacyManager;
 import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsFactionManager;
+import com.talhanation.recruits.world.RecruitsPlayerInfo;
 import ee.lastpagans.settlementprototype.network.CampaignSnapshotPacket;
 import ee.lastpagans.settlementprototype.network.DiplomacySnapshotPacket;
 import ee.lastpagans.settlementprototype.network.FactionSnapshotPacket;
@@ -887,6 +888,14 @@ public final class CampaignManager {
                             && !transferred.getId().equals(loserSettlement.getId())) {
                         return "a Settlement War may only transfer its defending/negotiating settlement, not unrelated territory";
                     }
+                    UUID recipientOwner = treatyRecipientOwner(level, winnerFaction, winnerSettlement, war);
+                    if (recipientOwner == null) return "the winning side has no valid ruler to receive the transferred settlement";
+                    if (winnerFaction.isBlank() && !recipientOwner.equals(transferred.getOwnerId())) {
+                        long independentHoldings = settlements.getSettlements().stream()
+                                .filter(value -> recipientOwner.equals(value.getOwnerId()) && value.getFactionTeam().isBlank()
+                                        && !value.getId().equals(transferred.getId())).count();
+                        if (independentHoldings >= 2) return "the winning ruler already owns the maximum two independent settlements";
+                    }
                 }
                 case "TRANSFER_CLAIM" -> {
                     UUID claimId;
@@ -909,6 +918,12 @@ public final class CampaignManager {
                     if (released == null) return "the settlement requested for independence no longer exists";
                     if (loserFaction.isBlank() || !loserFaction.equals(released.getFactionTeam())) {
                         return "the side receiving these demands does not rule the settlement requested for independence";
+                    }
+                    if (released.getOwnerId() != null) {
+                        long independentHoldings = settlements.getSettlements().stream()
+                                .filter(value -> released.getOwnerId().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()
+                                        && !value.getId().equals(released.getId())).count();
+                        if (independentHoldings >= 2) return "that settlement's ruler already owns the maximum two independent settlements";
                     }
                 }
                 default -> { }
@@ -950,6 +965,7 @@ public final class CampaignManager {
         PrototypeData.SettlementRecord winnerSettlement = settlements.getSettlement(offer.proposerSettlement());
         if (winnerSettlement == null && !winnerFaction.isBlank()) winnerSettlement = settlements.settlementsForFaction(winnerFaction).stream().findFirst().orElse(null);
         PrototypeData.SettlementRecord loserSettlement = settlements.getSettlement(offer.targetSettlement());
+        UUID recipientOwner = treatyRecipientOwner(level, winnerFaction, winnerSettlement, war);
         for (Campaign23Data.PeaceTerm term : offer.terms()) {
             switch (term.type()) {
                 case "WEALTH" -> {
@@ -968,9 +984,9 @@ public final class CampaignManager {
                 case "REPARATIONS" -> { if (!loserFaction.isBlank() && !winnerFaction.isBlank() && term.amount() > 0 && term.durationDays() > 0) extra.addReparation(new Campaign23Data.ReparationRecord(UUID.randomUUID(), loserFaction, winnerFaction, term.amount(), term.durationDays(), day + 1)); }
                 case "NAP" -> { if (!winnerFaction.isBlank() && !loserFaction.isBlank() && term.durationDays() > 0) { dataRelationNap(level, winnerFaction, loserFaction, day); extra.setForcedNap(winnerFaction, loserFaction, day + term.durationDays()); } }
                 case "CONVERT_FAITH" -> convertSideFaith(level, loserFaction, loserSettlement, term.text());
-                case "TRANSFER_SETTLEMENT" -> transferSettlementByTreaty(level, term.targetId(), winnerFaction);
+                case "TRANSFER_SETTLEMENT" -> transferSettlementByTreaty(level, term.targetId(), winnerFaction, recipientOwner);
                 case "TRANSFER_CLAIM" -> transferClaimByTreaty(level, term.targetId(), term.text());
-                case "RECOGNIZE_INDEPENDENCE" -> { PrototypeData.SettlementRecord s = settlements.getSettlement(term.targetId()); if (s != null) s.setFactionTeam(""); }
+                case "RECOGNIZE_INDEPENDENCE" -> releaseSettlementByTreaty(settlements.getSettlement(term.targetId()));
             }
         }
     }
@@ -994,16 +1010,50 @@ public final class CampaignManager {
         if (ruler == null && settlement != null) ruler = settlement.getOwnerId();
         PrototypeData.CharacterRecord character = ruler == null ? null : PrototypeData.get(level).getCharacter(ruler); if (character != null) character.setFaith(faith);
     }
-    private static void transferSettlementByTreaty(ServerLevel level, String settlementId, String winnerFaction) {
-        PrototypeData.SettlementRecord settlement = PrototypeData.get(level).getSettlement(settlementId); if (settlement == null) return;
+    private static UUID treatyRecipientOwner(ServerLevel level, String winnerFaction, PrototypeData.SettlementRecord winnerSettlement,
+                                             CampaignData.WarRecord war) {
+        if (war != null && war.type() == CampaignData.WarType.SETTLEMENT_WAR && winnerSettlement != null && winnerSettlement.getOwnerId() != null)
+            return winnerSettlement.getOwnerId();
+        if (winnerFaction != null && !winnerFaction.isBlank() && FactionEvents.recruitsFactionManager != null) {
+            RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(winnerFaction);
+            if (faction != null && faction.getTeamLeaderUUID() != null) return faction.getTeamLeaderUUID();
+        }
+        return winnerSettlement == null ? null : winnerSettlement.getOwnerId();
+    }
+
+    private static void transferSettlementByTreaty(ServerLevel level, String settlementId, String winnerFaction, UUID recipientOwner) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(level).getSettlement(settlementId); if (settlement == null || recipientOwner == null) return;
+        UUID previousOwner = settlement.getOwnerId();
         settlement.setFactionTeam(winnerFaction);
+        if (!recipientOwner.equals(previousOwner)) {
+            settlement.setOwner(recipientOwner);
+            if (previousOwner != null) settlement.setRole(previousOwner, PrototypeData.SettlementRole.OUTSIDER);
+        }
+        if (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL
+                || (!winnerFaction.isBlank() && settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)) {
+            settlement.setRank(PrototypeData.SettlementRank.TOWN);
+        }
         if (!winnerFaction.isBlank() && FactionEvents.recruitsFactionManager != null && ClaimEvents.recruitsClaimManager != null) {
             RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(winnerFaction);
-            if (faction != null) for (PrototypeData.ClaimLink link : settlement.getClaimLinks()) { RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(link.id()); if (claim != null) { claim.setOwnerFaction(faction); ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, claim); } }
+            if (faction != null) for (PrototypeData.ClaimLink link : settlement.getClaimLinks()) {
+                RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(link.id());
+                if (claim != null) {
+                    claim.setOwnerFaction(faction);
+                    if (faction.getTeamLeaderUUID() != null) claim.setPlayer(new RecruitsPlayerInfo(faction.getTeamLeaderUUID(), faction.getTeamLeaderName(), faction));
+                    ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, claim);
+                }
+            }
             ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(level);
         }
-        settlement.addChronicle("Settlement transferred by peace treaty to " + (winnerFaction.isBlank() ? "independence" : factionName(winnerFaction)) + ".");
+        settlement.addChronicle("Settlement transferred by peace treaty to " + (winnerFaction.isBlank() ? "the opposing ruler" : factionName(winnerFaction)) + ".");
     }
+    private static void releaseSettlementByTreaty(PrototypeData.SettlementRecord settlement) {
+        if (settlement == null) return;
+        settlement.setFactionTeam("");
+        if (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL) settlement.setRank(PrototypeData.SettlementRank.TOWN);
+        settlement.addChronicle("Independence recognized by peace treaty.");
+    }
+
     private static void transferClaimByTreaty(ServerLevel level, String claimIdRaw, String destinationSettlementId) {
         UUID claimId; try { claimId = UUID.fromString(claimIdRaw); } catch (IllegalArgumentException e) { return; }
         PrototypeData data = PrototypeData.get(level); PrototypeData.SettlementRecord destination = data.getSettlement(destinationSettlementId); if (destination == null) return;
@@ -1012,7 +1062,12 @@ public final class CampaignManager {
         source.unlinkClaim(link.dimension(), claimId); destination.linkClaim(link.dimension(), claimId, link.name());
         if (ClaimEvents.recruitsClaimManager != null && FactionEvents.recruitsFactionManager != null && !destination.getFactionTeam().isBlank()) {
             RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(claimId); RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(destination.getFactionTeam());
-            if (claim != null && faction != null) { claim.setOwnerFaction(faction); ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, claim); ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(level); }
+            if (claim != null && faction != null) {
+                claim.setOwnerFaction(faction);
+                if (faction.getTeamLeaderUUID() != null) claim.setPlayer(new RecruitsPlayerInfo(faction.getTeamLeaderUUID(), faction.getTeamLeaderName(), faction));
+                ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, claim);
+                ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(level);
+            }
         }
     }
     private static void toastSettlementManagers(MinecraftServer server, String settlementId, String title, String body) {
