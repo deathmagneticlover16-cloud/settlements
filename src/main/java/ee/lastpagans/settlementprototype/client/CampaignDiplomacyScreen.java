@@ -180,7 +180,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
                     ignore.active = snapshot.canManage() && !war.viewerIgnoredIntervention();
                     actionX += 64;
                 }
-                Button aid = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> minecraft.setScreen(new WarAidScreen(this, war)))
+                Button aid = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> minecraft.setScreen(new WarAidScreen(this, snapshot, war)))
                         .bounds(actionX, y, 72, 20).build());
                 aid.active = snapshot.canManage();
                 if (!viewerJoinedSettlementWar) {
@@ -394,7 +394,9 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             String defenders = war.targetSettlementName().isBlank() ? war.defenderFactionName() : war.targetSettlementName();
             graphics.drawString(font, war.typeName() + " — " + attackers + " vs " + defenders, left + 20, y, 0xFFFFB0A0, false);
             graphics.drawString(font, "Casus Belli: " + war.goalName() + " · War score " + signed(war.warScore()), left + 20, y + 12, 0xFFAAAAAA, false);
-            graphics.drawString(font, "Escalation: " + war.typeName(), left + 20, y + 23, 0xFF8FA8C8, false);
+            long recurringAid = snapshot.aid().stream().filter(aid -> war.id().equals(aid.warId()) && aid.recurring()).count();
+            String aidStatus = recurringAid > 0 ? " · Daily aid: " + recurringAid : "";
+            graphics.drawString(font, "Escalation: " + war.typeName() + aidStatus, left + 20, y + 23, 0xFF8FA8C8, false);
         }
     }
 

@@ -384,6 +384,15 @@ public final class Campaign23Data extends SavedData {
     public void addWarAid(UUID war, AidRecord value) { if (war == null || value == null) return; aidByWar.computeIfAbsent(war, key -> new ArrayList<>()).add(value); setDirty(); }
     public void replaceWarAid(UUID war, List<AidRecord> values) { if (war == null) return; if (values == null || values.isEmpty()) aidByWar.remove(war); else aidByWar.put(war, new ArrayList<>(values)); setDirty(); }
     public void removeWarAid(UUID war) { if (aidByWar.remove(war) != null) setDirty(); }
+    public boolean removeWarAid(UUID war, UUID aidId) {
+        if (war == null || aidId == null) return false;
+        List<AidRecord> values = aidByWar.get(war);
+        if (values == null) return false;
+        boolean removed = values.removeIf(value -> aidId.equals(value.id()));
+        if (values.isEmpty()) aidByWar.remove(war);
+        if (removed) setDirty();
+        return removed;
+    }
     public int warScore(UUID war) { return clamp(warScore.getOrDefault(war, 0), -100, 100); }
     public void setWarScore(UUID war, int score) { if (war == null) return; warScore.put(war, clamp(score, -100, 100)); setDirty(); }
     public void changeWarScore(UUID war, int delta) { setWarScore(war, warScore(war) + delta); }

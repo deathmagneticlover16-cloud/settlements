@@ -22,6 +22,7 @@ public record DiplomacySnapshot(
         List<SettlementTarget> settlements,
         List<ProposalEntry> proposals,
         List<WarEntry> wars,
+        List<AidEntry> aid,
         String message
 ) {
     public static DiplomacySnapshot from(ServerPlayer player, String message) {
@@ -111,10 +112,21 @@ public record DiplomacySnapshot(
                     value.attackerFactionJoined(), value.defenderFactionJoined(), attackerParent, defenderParent,
                     campaign23.ignoredWarIntervention(value.id(), own), campaign23.warScore(value.id()));
         }).toList();
+        java.util.Set<UUID> visibleWarIds = visibleWars.stream().map(CampaignData.WarRecord::id)
+                .collect(java.util.stream.Collectors.toSet());
+        List<AidEntry> aid = new ArrayList<>();
+        for (UUID visibleWarId : visibleWarIds) {
+            for (Campaign23Data.AidRecord value : campaign23.warAid(visibleWarId)) {
+                PrototypeData.SettlementRecord target = settlementsData.getSettlement(value.targetSettlement());
+                aid.add(new AidEntry(value.id(), visibleWarId, value.fromFaction(), CampaignManager.factionName(value.fromFaction()),
+                        value.targetSettlement(), target == null ? value.targetSettlement() : target.getName(),
+                        value.manpower(), value.wealth(), value.food(), value.recurring(), value.nextDay()));
+            }
+        }
 
         boolean canDeclareWar = player.createCommandSourceStack().hasPermission(2) || leader
                 || settlements.stream().anyMatch(SettlementTarget::manageable);
-        return new DiplomacySnapshot(own, ownName, rank, canManage, canDeclareWar, relations, settlements, proposals, wars,
+        return new DiplomacySnapshot(own, ownName, rank, canManage, canDeclareWar, relations, settlements, proposals, wars, aid,
                 message == null ? "" : message);
     }
 
@@ -142,13 +154,15 @@ public record DiplomacySnapshot(
         buffer.writeUtf(ownFactionId, 64); buffer.writeUtf(ownFactionName, 64); buffer.writeUtf(viewerRank, 32); buffer.writeBoolean(canManage); buffer.writeBoolean(canDeclareWar);
         writeList(buffer, relations, RelationEntry::encode); writeList(buffer, settlements, SettlementTarget::encode);
         writeList(buffer, proposals, ProposalEntry::encode); writeList(buffer, wars, WarEntry::encode);
+        writeList(buffer, aid, AidEntry::encode);
         buffer.writeUtf(message, 256);
     }
 
     public static DiplomacySnapshot decode(FriendlyByteBuf buffer) {
         return new DiplomacySnapshot(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32), buffer.readBoolean(), buffer.readBoolean(),
                 readList(buffer, RelationEntry::decode, 256), readList(buffer, SettlementTarget::decode, 1024),
-                readList(buffer, ProposalEntry::decode, 256), readList(buffer, WarEntry::decode, 256), buffer.readUtf(256));
+                readList(buffer, ProposalEntry::decode, 256), readList(buffer, WarEntry::decode, 256),
+                readList(buffer, AidEntry::decode, 512), buffer.readUtf(256));
     }
 
     private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, Encoder<T> encoder) {
@@ -212,6 +226,30 @@ public record DiplomacySnapshot(
             UUID id = buffer.readUUID(); String type = buffer.readUtf(32); String fromId = buffer.readUtf(64); String fromName = buffer.readUtf(80);
             UUID linked = buffer.readBoolean() ? buffer.readUUID() : null;
             return new ProposalEntry(id, type, fromId, fromName, linked, buffer.readUtf(512), buffer.readBoolean(), buffer.readBoolean());
+        }
+    }
+
+    public record AidEntry(UUID id, UUID warId, String fromFactionId, String fromFactionName,
+                           String targetSettlementId, String targetSettlementName, int manpower, int wealth, int food,
+                           boolean recurring, long nextDay) {
+        private static void encode(AidEntry value, FriendlyByteBuf buffer) {
+            buffer.writeUUID(value.id); buffer.writeUUID(value.warId);
+            buffer.writeUtf(value.fromFactionId, 64); buffer.writeUtf(value.fromFactionName, 80);
+            buffer.writeUtf(value.targetSettlementId, 64); buffer.writeUtf(value.targetSettlementName, 80);
+            buffer.writeInt(value.manpower); buffer.writeInt(value.wealth); buffer.writeInt(value.food);
+            buffer.writeBoolean(value.recurring); buffer.writeLong(value.nextDay);
+        }
+        private static AidEntry decode(FriendlyByteBuf buffer) {
+            return new AidEntry(buffer.readUUID(), buffer.readUUID(), buffer.readUtf(64), buffer.readUtf(80),
+                    buffer.readUtf(64), buffer.readUtf(80), buffer.readInt(), buffer.readInt(), buffer.readInt(),
+                    buffer.readBoolean(), buffer.readLong());
+        }
+        public String summary() {
+            List<String> parts = new ArrayList<>();
+            if (manpower > 0) parts.add(manpower + " MP");
+            if (wealth > 0) parts.add(wealth + " wealth");
+            if (food > 0) parts.add(food + " food");
+            return String.join(" · ", parts);
         }
     }
 

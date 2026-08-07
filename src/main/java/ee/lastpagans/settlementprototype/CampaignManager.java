@@ -449,6 +449,7 @@ public final class CampaignManager {
             case "JOIN_SETTLEMENT_WAR" -> joinSettlementWar(player, data, own, warId, day);
             case "IGNORE_SETTLEMENT_WAR" -> ignoreSettlementWar(player, data, own, warId);
             case "SEND_AID" -> sendWarAid(player, data, own, warId, extra, day);
+            case "CANCEL_AID" -> cancelWarAid(player, data, own, warId, proposalId, day);
             case "ACCEPT_PROPOSAL" -> acceptProposal(player, data, own, proposalId, day);
             case "REJECT_PROPOSAL" -> rejectProposal(player, data, own, proposalId);
             case "BREAK_TREATY" -> breakTreaty(player, data, own, targetFaction, day);
@@ -656,6 +657,30 @@ public final class CampaignManager {
         if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(player.getServer(), target.getId(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
         else CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
         return "Aid delivered to " + target.getName() + (recurring ? " and scheduled daily." : ".");
+    }
+
+    private static String cancelWarAid(ServerPlayer player, CampaignData data, String own, UUID warId, UUID aidId, long day) {
+        if (!canManageDiplomacy(player, own, 2)) return "Your faction rank cannot cancel war aid.";
+        CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "That war is no longer active.";
+        if (aidId == null) return "Select an active recurring aid commitment to cancel.";
+        Campaign23Data extraData = Campaign23Data.get(player.serverLevel());
+        Campaign23Data.AidRecord aid = extraData.warAid(war.id()).stream()
+                .filter(value -> aidId.equals(value.id())).findFirst().orElse(null);
+        if (aid == null || !aid.recurring()) return "That recurring aid commitment no longer exists.";
+        if (!own.equals(aid.fromFaction())) return "You may only cancel your own faction's aid commitments.";
+        PrototypeData.SettlementRecord target = PrototypeData.get(player.serverLevel()).getSettlement(aid.targetSettlement());
+        if (!extraData.removeWarAid(war.id(), aid.id())) return "That recurring aid commitment no longer exists.";
+
+        String targetName = target == null ? aid.targetSettlement() : target.getName();
+        data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MINOR, "War aid cancelled",
+                factionName(own) + " cancelled recurring aid to " + targetName + ".", day, own, aid.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);
+        CampaignToastSender.faction(player.getServer(), own, "AID CANCELLED", "Recurring aid to " + targetName + " has been cancelled.");
+        if (target != null) {
+            if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(player.getServer(), target.getId(), "AID CANCELLED", factionName(own) + " cancelled recurring aid to your settlement.");
+            else CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID CANCELLED", factionName(own) + " cancelled recurring aid to " + targetName + ".");
+        }
+        return "Recurring aid to " + targetName + " cancelled.";
     }
 
     private static int parsePositive(String[] split, int index) {
