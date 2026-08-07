@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Three rounds of three server-verifiable trait cards, with a single reroll for the whole character. */
-public final class TraitSelectionScreen extends Screen {
+public final class TraitSelectionScreen extends ScaledCampaignScreen {
     private static final int W = 570, H = 330;
     private final CharacterCreationScreen.CharacterDraft draft;
     private final List<String> selected;
@@ -42,8 +42,9 @@ public final class TraitSelectionScreen extends Screen {
     }
 
     @Override protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         rebuildChoices();
         rebuildButtons();
     }
@@ -91,18 +92,22 @@ public final class TraitSelectionScreen extends Screen {
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 48, 0xFF3B3023);
         graphics.drawCenteredString(font, "PICK YOUR TRAITS", left + W / 2, top + 12, 0xFFE7D8B0);
         graphics.drawCenteredString(font, "Choice " + (round + 1) + " of 3 · choose one of the three cards", left + W / 2, top + 29, 0xFFC9B989);
 
-        for (int i = 0; i < choices.size(); i++) renderCard(graphics, choices.get(i), left + 22 + i * 180, top + 62, mouseX, mouseY);
+        for (int i = 0; i < choices.size(); i++) renderCard(graphics, choices.get(i), left + 22 + i * 180, top + 62, uiMouseX, uiMouseY);
         if (!selected.isEmpty()) {
             String names = selected.stream().map(CampaignDefinitions::trait).filter(java.util.Objects::nonNull)
                     .map(CampaignDefinitions.TraitDefinition::name).reduce((a,b) -> a + " · " + b).orElse("");
             graphics.drawCenteredString(font, "Chosen: " + names, left + W / 2, top + 284, 0xFFAAAAAA);
         }
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void renderCard(GuiGraphics graphics, String id, int x, int y, int mouseX, int mouseY) {
@@ -119,7 +124,7 @@ public final class TraitSelectionScreen extends Screen {
         graphics.drawString(font, "Effects", x + 10, y + 112, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal(trait.effectsText()), x + 10, y + 127, 146, 0xFFAAAAAA);
         if (mouseX >= x && mouseX <= x + 166 && mouseY >= y && mouseY <= y + 184)
-            graphics.renderTooltip(font, Component.literal(trait.effectsText()), mouseX, mouseY);
+            graphics.renderTooltip(font, Component.literal(trait.effectsText()), uiMouseX, uiMouseY);
     }
 
     private int tone(CampaignDefinitions.TraitTone tone) {

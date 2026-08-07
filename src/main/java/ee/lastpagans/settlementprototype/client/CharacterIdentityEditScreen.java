@@ -9,7 +9,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public final class CharacterIdentityEditScreen extends Screen {
+public final class CharacterIdentityEditScreen extends ScaledCampaignScreen {
     private static final int W = 420;
     private static final int H = 210;
     private final CharacterSnapshot snapshot;
@@ -27,8 +27,9 @@ public final class CharacterIdentityEditScreen extends Screen {
 
     @Override
     protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
 
         dynasty = new EditBox(font, left + 150, top + 72, 242, 20, Component.literal("Dynasty"));
         dynasty.setMaxLength(32);
@@ -55,6 +56,9 @@ public final class CharacterIdentityEditScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 43, 0xFF3B3023);
         graphics.drawCenteredString(font, "EDIT DYNASTY AND MAIN HOUSE", left + W / 2, top + 14, 0xFFE7D8B0);
@@ -64,7 +68,8 @@ public final class CharacterIdentityEditScreen extends Screen {
         graphics.drawString(font, "Dynasty", left + 26, top + 78, 0xFFDDDDDD, false);
         graphics.drawString(font, "Main house", left + 26, top + 114, 0xFFDDDDDD, false);
         graphics.drawString(font, "Leave either field blank until it exists in roleplay.", left + 26, top + 143, 0xFF888888, false);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     @Override public boolean isPauseScreen() { return false; }

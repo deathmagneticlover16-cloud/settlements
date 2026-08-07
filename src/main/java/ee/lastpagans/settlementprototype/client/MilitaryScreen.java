@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Locale;
 
 /** Strategic recruitment and upkeep screen. This deliberately is not an RTS unit overview. */
-public final class MilitaryScreen extends Screen {
+public final class MilitaryScreen extends ScaledCampaignScreen {
     private static final int W = 540, H = 330;
     private PrototypeSnapshot snapshot;
     private int left, top;
@@ -28,8 +28,9 @@ public final class MilitaryScreen extends Screen {
     }
 
     @Override protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         rebuildWidgets();
     }
 
@@ -41,8 +42,9 @@ public final class MilitaryScreen extends Screen {
 
     @Override
     protected void rebuildWidgets() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         clearWidgets();
         List<PrototypeSnapshot.UnitTemplateEntry> templates = professionalTemplates();
         List<String> names = templates.stream().map(value -> value.displayName() + (value.configured() ? "" : " — fallback")).toList();
@@ -108,17 +110,22 @@ public final class MilitaryScreen extends Screen {
     }
 
     @Override public boolean mouseClicked(double x, double y, int button) {
-        if (unitDropdown != null && unitDropdown.isExpanded() && unitDropdown.mouseClicked(x, y, button)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (unitDropdown != null && unitDropdown.isExpanded() && unitDropdown.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
     @Override public boolean mouseScrolled(double x, double y, double delta) {
-        if (unitDropdown != null && unitDropdown.isExpanded() && unitDropdown.mouseScrolled(x, y, delta)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (unitDropdown != null && unitDropdown.isExpanded() && unitDropdown.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0171717);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 58, 0xFF3B3023);
         graphics.fill(left + 14, top + 68, left + W - 14, top + 286, 0xFF242424);
@@ -155,7 +162,8 @@ public final class MilitaryScreen extends Screen {
         status(graphics, "Muster Ground", snapshot.musterGroundSet(), 190, 230);
         status(graphics, "Barracks", snapshot.barracksSet(), 374, 230);
         if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 281, 0xFFFFD27A);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void stat(GuiGraphics graphics, String label, Object value, int x, int y) {

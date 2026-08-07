@@ -342,7 +342,7 @@ public final class PrototypeCommands {
                                                         .executes(context -> setMercenaryHand(context.getSource(), IntegerArgumentType.getInteger(context, "wage"), IntegerArgumentType.getInteger(context, "interval_days"))))))
                                 .then(Commands.literal("clearhand")
                                         .executes(context -> clearMercenaryHand(context.getSource()))))
-        ));
+        )));
 
         dispatcher.register(Commands.literal("character")
                 .then(Commands.literal("open").executes(context -> openCharacter(context.getSource())))

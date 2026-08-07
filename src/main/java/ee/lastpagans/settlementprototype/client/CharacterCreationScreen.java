@@ -9,7 +9,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-public final class CharacterCreationScreen extends Screen {
+public final class CharacterCreationScreen extends ScaledCampaignScreen {
     private static final int PANEL_WIDTH = 440;
     private static final int PANEL_HEIGHT = 286;
 
@@ -33,8 +33,9 @@ public final class CharacterCreationScreen extends Screen {
 
     @Override
     protected void init() {
-        left = (width - PANEL_WIDTH) / 2;
-        top = (height - PANEL_HEIGHT) / 2;
+        setupCampaignScale(PANEL_WIDTH, PANEL_HEIGHT);
+        left = campaignLeft(PANEL_WIDTH);
+        top = campaignTop(PANEL_HEIGHT);
 
         first = field(left + 170, top + 55, 112, "First name");
         middle = field(left + 288, top + 55, 132, "Middle (optional)");
@@ -90,23 +91,28 @@ public final class CharacterCreationScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (faith.isExpanded() && faith.mouseClicked(x, y, button)) return true;
-        if (address.isExpanded() && address.mouseClicked(x, y, button)) return true;
-        if (title.isExpanded() && title.mouseClicked(x, y, button)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (faith.isExpanded() && faith.mouseClicked(uiX, uiY, button)) return true;
+        if (address.isExpanded() && address.mouseClicked(uiX, uiY, button)) return true;
+        if (title.isExpanded() && title.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
-        if (faith.isExpanded() && faith.mouseScrolled(x, y, delta)) return true;
-        if (address.isExpanded() && address.mouseScrolled(x, y, delta)) return true;
-        if (title.isExpanded() && title.mouseScrolled(x, y, delta)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (faith.isExpanded() && faith.mouseScrolled(uiX, uiY, delta)) return true;
+        if (address.isExpanded() && address.mouseScrolled(uiX, uiY, delta)) return true;
+        if (title.isExpanded() && title.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + PANEL_WIDTH - 3, top + 40, 0xFF3B3023);
         graphics.fill(left + 14, top + 50, left + 154, top + 239, 0xFF242424);
@@ -114,12 +120,13 @@ public final class CharacterCreationScreen extends Screen {
         graphics.drawCenteredString(font, "Your account, UUID and Recruits faction remain unchanged.", left + PANEL_WIDTH / 2, top + 28, 0xFFAA9D7F);
         graphics.drawCenteredString(font, "Character", left + 84, top + 57, 0xFFE7D8B0);
         if (minecraft != null && minecraft.player != null) {
-            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 70, 122, 157, mouseX, mouseY);
+            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 70, 122, 157, uiMouseX, uiMouseY);
         }
         graphics.drawString(font, "Name", left + 170, top + 44, 0xFFDDDDDD, false);
         graphics.drawString(font, "Identity", left + 170, top + 147, 0xFFDDDDDD, false);
         if (!warning.isBlank()) graphics.drawCenteredString(font, warning, left + PANEL_WIDTH / 2, top + PANEL_HEIGHT + 5, 0xFFFFC86B);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     @Override public boolean shouldCloseOnEsc() { return false; }

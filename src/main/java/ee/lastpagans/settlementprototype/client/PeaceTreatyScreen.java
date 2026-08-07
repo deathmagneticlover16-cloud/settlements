@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Negotiated Settlements 2.3 peace treaty builder. */
-public final class PeaceTreatyScreen extends Screen {
+public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private static final int W = 520, H = 360;
     private final Screen parent;
     private final DiplomacySnapshot snapshot;
@@ -30,7 +30,7 @@ public final class PeaceTreatyScreen extends Screen {
     }
 
     @Override protected void init() {
-        left = (width - W) / 2; top = (height - H) / 2;
+        setupCampaignScale(W, H); left = campaignLeft(W); top = campaignTop(H);
         wealth = number(left + 142, top + 68, 104); manpower = number(left + 142, top + 96, 104);
         reparations = number(left + 142, top + 124, 104); reparationsDays = number(left + 142, top + 152, 104);
         napDays = number(left + 142, top + 180, 104);
@@ -103,21 +103,27 @@ public final class PeaceTreatyScreen extends Screen {
     private static int clamp(int i, int size) { return size <= 0 ? 0 : Math.max(0, Math.min(i, size - 1)); }
 
     @Override public boolean mouseClicked(double x, double y, int button) {
-        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claim, destination}) if (d != null && d.isExpanded() && d.mouseClicked(x, y, button)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claim, destination}) if (d != null && d.isExpanded() && d.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
     @Override public boolean mouseScrolled(double x, double y, double delta) {
-        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claim, destination}) if (d != null && d.isExpanded() && d.mouseScrolled(x, y, delta)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claim, destination}) if (d != null && d.isExpanded() && d.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
     @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g); g.fill(left, top, left + W, top + H, 0xF0181818); g.fill(left + 3, top + 3, left + W - 3, top + 40, 0xFF3B3023);
+        renderBackground(g);
+        int uiMx = campaignMouseX(mx);
+        int uiMy = campaignMouseY(my);
+        beginCampaignRender(g); g.fill(left, top, left + W, top + H, 0xF0181818); g.fill(left + 3, top + 3, left + W - 3, top + 40, 0xFF3B3023);
         g.drawCenteredString(font, "NEGOTIATE PEACE", left + W / 2, top + 13, 0xFFE7D8B0);
         g.drawCenteredString(font, war.typeName() + " · War score " + (war.warScore() > 0 ? "+" : "") + war.warScore(), left + W / 2, top + 29, 0xFFAAAAAA);
         g.drawString(font, "Lump wealth", left + 25, top + 74, 0xFFFFFFFF, false); g.drawString(font, "Manpower", left + 25, top + 102, 0xFFFFFFFF, false);
         g.drawString(font, "Reparations/day", left + 25, top + 130, 0xFFFFFFFF, false); g.drawString(font, "Reparation days", left + 25, top + 158, 0xFFFFFFFF, false); g.drawString(font, "Forced NAP days", left + 25, top + 186, 0xFFFFFFFF, false);
         g.drawWordWrap(font, Component.literal("Terms are demands on the opposing side. A side at ±90 war score is considered capitulated and cannot reject terms from the dominant side."), left + 25, top + 224, 220, 0xFFFFD27A);
-        super.render(g, mx, my, pt);
+        super.render(g, uiMx, uiMy, pt);
+        endCampaignRender(g);
     }
     @Override public boolean isPauseScreen() { return false; }
 }

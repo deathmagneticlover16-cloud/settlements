@@ -20,7 +20,7 @@ import net.minecraft.world.item.Items;
 
 import java.util.Locale;
 
-public final class PrototypeScreen extends Screen {
+public final class PrototypeScreen extends ScaledCampaignScreen {
     private static final int W = 540, H = 330;
     private PrototypeSnapshot snapshot;
     private int left, top;
@@ -36,14 +36,16 @@ public final class PrototypeScreen extends Screen {
     }
 
     @Override protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         buildWidgets();
     }
 
     private void buildWidgets() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         clearWidgets();
         String[] labels = {"Overview", "Residents", "Treasury", "Effects", "Manage"};
         for (int i = 0; i < labels.length; i++) {
@@ -199,6 +201,9 @@ public final class PrototypeScreen extends Screen {
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0171717);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 62, 0xFF3B3023);
         graphics.fill(left + 12, top + 96, left + W - 12, top + 290, 0xFF242424);
@@ -218,11 +223,12 @@ public final class PrototypeScreen extends Screen {
             case OVERVIEW -> renderOverview(graphics);
             case RESIDENTS -> renderResidents(graphics);
             case TREASURY -> renderTreasury(graphics);
-            case EFFECTS -> renderEffects(graphics, mouseX, mouseY);
+            case EFFECTS -> renderEffects(graphics, uiMouseX, uiMouseY);
             case MANAGEMENT -> renderManagement(graphics);
         }
         if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 36), left + W / 2, top + 284, 0xFFFFD27A);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void renderOverview(GuiGraphics graphics) {
@@ -283,7 +289,7 @@ public final class PrototypeScreen extends Screen {
             graphics.drawString(font, fit(effect.name(), 190), left + 44, y, tone, false);
             graphics.drawString(font, fit(effect.source() + " · " + effect.duration(), 250), left + 264, y, 0xFF999999, false);
             if (mouseX >= left + 18 && mouseX <= left + W - 18 && mouseY >= y - 6 && mouseY <= y + 14) {
-                graphics.renderTooltip(font, Component.literal(effect.detail()), mouseX, mouseY);
+                graphics.renderTooltip(font, Component.literal(effect.detail()), uiMouseX, uiMouseY);
             }
         }
         if (snapshot.effects().isEmpty()) graphics.drawString(font, "No active settlement modifiers.", left + 22, top + 134, 0xFFAAAAAA, false);

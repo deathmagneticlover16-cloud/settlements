@@ -10,7 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 /** One-time or daily material support for a parent faction's settlement war without joining it. */
-public final class WarAidScreen extends Screen {
+public final class WarAidScreen extends ScaledCampaignScreen {
     private final Screen parent;
     private final DiplomacySnapshot.WarEntry war;
     private EditBox manpower, wealth, food;
@@ -21,7 +21,7 @@ public final class WarAidScreen extends Screen {
         super(Component.literal("Send War Aid")); this.parent = parent; this.war = war;
     }
     @Override protected void init() {
-        left = (width - 390) / 2; top = (height - 250) / 2;
+        setupCampaignScale(390, 250); left = campaignLeft(390); top = campaignTop(250);
         manpower = numberField(left + 180, top + 78, "0");
         wealth = numberField(left + 180, top + 108, "0");
         food = numberField(left + 180, top + 138, "0");
@@ -41,12 +41,16 @@ public final class WarAidScreen extends Screen {
         minecraft.setScreen(parent);
     }
     @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g); g.fill(left, top, left + 390, top + 230, 0xF0181818); g.fill(left + 3, top + 3, left + 387, top + 40, 0xFF3B3023);
+        renderBackground(g);
+        int uiMx = campaignMouseX(mx);
+        int uiMy = campaignMouseY(my);
+        beginCampaignRender(g); g.fill(left, top, left + 390, top + 230, 0xF0181818); g.fill(left + 3, top + 3, left + 387, top + 40, 0xFF3B3023);
         g.drawCenteredString(font, "SEND AID", left + 195, top + 14, 0xFFE7D8B0);
         g.drawCenteredString(font, war.attackerSettlementName() + " vs " + war.targetSettlementName(), left + 195, top + 49, 0xFFBBBBBB);
         g.drawString(font, "Manpower", left + 30, top + 84, 0xFFFFFFFF, false); g.drawString(font, "Wealth", left + 30, top + 114, 0xFFFFFFFF, false); g.drawString(font, "Food", left + 30, top + 144, 0xFFFFFFFF, false);
         g.drawCenteredString(font, "Sending aid does not make your faction a belligerent.", left + 195, top + 207, 0xFFFFD27A);
-        super.render(g, mx, my, pt);
+        super.render(g, uiMx, uiMy, pt);
+        endCampaignRender(g);
     }
     @Override public boolean isPauseScreen() { return false; }
 }

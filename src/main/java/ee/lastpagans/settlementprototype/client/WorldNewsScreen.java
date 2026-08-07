@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-public final class WorldNewsScreen extends Screen {
+public final class WorldNewsScreen extends ScaledCampaignScreen {
     private static final int W = 520;
     private static final int H = 310;
     private static final List<String> FILTERS = List.of(
@@ -32,8 +32,9 @@ public final class WorldNewsScreen extends Screen {
 
     @Override
     protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         filterDrop = addRenderableWidget(new DropdownWidget(left + 18, top + 48, 170, 20, FILTERS, 0, value -> {
             filter = value;
             scroll = 0;
@@ -51,13 +52,15 @@ public final class WorldNewsScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (filterDrop != null && filterDrop.isExpanded() && filterDrop.mouseClicked(x, y, button)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (filterDrop != null && filterDrop.isExpanded() && filterDrop.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
-        if (filterDrop != null && filterDrop.isExpanded() && filterDrop.mouseScrolled(x, y, delta)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (filterDrop != null && filterDrop.isExpanded() && filterDrop.mouseScrolled(uiX, uiY, delta)) return true;
         List<WorldNewsSnapshot.Entry> values = filtered();
         scroll = Math.max(0, Math.min(Math.max(0, values.size() - 5), scroll + (delta < 0 ? 1 : -1)));
         return true;
@@ -66,6 +69,9 @@ public final class WorldNewsScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0171717);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 40, 0xFF3B3023);
         graphics.fill(left + 12, top + 76, left + W - 12, top + 274, 0xFF242424);
@@ -83,7 +89,8 @@ public final class WorldNewsScreen extends Screen {
             }
         }
         graphics.drawString(font, "Use the mouse wheel to browse older reports.", left + 20, top + 262, 0xFF777777, false);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void renderEntry(GuiGraphics graphics, WorldNewsSnapshot.Entry entry, int x, int y) {

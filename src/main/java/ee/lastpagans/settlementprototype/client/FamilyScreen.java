@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-public final class FamilyScreen extends Screen {
+public final class FamilyScreen extends ScaledCampaignScreen {
     private static final int W = 500;
     private static final int H = 320;
     private final FamilySnapshot snapshot;
@@ -30,8 +30,9 @@ public final class FamilyScreen extends Screen {
 
     @Override
     protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
 
         boolean showAiChoices = !snapshot.married() || snapshot.canMarryAdditional();
         if (showAiChoices) {
@@ -104,23 +105,28 @@ public final class FamilyScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseClicked(x, y, button)) return true;
-        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseClicked(x, y, button)) return true;
-        if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseClicked(x, y, button)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
-        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseScrolled(x, y, delta)) return true;
-        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseScrolled(x, y, delta)) return true;
-        if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseScrolled(x, y, delta)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 40, 0xFF3B3023);
         graphics.fill(left + 12, top + 48, left + 236, top + 256, 0xFF242424);
@@ -178,7 +184,8 @@ public final class FamilyScreen extends Screen {
         }
 
         if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, snapshot.message(), left + W / 2, top + 272, 0xFFFFD27A);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void line(GuiGraphics graphics, String label, String value, int x, int y) {

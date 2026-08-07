@@ -14,7 +14,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-public final class FactionScreen extends Screen {
+public final class FactionScreen extends ScaledCampaignScreen {
     private static final int W = 560;
     private static final int H = 370;
     private final FactionSnapshot snapshot;
@@ -51,15 +51,17 @@ public final class FactionScreen extends Screen {
 
     @Override
     protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         rebuildWidgets();
     }
 
     @Override
     protected void rebuildWidgets() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         clearWidgets();
         memberDrop = null;
         rankDrop = null;
@@ -185,29 +187,34 @@ public final class FactionScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
-        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseClicked(x, y, button)) return true;
-        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseClicked(x, y, button)) return true;
-        if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseClicked(x, y, button)) return true;
-        if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseClicked(x, y, button)) return true;
-        if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseClicked(x, y, button)) return true;
-        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseClicked(x, y, button)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
-        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseScrolled(x, y, delta)) return true;
-        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseScrolled(x, y, delta)) return true;
-        if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseScrolled(x, y, delta)) return true;
-        if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseScrolled(x, y, delta)) return true;
-        if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseScrolled(x, y, delta)) return true;
-        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseScrolled(x, y, delta)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0171717);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 62, 0xFF3B3023);
         graphics.fill(left + 12, top + 96, left + W - 12, top + H - 38, 0xFF242424);
@@ -221,7 +228,8 @@ public final class FactionScreen extends Screen {
             graphics.drawString(font, "Team color", left + 132, top + 140, 0xFFE7D8B0, false);
             graphics.drawString(font, "Unit color", left + 286, top + 140, 0xFFE7D8B0, false);
             if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 50), left + W / 2, top + 238, 0xFFFFD27A);
-            super.render(graphics, mouseX, mouseY, partialTick);
+            super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
             return;
         }
 
@@ -237,7 +245,8 @@ public final class FactionScreen extends Screen {
             case RANKS -> renderRanks(graphics);
         }
         if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 326, 0xFFFFD27A);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void renderOverview(GuiGraphics graphics) {

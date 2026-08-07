@@ -10,7 +10,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-public final class CampaignMainScreen extends Screen {
+public final class CampaignMainScreen extends ScaledCampaignScreen {
     private static final int W = 480, H = 310;
     private final CampaignSnapshot snapshot;
     private int left, top;
@@ -26,8 +26,9 @@ public final class CampaignMainScreen extends Screen {
     }
 
     @Override protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         addButton("CHARACTER", 18, 92, OpenCampaignRequestPacket.ScreenTarget.CHARACTER);
         addButton("SETTLEMENT", 132, 92, OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT);
         addButton("FACTION", 246, 92, OpenCampaignRequestPacket.ScreenTarget.FACTION);
@@ -51,11 +52,14 @@ public final class CampaignMainScreen extends Screen {
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 82, 0xFF3B3023);
         graphics.fill(left + 10, top + 86, left + W - 10, top + 176, 0xFF242424);
         graphics.fill(left + 10, top + 184, left + W - 10, top + 245, 0xFF242424);
-        if (minecraft != null && minecraft.player != null) PortraitRenderer.render(graphics, minecraft.player, left + 16, top + 9, 64, 66, mouseX, mouseY);
+        if (minecraft != null && minecraft.player != null) PortraitRenderer.render(graphics, minecraft.player, left + 16, top + 9, 64, 66, uiMouseX, uiMouseY);
         if (banner != null) banner.renderBanner(graphics, left + W - 58, top + 7, 20, 40, 22);
 
         graphics.drawString(font, snapshot.characterName(), left + 94, top + 13, 0xFFFFFFFF, false);
@@ -75,7 +79,8 @@ public final class CampaignMainScreen extends Screen {
             graphics.drawString(font, "Notices: treaties " + snapshot.pendingDiplomacy() + " · marriage " + snapshot.pendingMarriage()
                     + " · wars " + snapshot.activeWars(), left + 16, top + 263, 0xFFFFD27A, false);
         }
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void stat(GuiGraphics graphics, String name, Object value, int x, int y) {

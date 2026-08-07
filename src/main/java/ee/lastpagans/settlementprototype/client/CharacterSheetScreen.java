@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-public final class CharacterSheetScreen extends Screen {
+public final class CharacterSheetScreen extends ScaledCampaignScreen {
     private static final int W = 560;
     private static final int H = 380;
     private final CharacterSnapshot snapshot;
@@ -33,8 +33,9 @@ public final class CharacterSheetScreen extends Screen {
 
     @Override
     protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         addRenderableWidget(Button.builder(Component.literal("Edit Dynasty / House"), button ->
                 minecraft.setScreen(new CharacterIdentityEditScreen(snapshot, returnToMain)))
                 .bounds(left + 176, top + 346, 150, 20).build());
@@ -51,6 +52,9 @@ public final class CharacterSheetScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 47, 0xFF3B3023);
         graphics.fill(left + 14, top + 57, left + 164, top + 302, 0xFF242424);
@@ -60,7 +64,7 @@ public final class CharacterSheetScreen extends Screen {
         graphics.drawCenteredString(font, snapshot.displayName().toUpperCase(), left + W / 2, top + 11, 0xFFE7D8B0);
         graphics.drawCenteredString(font, snapshot.titleLine(), left + W / 2, top + 29, 0xFFC9B989);
         if (minecraft != null && minecraft.player != null) {
-            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 67, 132, 225, mouseX, mouseY);
+            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 67, 132, 225, uiMouseX, uiMouseY);
         }
 
         int x = left + 186;
@@ -103,13 +107,14 @@ public final class CharacterSheetScreen extends Screen {
         graphics.drawString(font, "Holdings: " + shorten(holdings, 61), left + 18, top + 307, 0xFF999999, false);
         graphics.drawString(font, "Account: " + snapshot.accountName(), left + 18, top + 324, 0xFF666666, false);
 
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
         if (hovered != null) {
             List<Component> tooltip = new ArrayList<>();
             tooltip.add(Component.literal(hovered.name()));
             tooltip.add(Component.literal(hovered.description()));
             hovered.effects().forEach(effect -> tooltip.add(Component.literal(effect)));
-            graphics.renderTooltip(font, tooltip, Optional.empty(), mouseX, mouseY);
+            graphics.renderTooltip(font, tooltip, Optional.empty(), uiMouseX, uiMouseY);
         }
     }
 

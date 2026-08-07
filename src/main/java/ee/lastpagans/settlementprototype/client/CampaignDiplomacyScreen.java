@@ -18,7 +18,7 @@ import java.util.Locale;
 import java.util.UUID;
 
 /** Settlements 2.3 guided diplomacy screen. Settlement wars are settlement-to-settlement by design. */
-public final class CampaignDiplomacyScreen extends Screen {
+public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
     private static final int W = 560, H = 380;
     private final DiplomacySnapshot snapshot;
     private int left, top;
@@ -38,8 +38,9 @@ public final class CampaignDiplomacyScreen extends Screen {
     }
 
     @Override protected void init() {
-        left = (width - W) / 2;
-        top = (height - H) / 2;
+        setupCampaignScale(W, H);
+        left = campaignLeft(W);
+        top = campaignTop(H);
         buildWidgets();
     }
 
@@ -276,11 +277,13 @@ public final class CampaignDiplomacyScreen extends Screen {
     }
 
     @Override public boolean mouseClicked(double x, double y, int button) {
-        for (DropdownWidget dropdown : dropdowns()) if (dropdown != null && dropdown.isExpanded() && dropdown.mouseClicked(x, y, button)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        for (DropdownWidget dropdown : dropdowns()) if (dropdown != null && dropdown.isExpanded() && dropdown.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
     @Override public boolean mouseScrolled(double x, double y, double delta) {
-        for (DropdownWidget dropdown : dropdowns()) if (dropdown != null && dropdown.isExpanded() && dropdown.mouseScrolled(x, y, delta)) return true;
+        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
+        for (DropdownWidget dropdown : dropdowns()) if (dropdown != null && dropdown.isExpanded() && dropdown.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
     private List<DropdownWidget> dropdowns() {
@@ -291,6 +294,9 @@ public final class CampaignDiplomacyScreen extends Screen {
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 39, 0xFF3B3023);
         graphics.fill(left + 12, top + 72, left + W - 12, top + H - 42, 0xFF242424);
@@ -304,7 +310,8 @@ public final class CampaignDiplomacyScreen extends Screen {
             case WARS -> renderWars(graphics);
         }
         if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, snapshot.message(), left + W / 2, top + H - 52, 0xFFFFD27A);
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
     private void renderRelations(GuiGraphics graphics) {
