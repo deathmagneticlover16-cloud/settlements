@@ -754,6 +754,29 @@ public final class PrototypeManager {
         }
     }
 
+    /** Admin/debug hook: makes every loaded tracked mercenary in a faction immediately due and processes payment once. */
+    public static int forceMercenaryPaymentCheck(MinecraftServer server, String faction) {
+        if (server == null) return 0;
+        String wanted = faction == null ? "" : faction.trim();
+        PrototypeData settlements = PrototypeData.get(server.overworld());
+        CampaignData campaign = CampaignData.get(server.overworld());
+        long day = server.overworld().getDayTime() / 24000L;
+        int count = 0;
+        for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
+            if (!wanted.isBlank() && !wanted.equals(settlement.getFactionTeam())) continue;
+            for (UUID uuid : Set.copyOf(settlement.getAllMilitaryUnits())) {
+                AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
+                if (recruit == null || !recruit.getPersistentData().getBoolean(TAG_MERCENARY)) continue;
+                int interval = Math.max(1, recruit.getPersistentData().getInt(TAG_MERCENARY_INTERVAL_DAYS));
+                recruit.getPersistentData().putLong(TAG_MERCENARY_NEXT_PAYMENT_DAY, day);
+                processMercenaryPayment(recruit, settlement, campaign, day);
+                count++;
+            }
+        }
+        return count;
+    }
+
+
     private static AbstractRecruitEntity findLoadedRecruit(MinecraftServer server, UUID uuid) {
         for (ServerLevel level : server.getAllLevels()) {
             Entity entity = level.getEntity(uuid);
@@ -788,8 +811,13 @@ public final class PrototypeManager {
         // handled on the next military-system pass.
         int dueCycles = (int) Math.min(64L, 1L + Math.max(0L, day - next) / interval);
         int missedThisPass = 0;
+        Campaign23Data extra = Campaign23Data.get((ServerLevel) recruit.level());
+        String payerFaction = settlement.getFactionTeam();
         for (int cycle = 0; cycle < dueCycles; cycle++) {
-            if (settlement.spendWealth(wage)) {
+            boolean paid = !payerFaction.isBlank()
+                    ? extra.spendFactionWealth(payerFaction, wage)
+                    : settlement.spendWealth(wage);
+            if (paid) {
                 data.putInt(TAG_MERCENARY_MISSED_PAYMENTS, 0);
                 recruit.setMoral(Math.min(100.0F, recruit.getMorale() + 5.0F));
             } else {

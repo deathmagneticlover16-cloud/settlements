@@ -508,6 +508,14 @@ public final class CampaignData extends SavedData {
         return List.copyOf(values);
     }
 
+    public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day) {
+        List<NpcSpouse> values = generateCandidates(playerId, day, 5);
+        spouseCandidates.put(playerId, values);
+        spouseCandidateGeneratedDay.put(playerId, day);
+        setDirty();
+        return List.copyOf(values);
+    }
+
     public long nextCandidateRefreshDay(UUID playerId) {
         return spouseCandidateGeneratedDay.getOrDefault(playerId, 0L) + 7L;
     }
