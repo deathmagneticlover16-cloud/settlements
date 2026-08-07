@@ -45,14 +45,15 @@ public record DiplomacySnapshot(
                 // Protected admin polities are intentionally absent from ordinary player diplomacy. Operators can
                 // still see them for diagnostics, but every mutating action remains server-authoritative.
                 if (!adminViewer && campaign23.factionProtected(faction.getStringID())) continue;
-                CampaignData.DiplomacyRecord relation = campaign.relation(own, faction.getStringID());
+                CampaignData.DiplomacyRecord relation = own.isBlank() ? null : campaign.relation(own, faction.getStringID());
                 PrototypeData.CharacterRecord ownCharacter = PrototypeData.get(player.serverLevel()).getCharacter(player.getUUID());
                 String ownFaith = ownCharacter == null ? "" : ownCharacter.getFaith();
                 String otherFaith = factionLeaderFaith(player, faction);
                 int faithModifier = CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith);
                 relations.add(new RelationEntry(
                         faction.getStringID(), faction.getTeamDisplayName(), faction.getBanner() == null ? new CompoundTag() : faction.getBanner().copy(),
-                        relation.relationship(), relation.state().name(), faithModifier, campaign.getFactionReliability(faction.getStringID())
+                        relation == null ? 0 : relation.relationship(), relation == null ? CampaignData.TreatyState.NEUTRAL.name() : relation.state().name(),
+                        faithModifier, campaign.getFactionReliability(faction.getStringID())
                 ));
             }
         }
