@@ -159,7 +159,11 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
             graphics.drawString(font, "No professional unit types are available.", left + 24, top + 174, 0xFFFFA080, false);
         }
 
-        graphics.drawString(font, "Faction/settlement wage obligation: " + snapshot.mercenaryWages() + " wealth / cycle", left + 286, top + 214, 0xFFB8B0A0, false);
+        graphics.drawString(font, "Mercenary obligation: " + snapshot.mercenaryWages() + " wealth / cycle", left + 286, top + 214, 0xFFB8B0A0, false);
+        String mercenaryTiming = snapshot.mercenaries() <= 0 ? "No active contracts"
+                : snapshot.mercenaryStatus() + " · next payment day " + snapshot.mercenaryNextPaymentDay();
+        graphics.drawString(font, "Mercenary status: " + mercenaryTiming, left + 286, top + 226,
+                "Paid".equals(snapshot.mercenaryStatus()) ? 0xFFA9D18E : snapshot.mercenaries() <= 0 ? 0xFFAAAAAA : 0xFFFFA080, false);
         PrototypeSnapshot.LevyStatusEntry levy = snapshot.levyStatus();
         String factionLabel = snapshot.factionId().isBlank() ? "Independent" : "Faction";
         graphics.drawString(font, "Levy capacity: you " + levy.playerDeployed() + "/" + levy.playerCap()

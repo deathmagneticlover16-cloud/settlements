@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class PrototypeNetwork {
-    private static final String PROTOCOL = "25";
+    private static final String PROTOCOL = "26";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(SettlementPrototype.MOD_ID, "main"),

@@ -26,7 +26,7 @@ public record PrototypeSnapshot(
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
         int professionals, int levymen, int pendingContracts,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet,
-        int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, LevyStatusEntry levyStatus,
+        int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, long mercenaryNextPaymentDay, String mercenaryStatus, LevyStatusEntry levyStatus,
         String factionTeam, boolean claimLinked, int claimCount, String claimName,
         String notice, List<EffectEntry> effects, List<String> chronicle, List<String> contributions, String message
 ) {
@@ -66,7 +66,7 @@ public record PrototypeSnapshot(
                 settlement.getMaximumManpower(), settlement.getAvailableManpower(), Campaign23Data.get(player.serverLevel()).foreignManpower(settlement.getId()), settlement.getUsedManpower(), settlement.getLevyReservedManpower(), settlement.getSupportedManpower(),
                 settlement.getProfessionalCount(), settlement.getLivingLevymen(), settlement.getPendingContracts(),
                 settlement.hasTownSquare(), settlement.hasMusterGround(), settlement.hasBarracks(), settlement.getBarracksChest() != null,
-                settlement.getBarracksRadius(), settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), levyStatus,
+                settlement.getBarracksRadius(), settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
                 settlement.getFactionTeam(), settlement.hasClaim(), settlement.getClaimCount(), settlement.getClaimSummary(), settlement.getNotice(), effects,
                 settlement.getChronicle().stream().limit(8).toList(), settlement.getContributions().stream().limit(8).toList(), message == null ? "" : message
         );
@@ -79,6 +79,11 @@ public record PrototypeSnapshot(
         List<Campaign23Data.MercenaryContractRecord> contracts = extra.mercenariesForSettlement(settlement.getId());
         int mercenaries = contracts.size();
         int wages = contracts.stream().mapToInt(Campaign23Data.MercenaryContractRecord::wage).sum();
+        long nextPayment = contracts.stream().mapToLong(Campaign23Data.MercenaryContractRecord::nextPaymentDay).min().orElse(-1L);
+        int worstMissed = contracts.stream().mapToInt(Campaign23Data.MercenaryContractRecord::missedPayments).max().orElse(0);
+        boolean deserting = contracts.stream().anyMatch(Campaign23Data.MercenaryContractRecord::desertPending);
+        String status = mercenaries == 0 ? "None" : deserting || worstMissed >= 3 ? "Deserting"
+                : worstMissed == 2 ? "Unpaid" : worstMissed == 1 ? "Discontented" : "Paid";
         for (UUID uuid : settlement.getAllMilitaryUnits()) {
             Entity found = null;
             for (ServerLevel level : player.getServer().getAllLevels()) {
@@ -89,7 +94,7 @@ public record PrototypeSnapshot(
             moraleTotal += Math.round(recruit.getMorale());
             moraleCount++;
         }
-        return new MilitarySummary(moraleCount == 0 ? 0 : Math.round((float) moraleTotal / moraleCount), mercenaries, wages);
+        return new MilitarySummary(moraleCount == 0 ? 0 : Math.round((float) moraleTotal / moraleCount), mercenaries, wages, nextPayment, status);
     }
 
     private static LevyStatusEntry levyStatus(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
@@ -263,7 +268,7 @@ public record PrototypeSnapshot(
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
         buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet);
-        buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); levyStatus.encode(buffer);
+        buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
         writeList(buffer, effects, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions); buffer.writeUtf(message, 256);
     }
@@ -277,7 +282,7 @@ public record PrototypeSnapshot(
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), LevyStatusEntry.decode(buffer),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),
                 buffer.readUtf(64), buffer.readBoolean(), buffer.readVarInt(), buffer.readUtf(180), buffer.readUtf(160),
                 readList(buffer, EffectEntry::decode, 32), readStrings(buffer), readStrings(buffer), buffer.readUtf(256)
         );
@@ -354,7 +359,7 @@ public record PrototypeSnapshot(
         }
     }
 
-    private record MilitarySummary(int averageMorale, int mercenaries, int totalWages) {}
+    private record MilitarySummary(int averageMorale, int mercenaries, int totalWages, long nextPaymentDay, String status) {}
 
     @FunctionalInterface private interface Encoder<T> { void encode(T value, FriendlyByteBuf buffer); }
     @FunctionalInterface private interface Decoder<T> { T decode(FriendlyByteBuf buffer); }

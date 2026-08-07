@@ -876,6 +876,8 @@ public final class PrototypeManager {
 
     private static void processMercenaryContracts(MinecraftServer server, PrototypeData settlements, CampaignData campaign, long day) {
         Campaign23Data extra = Campaign23Data.get(server.overworld());
+        java.util.Set<String> paidFactions = new java.util.HashSet<>();
+        java.util.Set<String> missedFactions = new java.util.HashSet<>();
         for (Campaign23Data.MercenaryContractRecord original : List.copyOf(extra.mercenaryContracts())) {
             PrototypeData.SettlementRecord settlement = settlements.getSettlement(original.settlementId());
             if (settlement == null) { extra.removeMercenaryContract(original.unitId()); continue; }
@@ -889,7 +891,13 @@ public final class PrototypeManager {
                     boolean paid = !contract.factionId().isBlank()
                             ? extra.spendFactionWealth(contract.factionId(), contract.wage())
                             : settlement.spendWealth(contract.wage());
-                    if (paid) missed = 0; else missed++;
+                    if (paid) {
+                        missed = 0;
+                        if (!contract.factionId().isBlank()) paidFactions.add(contract.factionId());
+                    } else {
+                        missed++;
+                        if (!contract.factionId().isBlank()) missedFactions.add(contract.factionId());
+                    }
                     next += contract.intervalDays();
                     if (missed >= MERCENARY_DESERTION_MISSES) { pending = true; break; }
                 }
@@ -907,6 +915,10 @@ public final class PrototypeManager {
                 recruit.setMoral(Math.min(100.0F, recruit.getMorale() + 1.0F));
             }
         }
+        // Reliability is faction reputation, not a per-soldier score. Award/penalize at most
+        // once per processing pass regardless of how many mercenary contracts were due.
+        for (String faction : paidFactions) if (!missedFactions.contains(faction)) campaign.changeFactionReliability(faction, 1);
+        for (String faction : missedFactions) campaign.changeFactionReliability(faction, -2);
     }
 
     private static void syncMercenaryEntityFromContract(AbstractRecruitEntity recruit, Campaign23Data.MercenaryContractRecord contract) {
