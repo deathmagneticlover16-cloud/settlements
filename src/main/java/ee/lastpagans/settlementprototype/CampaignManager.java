@@ -132,7 +132,9 @@ public final class CampaignManager {
                 else {
                     RecruitsFaction faction = FactionEvents.recruitsFactionManager == null ? null
                             : FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
-                    if (faction != null && targetPlayer.equals(faction.getTeamLeaderUUID())) result = "The faction leader always holds the highest rank.";
+                    if (faction == null) result = "Faction data is unavailable.";
+                    else if (targetPlayer.equals(faction.getTeamLeaderUUID())) result = "The faction leader always holds the highest rank.";
+                    else if (faction.getMembers().stream().noneMatch(info -> info != null && targetPlayer.equals(info.getUUID()))) result = "That player is no longer a member of your faction.";
                     else {
                         data.setFactionMemberRank(factionId, targetPlayer, Math.max(0, Math.min(3, tier)));
                         PrototypeManager.broadcastProfiles(player.getServer());

@@ -1025,7 +1025,12 @@ public final class PrototypeManager {
         ServerPlayer target = player.getServer().getPlayerList().getPlayerByName(accountName == null ? "" : accountName.trim());
         if (target == null) return "That player must be online to receive settlement ownership.";
         PrototypeData data = PrototypeData.get(player.serverLevel());
-        if (target.getTeam() == null && data.getSettlements().stream()
+        String settlementFaction = settlement.getFactionTeam() == null ? "" : settlement.getFactionTeam();
+        String targetFaction = target.getTeam() == null ? "" : target.getTeam().getName();
+        if (!settlementFaction.equals(targetFaction)) {
+            return "Settlement ownership can only be transferred within its current polity. Use diplomacy for cross-polity territorial transfers.";
+        }
+        if (targetFaction.isBlank() && data.getSettlements().stream()
                 .filter(value -> target.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank() && value != settlement).count() >= 2) {
             return target.getGameProfile().getName() + " already owns the maximum two independent settlements.";
         }
