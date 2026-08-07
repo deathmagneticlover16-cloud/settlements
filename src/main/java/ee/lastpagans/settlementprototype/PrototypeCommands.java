@@ -243,7 +243,13 @@ public final class PrototypeCommands {
                                 .then(Commands.literal("levy").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> adminResetLevy(context.getSource(), EntityArgument.getPlayer(context, "player")))))
                                 .then(Commands.literal("cooldowns").then(Commands.argument("player", EntityArgument.player())
-                                        .executes(context -> adminResetCooldowns(context.getSource(), EntityArgument.getPlayer(context, "player"))))))
+                                        .executes(context -> adminResetCooldowns(context.getSource(), EntityArgument.getPlayer(context, "player")))))
+                                .then(Commands.literal("faction_rank").then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> adminResetFactionRank(context.getSource(), EntityArgument.getPlayer(context, "player")))))
+                                .then(Commands.literal("selection").then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> adminResetSelection(context.getSource(), EntityArgument.getPlayer(context, "player"))))))
+                        .then(Commands.literal("recalculate").then(Commands.argument("settlement", StringArgumentType.word())
+                                .executes(context -> adminRecalculateSettlement(context.getSource(), StringArgumentType.getString(context, "settlement")))))
                         .then(Commands.literal("inspect")
                                 .then(Commands.literal("player").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> adminInspectPlayer(context.getSource(), EntityArgument.getPlayer(context, "player")))))
@@ -266,7 +272,9 @@ public final class PrototypeCommands {
                         .then(Commands.literal("debug")
                                 .then(Commands.literal("advance").then(Commands.argument("settlement", StringArgumentType.word())
                                         .then(Commands.argument("days", IntegerArgumentType.integer(1, 3650))
-                                                .executes(context -> adminDebugAdvance(context.getSource(), StringArgumentType.getString(context, "settlement"), IntegerArgumentType.getInteger(context, "days"))))))
+                                                .executes(context -> adminDebugAdvance(context.getSource(), StringArgumentType.getString(context, "settlement"), IntegerArgumentType.getInteger(context, "days")))))
+                                .then(Commands.literal("clear_time").then(Commands.argument("settlement", StringArgumentType.word())
+                                        .executes(context -> adminDebugClearTime(context.getSource(), StringArgumentType.getString(context, "settlement")))))
                                 .then(Commands.literal("modifier")
                                         .then(Commands.literal("add").then(Commands.argument("settlement", StringArgumentType.word())
                                                 .then(Commands.argument("modifier", StringArgumentType.word())
@@ -936,8 +944,9 @@ public final class PrototypeCommands {
             case "available_manpower", "manpower", "manpower_available" -> { if (add) settlement.changeAvailableManpower(value); else settlement.setAvailableManpower(value); }
             case "contracts", "pending_contracts" -> { if (add) settlement.changePendingContracts(value); else settlement.setPendingContracts(value); }
             case "prosperity" -> { Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.setProsperity(settlement.getId(), add ? extra.prosperity(settlement.getId()) + value : value); }
+            case "foreign_manpower", "foreign_mp" -> { Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.setForeignManpower(settlement.getId(), add ? extra.foreignManpower(settlement.getId()) + value : value); if (extra.foreignManpower(settlement.getId()) > 0) extra.addModifier(settlement.getId(), Campaign23Manager.standardModifier(source.getLevel(), settlement.getId(), "foreign_soldiers", 0)); else extra.removeModifier(settlement.getId(), "foreign_soldiers"); }
             default -> {
-                source.sendFailure(Component.literal("Unknown stat. Use stability, food, wealth, prosperity, housing, maximum_manpower, available_manpower, or contracts."));
+                source.sendFailure(Component.literal("Unknown stat. Use stability, food, wealth, prosperity, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
                 return 0;
             }
         }
@@ -945,6 +954,7 @@ public final class PrototypeCommands {
                 + ". Current values: stability=" + settlement.getStability() + ", food=" + settlement.getFood()
                 + ", wealth=" + settlement.getWealth() + ", housing=" + settlement.getHousingCapacity()
                 + ", manpower=" + settlement.getAvailableManpower() + "/" + settlement.getMaximumManpower()
+                + ", foreignMP=" + Campaign23Data.get(source.getLevel()).foreignManpower(settlement.getId())
                 + ", contracts=" + settlement.getPendingContracts() + "."), true);
         return 1;
     }
@@ -1012,6 +1022,32 @@ public final class PrototypeCommands {
     private static int adminResetCooldowns(CommandSourceStack source, ServerPlayer target) {
         Campaign23Data.get(target.serverLevel()).clearLevyCooldown(target.getUUID()); source.sendSuccess(() -> Component.literal("Levy cooldown cleared for " + target.getGameProfile().getName() + "."), true); return 1;
     }
+    private static int adminResetFactionRank(CommandSourceStack source, ServerPlayer target) {
+        CampaignData.get(target.serverLevel()).resetFactionRank(target.getUUID());
+        PrototypeManager.broadcastProfiles(target.getServer());
+        source.sendSuccess(() -> Component.literal("Settlements faction-rank override cleared for " + target.getGameProfile().getName() + "."), true);
+        return 1;
+    }
+    private static int adminResetSelection(CommandSourceStack source, ServerPlayer target) {
+        PrototypeData.get(target.serverLevel()).clearSelection(target.getUUID());
+        source.sendSuccess(() -> Component.literal("Selected settlement cleared for " + target.getGameProfile().getName() + "."), true);
+        return 1;
+    }
+
+    private static int adminRecalculateSettlement(CommandSourceStack source, String id) {
+        PrototypeData data = PrototypeData.get(source.getLevel());
+        PrototypeData.SettlementRecord settlement = data.getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        int housing = Campaign23Manager.recalculateHousing(source.getLevel(), settlement);
+        int recovered = settlement.runManpowerChecker();
+        int prosperity = Campaign23Manager.recalculateProsperity(settlement, Campaign23Data.get(source.getLevel()));
+        Campaign23Data extra = Campaign23Data.get(source.getLevel());
+        if (extra.foreignManpower(settlement.getId()) <= 0) extra.removeModifier(settlement.getId(), "foreign_soldiers");
+        source.sendSuccess(() -> Component.literal("Recalculated " + settlement.getName() + ": housing=" + housing
+                + ", prosperity=" + prosperity + ", recoveredMP=" + recovered + ", availableMP=" + settlement.getAvailableManpower()
+                + "/" + settlement.getMaximumManpower() + ", foreignMP=" + extra.foreignManpower(settlement.getId()) + "."), true);
+        return 1;
+    }
 
     private static int adminInspectPlayer(CommandSourceStack source, ServerPlayer target) {
         PrototypeData data = PrototypeData.get(target.serverLevel()); PrototypeData.CharacterRecord c = data.getCharacter(target.getUUID());
@@ -1061,6 +1097,13 @@ public final class PrototypeCommands {
         Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.advanceDebugTime(s.getId(), days * 24L * 60L * 60L * 1000L);
         Campaign23Manager.processCampaignSystems(source.getServer(), source.getLevel().getDayTime() / 24000L + days);
         source.sendSuccess(() -> Component.literal("Advanced Settlements campaign timers for " + s.getName() + " by " + days + " day(s). Minecraft world time was not changed."), true); return 1;
+    }
+    private static int adminDebugClearTime(CommandSourceStack source, String id) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        Campaign23Data.get(source.getLevel()).clearDebugTime(settlement.getId());
+        source.sendSuccess(() -> Component.literal("Cleared artificial campaign-time offset for " + settlement.getName() + ". Vanilla world time was not changed."), true);
+        return 1;
     }
     private static int adminDebugModifierAdd(CommandSourceStack source, String id, String modifier, int durationMinutes) {
         PrototypeData.SettlementRecord s = PrototypeData.get(source.getLevel()).getSettlement(id); if (s == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
