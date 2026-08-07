@@ -221,7 +221,14 @@ public final class PrototypeCommands {
                                         .then(Commands.argument("player", EntityArgument.player())
                                                 .then(Commands.argument("name", StringArgumentType.greedyString())
                                                         .executes(context -> adminCreateFaction(context.getSource(), EntityArgument.getPlayer(context, "player"),
-                                                                StringArgumentType.getString(context, "name")))))))
+                                                                StringArgumentType.getString(context, "name"))))))
+                                .then(Commands.literal("wealth")
+                                        .then(Commands.literal("set").then(Commands.argument("faction", StringArgumentType.word())
+                                                .then(Commands.argument("value", IntegerArgumentType.integer(0, 100000000))
+                                                        .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), false)))))
+                                        .then(Commands.literal("add").then(Commands.argument("faction", StringArgumentType.word())
+                                                .then(Commands.argument("value", IntegerArgumentType.integer(-100000000, 100000000))
+                                                        .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), true))))))
                         .then(Commands.literal("reset")
                                 .then(Commands.literal("character").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> adminResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))))
@@ -928,8 +935,9 @@ public final class PrototypeCommands {
             case "maximum_manpower", "max_manpower", "manpower_max" -> { if (add) settlement.changeMaximumManpower(value); else settlement.setMaximumManpower(value); }
             case "available_manpower", "manpower", "manpower_available" -> { if (add) settlement.changeAvailableManpower(value); else settlement.setAvailableManpower(value); }
             case "contracts", "pending_contracts" -> { if (add) settlement.changePendingContracts(value); else settlement.setPendingContracts(value); }
+            case "prosperity" -> { Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.setProsperity(settlement.getId(), add ? extra.prosperity(settlement.getId()) + value : value); }
             default -> {
-                source.sendFailure(Component.literal("Unknown stat. Use stability, food, wealth, housing, maximum_manpower, available_manpower, or contracts."));
+                source.sendFailure(Component.literal("Unknown stat. Use stability, food, wealth, prosperity, housing, maximum_manpower, available_manpower, or contracts."));
                 return 0;
             }
         }
@@ -938,6 +946,14 @@ public final class PrototypeCommands {
                 + ", wealth=" + settlement.getWealth() + ", housing=" + settlement.getHousingCapacity()
                 + ", manpower=" + settlement.getAvailableManpower() + "/" + settlement.getMaximumManpower()
                 + ", contracts=" + settlement.getPendingContracts() + "."), true);
+        return 1;
+    }
+
+    private static int adminFactionWealth(CommandSourceStack source, String faction, int value, boolean add) {
+        Campaign23Data extra = Campaign23Data.get(source.getLevel());
+        if (faction == null || faction.isBlank()) { source.sendFailure(Component.literal("Faction ID cannot be blank.")); return 0; }
+        if (add) extra.changeFactionWealth(faction, value); else extra.setFactionWealth(faction, value);
+        source.sendSuccess(() -> Component.literal("Faction treasury for " + faction + " is now " + extra.factionWealth(faction) + "."), true);
         return 1;
     }
 
