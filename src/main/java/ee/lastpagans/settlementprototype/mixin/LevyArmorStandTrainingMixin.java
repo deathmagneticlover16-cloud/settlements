@@ -22,7 +22,14 @@ public abstract class LevyArmorStandTrainingMixin {
     @Unique
     private boolean settlementprototype$suppressArmorStandXp;
 
-    @Inject(method = "doHurtTarget", at = @At("HEAD"))
+    @Inject(
+            method = {
+                    "doHurtTarget(Lnet/minecraft/world/entity/Entity;)Z",
+                    "m_7327_(Lnet/minecraft/world/entity/Entity;)Z"
+            },
+            at = @At("HEAD"),
+            remap = false
+    )
     private void settlementprototype$rememberTrainingTarget(Entity target, CallbackInfoReturnable<Boolean> cir) {
         AbstractRecruitEntity recruit = (AbstractRecruitEntity) (Object) this;
         settlementprototype$suppressArmorStandXp = SettlementConfig.BLOCK_LEVY_ARMOR_STAND_XP.get()
@@ -31,14 +38,25 @@ public abstract class LevyArmorStandTrainingMixin {
     }
 
     @Redirect(
-            method = "doHurtTarget",
-            at = @At(value = "INVOKE", target = "Lcom/talhanation/recruits/entities/AbstractRecruitEntity;addXp(I)V", remap = false)
+            method = {
+                    "doHurtTarget(Lnet/minecraft/world/entity/Entity;)Z",
+                    "m_7327_(Lnet/minecraft/world/entity/Entity;)Z"
+            },
+            at = @At(value = "INVOKE", target = "Lcom/talhanation/recruits/entities/AbstractRecruitEntity;addXp(I)V", remap = false),
+            remap = false
     )
     private void settlementprototype$skipArmorStandTrainingXp(AbstractRecruitEntity recruit, int amount) {
         if (!settlementprototype$suppressArmorStandXp) recruit.addXp(amount);
     }
 
-    @Inject(method = "doHurtTarget", at = @At("RETURN"))
+    @Inject(
+            method = {
+                    "doHurtTarget(Lnet/minecraft/world/entity/Entity;)Z",
+                    "m_7327_(Lnet/minecraft/world/entity/Entity;)Z"
+            },
+            at = @At("RETURN"),
+            remap = false
+    )
     private void settlementprototype$clearTrainingTarget(Entity target, CallbackInfoReturnable<Boolean> cir) {
         settlementprototype$suppressArmorStandXp = false;
     }
