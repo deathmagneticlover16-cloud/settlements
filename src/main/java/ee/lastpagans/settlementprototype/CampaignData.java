@@ -1118,6 +1118,13 @@ public final class CampaignData extends SavedData {
         public void changeRelationship(int delta) {
             relationship = clamp(relationship + delta, -100, 100);
         }
+
+        public boolean passiveImprove(int cap, long day) {
+            if (lastChangedDay >= day || relationship >= cap) return false;
+            relationship = clamp(relationship + 1, -100, Math.min(100, cap));
+            lastChangedDay = day;
+            return true;
+        }
     }
 
     public static final class DiplomacyProposal {

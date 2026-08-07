@@ -106,6 +106,7 @@ public final class Campaign23Manager {
         processRecurringWarAid(server, extra, settlements, day);
         processReparations(server, extra, day);
         processForcedNapExpiry(server, extra, day);
+        processPassiveRelations(server, extra, day);
         processDevotionSites(server, extra, settlements, day);
     }
 
@@ -673,6 +674,26 @@ public final class Campaign23Manager {
             if (remaining > 0) next.add(value.next(day + 1, remaining));
         }
         extra.replaceReparations(next);
+    }
+
+    private static void processPassiveRelations(MinecraftServer server, Campaign23Data extra, long day) {
+        CampaignData campaign = CampaignData.get(server.overworld());
+        for (CampaignData.DiplomacyRecord relation : campaign.getDiplomacy()) {
+            if (relation.state() == CampaignData.TreatyState.WAR) continue;
+            int cap = switch (relation.state()) {
+                case NON_AGGRESSION -> 25;
+                case DEFENSIVE_ALLIANCE -> 50;
+                case MILITARY_ALLIANCE -> 70;
+                default -> extra.marriageAlliance(relation.firstFaction(), relation.secondFaction()) ? 45 : 0;
+            };
+            String before = CampaignManager.relationshipCategory(relation.relationship());
+            if (!relation.passiveImprove(cap, day)) continue;
+            String after = CampaignManager.relationshipCategory(relation.relationship());
+            if (!before.equals(after)) {
+                CampaignToastSender.relationChanged(server, relation.firstFaction(), relation.secondFaction(),
+                        after + " (" + relation.relationship() + ")");
+            }
+        }
     }
 
     private static void processForcedNapExpiry(MinecraftServer server, Campaign23Data extra, long day) {

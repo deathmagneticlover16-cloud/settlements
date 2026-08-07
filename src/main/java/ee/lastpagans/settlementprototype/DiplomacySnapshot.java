@@ -46,13 +46,17 @@ public record DiplomacySnapshot(
                 // still see them for diagnostics, but every mutating action remains server-authoritative.
                 if (!adminViewer && campaign23.factionProtected(faction.getStringID())) continue;
                 CampaignData.DiplomacyRecord relation = own.isBlank() ? null : campaign.relation(own, faction.getStringID());
-                PrototypeData.CharacterRecord ownCharacter = PrototypeData.get(player.serverLevel()).getCharacter(player.getUUID());
+                PrototypeData.CharacterRecord ownCharacter = factionLeaderCharacter(player, ownFaction);
+                PrototypeData.CharacterRecord otherCharacter = factionLeaderCharacter(player, faction);
                 String ownFaith = ownCharacter == null ? "" : ownCharacter.getFaith();
-                String otherFaith = factionLeaderFaith(player, faction);
+                String otherFaith = otherCharacter == null ? "" : otherCharacter.getFaith();
                 int faithModifier = CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith);
+                int traitModifier = CampaignDefinitions.relationTraitModifier(ownCharacter == null ? List.of() : ownCharacter.getTraits(), ownFaith, otherFaith)
+                        + CampaignDefinitions.relationTraitModifier(otherCharacter == null ? List.of() : otherCharacter.getTraits(), otherFaith, ownFaith);
+                int political = Math.max(-100, Math.min(100, (relation == null ? 0 : relation.relationship()) + traitModifier));
                 relations.add(new RelationEntry(
                         faction.getStringID(), faction.getTeamDisplayName(), faction.getBanner() == null ? new CompoundTag() : faction.getBanner().copy(),
-                        relation == null ? 0 : relation.relationship(), relation == null ? CampaignData.TreatyState.NEUTRAL.name() : relation.state().name(),
+                        political, relation == null ? CampaignData.TreatyState.NEUTRAL.name() : relation.state().name(),
                         faithModifier, campaign.getFactionReliability(faction.getStringID())
                 ));
             }
@@ -137,9 +141,13 @@ public record DiplomacySnapshot(
                 message == null ? "" : message);
     }
 
+    private static PrototypeData.CharacterRecord factionLeaderCharacter(ServerPlayer viewer, RecruitsFaction faction) {
+        if (faction == null || faction.getTeamLeaderUUID() == null) return null;
+        return PrototypeData.get(viewer.serverLevel()).getCharacter(faction.getTeamLeaderUUID());
+    }
+
     private static String factionLeaderFaith(ServerPlayer viewer, RecruitsFaction faction) {
-        if (faction == null || faction.getTeamLeaderUUID() == null) return "";
-        PrototypeData.CharacterRecord character = PrototypeData.get(viewer.serverLevel()).getCharacter(faction.getTeamLeaderUUID());
+        PrototypeData.CharacterRecord character = factionLeaderCharacter(viewer, faction);
         return character == null ? "" : character.getFaith();
     }
 

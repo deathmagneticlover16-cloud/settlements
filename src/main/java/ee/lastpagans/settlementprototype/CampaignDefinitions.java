@@ -163,6 +163,23 @@ public final class CampaignDefinitions {
         return total;
     }
 
+
+    /** Dynamic political-relations modifier contributed by a ruler's current traits. */
+    public static int relationTraitModifier(List<String> traitIds, String ownFaith, String otherFaith) {
+        if (traitIds == null) return 0;
+        int total = 0;
+        for (String id : traitIds) {
+            TraitDefinition definition = trait(id);
+            if (definition == null) continue;
+            int relation = definition.effect(EffectKind.RELATIONS);
+            if (relation == 0) continue;
+            // Zealous explicitly means same-faith relations rather than a universal bonus.
+            if (definition.id().equals("zealous") && (ownFaith == null || otherFaith == null || !ownFaith.equalsIgnoreCase(otherFaith))) continue;
+            total += relation;
+        }
+        return total;
+    }
+
     public static int religionRelationModifier(String first, String second) {
         if (first == null || second == null || first.isBlank() || second.isBlank()) return 0;
         if (first.equalsIgnoreCase(second)) return 10;

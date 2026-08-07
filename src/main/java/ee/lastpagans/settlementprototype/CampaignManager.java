@@ -472,7 +472,7 @@ public final class CampaignManager {
         if (protectedData.factionProtected(own) || protectedData.factionProtected(target)) return "Protected admin factions are excluded from ordinary diplomacy.";
         if (data.relation(own, target).state() == CampaignData.TreatyState.WAR) return "End the war before proposing a treaty.";
         data.createProposal(type, own, target, player.getUUID(), war, day);
-        data.relation(own, target).changeRelationship(2);
+        changeRelationship(player.getServer(), data, own, target, 2);
         data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL,
                 "Diplomatic proposal", factionName(own) + " sent a " + pretty(type.name()) + " proposal to " + factionName(target) + ".",
                 day, target, "", CampaignData.NewsVisibility.FACTION);
@@ -617,7 +617,7 @@ public final class CampaignManager {
         if (completesFactionWar) {
             CampaignData.DiplomacyRecord relation = data.relation(war.attackerFaction(), war.defenderFaction());
             relation.setState(CampaignData.TreatyState.WAR, day);
-            relation.changeRelationship(-40);
+            changeRelationship(player.getServer(), data, war.attackerFaction(), war.defenderFaction(), -40);
         }
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "War escalated",
                 factionName(own) + " joined the " + side + " settlement, escalating the conflict to " + escalation + ".",
@@ -1247,8 +1247,8 @@ public final class CampaignManager {
             war.addSupporter(own, attackerSide);
             CampaignData.DiplomacyRecord relation = data.relation(own, enemy);
             relation.setState(CampaignData.TreatyState.WAR, day);
-            relation.changeRelationship(-30);
-            data.relation(proposal.fromFaction(), own).changeRelationship(15);
+            changeRelationship(player.getServer(), data, own, enemy, -30);
+            changeRelationship(player.getServer(), data, proposal.fromFaction(), own, 15);
             // Reliability is earned from actual diplomatic conduct. Answering an ally's
             // legitimate call to war is one of the clearest positive signals.
             data.changeFactionReliability(own, 8);
@@ -1287,7 +1287,7 @@ public final class CampaignManager {
         }
         CampaignData.DiplomacyRecord relation = data.relation(proposal.fromFaction(), proposal.toFaction());
         relation.setState(state, day);
-        relation.changeRelationship(state.isAlliance() ? 15 : 8);
+        changeRelationship(player.getServer(), data, proposal.fromFaction(), proposal.toFaction(), state.isAlliance() ? 15 : 8);
         syncRelation(player.serverLevel(), proposal.fromFaction(), proposal.toFaction(), state);
         CampaignToastSender.relationChanged(player.getServer(), proposal.fromFaction(), proposal.toFaction(), state.displayName());
         return pretty(proposal.type().name()) + " accepted.";
@@ -1301,7 +1301,7 @@ public final class CampaignManager {
         if (protectedData.factionProtected(proposal.fromFaction()) || protectedData.factionProtected(proposal.toFaction()))
             return "Protected admin factions are excluded from ordinary diplomacy.";
         data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.REJECTED);
-        data.relation(proposal.fromFaction(), proposal.toFaction()).changeRelationship(-5);
+        changeRelationship(player.getServer(), data, proposal.fromFaction(), proposal.toFaction(), -5);
         CampaignToastSender.faction(player.getServer(), proposal.fromFaction(), "PROPOSAL REJECTED", factionName(own) + " rejected your " + pretty(proposal.type().name()) + " proposal.");
         return "Proposal rejected.";
     }
@@ -1314,7 +1314,7 @@ public final class CampaignManager {
         CampaignData.DiplomacyRecord relation = data.relation(own, target);
         if (relation.state() == CampaignData.TreatyState.WAR || relation.state() == CampaignData.TreatyState.NEUTRAL) return "There is no treaty to break.";
         relation.setState(CampaignData.TreatyState.NEUTRAL, day);
-        relation.changeRelationship(-20);
+        changeRelationship(player.getServer(), data, own, target, -20);
         data.changeFactionReliability(own, -15);
         syncRelation(player.serverLevel(), own, target, CampaignData.TreatyState.NEUTRAL);
         CampaignToastSender.relationChanged(player.getServer(), own, target, "Neutral — treaty broken");
@@ -1322,6 +1322,23 @@ public final class CampaignManager {
                 "Treaty broken", factionName(own) + " broke its treaty with " + factionName(target) + ".",
                 day, own, "", CampaignData.NewsVisibility.PUBLIC);
         return "Treaty with " + factionName(target) + " broken.";
+    }
+
+    public static String relationshipCategory(int relationship) {
+        if (relationship <= -25) return "Hostile";
+        if (relationship >= 25) return "Friendly";
+        return "Neutral";
+    }
+
+    static void changeRelationship(MinecraftServer server, CampaignData data, String first, String second, int delta) {
+        if (data == null || first == null || second == null || first.isBlank() || second.isBlank() || first.equals(second) || delta == 0) return;
+        CampaignData.DiplomacyRecord relation = data.relation(first, second);
+        String before = relationshipCategory(relation.relationship());
+        relation.changeRelationship(delta);
+        String after = relationshipCategory(relation.relationship());
+        if (server != null && !before.equals(after)) {
+            CampaignToastSender.relationChanged(server, first, second, after + " (" + relation.relationship() + ")");
+        }
     }
 
     private static void synchronizeWarPeace(ServerLevel level, CampaignData data, CampaignData.WarRecord war, long day) {
