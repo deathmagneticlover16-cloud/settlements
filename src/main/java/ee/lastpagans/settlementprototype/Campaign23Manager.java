@@ -241,11 +241,13 @@ public final class Campaign23Manager {
         // combine every independent settlement on the server into one artificial 500-man "faction" pool.
         int factionRemaining = settlement.getFactionTeam().isBlank()
                 ? factionCap : Math.max(0, factionCap - deployedForFaction(extra, settlement.getFactionTeam()));
-        int groundRemaining = (int)Math.min(Integer.MAX_VALUE, area.horizontalArea());
+        ServerLevel musterLevel = levelForRegion(player.getServer(), area);
+        if (musterLevel == null) return "The Muster Ground dimension is not available.";
+        int groundRemaining = usableMusterCapacity(musterLevel, area, desiredUnits);
         int allowedUnits = Math.min(desiredUnits, Math.min(playerRemaining, Math.min(factionRemaining, groundRemaining)));
         allowedUnits -= allowedUnits % 2;
         if (allowedUnits <= 0) {
-            if (groundRemaining <= 0) return "Your Muster Ground has no usable capacity.";
+            if (groundRemaining <= 0) return "Your Muster Ground has no safe standing blocks. Clear the field and try again.";
             if (playerRemaining <= 0) return "You already have the maximum " + playerCap + " deployed levymen.";
             if (factionRemaining <= 0) return "Your faction already has the maximum " + factionCap + " deployed levymen.";
             return "This levy cannot be raised right now.";
@@ -634,6 +636,37 @@ public final class Campaign23Manager {
             // fields are final, so debug/emergency speed is handled by advancing the settlement's campaign clock.
             extra.advanceDebugTime(mobilization.settlementId, Math.round(remaining * (1.0D - remainingMultiplier)));
         }
+    }
+
+    private static ServerLevel levelForRegion(MinecraftServer server, Campaign23Data.RegionRecord region) {
+        if (server == null || region == null || region.dimension().isBlank()) return null;
+        net.minecraft.resources.ResourceLocation location = net.minecraft.resources.ResourceLocation.tryParse(region.dimension());
+        if (location == null) return null;
+        return server.getLevel(net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, location));
+    }
+
+    /**
+     * Counts genuinely usable standing columns rather than treating every X/Z coordinate inside a rectangular
+     * selection as an army slot. This keeps caves, roofs, water-filled yards and obstructed courtyards from
+     * pretending to be a 300-man parade field. Stops as soon as the requested capacity is proven.
+     */
+    public static int usableMusterCapacity(ServerLevel level, Campaign23Data.RegionRecord area, int stopAfter) {
+        if (level == null || area == null || !area.valid()) return 0;
+        int wanted = stopAfter <= 0 ? Integer.MAX_VALUE : stopAfter;
+        int capacity = 0;
+        for (int x = area.min().getX(); x <= area.max().getX(); x++) {
+            for (int z = area.min().getZ(); z <= area.max().getZ(); z++) {
+                int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+                if (surface < area.min().getY() - 4 || surface > area.max().getY() + 8) continue;
+                BlockPos feet = new BlockPos(x, surface, z);
+                if (!level.getBlockState(feet).isAir() || !level.getBlockState(feet.above()).isAir()) continue;
+                BlockPos floor = feet.below();
+                if (!level.getBlockState(floor).isFaceSturdy(level, floor, net.minecraft.core.Direction.UP)) continue;
+                capacity++;
+                if (capacity >= wanted) return capacity;
+            }
+        }
+        return capacity;
     }
 
     public static BlockPos findMusterSpawn(ServerLevel level, PrototypeData.SettlementRecord settlement, int index) {
