@@ -17,6 +17,7 @@ public final class WarAidScreen extends ScaledCampaignScreen {
     private EditBox manpower, wealth, food;
     private String manpowerValue = "0", wealthValue = "0", foodValue = "0";
     private boolean manpowerDaily, wealthDaily, foodDaily;
+    private int aidScroll;
     private int left, top;
 
     public WarAidScreen(Screen parent, DiplomacySnapshot snapshot, DiplomacySnapshot.WarEntry war) {
@@ -41,8 +42,9 @@ public final class WarAidScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 320, top + 175, 100, 20).build());
 
         java.util.List<DiplomacySnapshot.AidEntry> commitments = commitments();
-        for (int i = 0; i < Math.min(4, commitments.size()); i++) {
-            DiplomacySnapshot.AidEntry aid = commitments.get(i);
+        aidScroll = Math.max(0, Math.min(aidScroll, Math.max(0, commitments.size() - 4)));
+        for (int i = 0; i < Math.min(4, commitments.size() - aidScroll); i++) {
+            DiplomacySnapshot.AidEntry aid = commitments.get(aidScroll + i);
             if (snapshot.canManage() && snapshot.ownFactionId().equals(aid.fromFactionId())) {
                 int y = top + 220 + i * 25;
                 addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> cancel(aid))
@@ -79,6 +81,17 @@ public final class WarAidScreen extends ScaledCampaignScreen {
     private java.util.List<DiplomacySnapshot.AidEntry> commitments() {
         return snapshot.aid().stream().filter(value -> war.id().equals(value.warId()) && value.recurring()).toList();
     }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        java.util.List<DiplomacySnapshot.AidEntry> values = commitments();
+        if (values.size() > 4) {
+            preserveValues();
+            aidScroll = Math.max(0, Math.min(values.size() - 4, aidScroll + (delta < 0 ? 1 : -1)));
+            rebuildWidgets();
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
     @Override public void render(GuiGraphics g, int mx, int my, float pt) {
         renderBackground(g);
         int uiMx = campaignMouseX(mx);
@@ -94,13 +107,14 @@ public final class WarAidScreen extends ScaledCampaignScreen {
         if (commitments.isEmpty()) {
             g.drawString(font, "No recurring aid commitments are active for this war.", left + 30, top + 225, 0xFFAAAAAA, false);
         } else {
-            for (int i = 0; i < Math.min(4, commitments.size()); i++) {
-                DiplomacySnapshot.AidEntry aid = commitments.get(i);
+            for (int i = 0; i < Math.min(4, commitments.size() - aidScroll); i++) {
+                DiplomacySnapshot.AidEntry aid = commitments.get(aidScroll + i);
                 int y = top + 220 + i * 25;
                 String line = aid.fromFactionName() + " → " + aid.targetSettlementName() + ": " + aid.summary();
                 g.drawString(font, font.plainSubstrByWidth(line, 315), left + 30, y, 0xFFFFFFFF, false);
             }
-            if (commitments.size() > 4) g.drawString(font, "+ " + (commitments.size() - 4) + " more commitments", left + 30, top + 320, 0xFFAAAAAA, false);
+            if (commitments.size() > 4) g.drawString(font, "Scroll aid ledger · " + (aidScroll + 1) + "-"
+                    + Math.min(commitments.size(), aidScroll + 4) + " / " + commitments.size(), left + 30, top + 320, 0xFFAAAAAA, false);
         }
         g.drawCenteredString(font, "Sending aid does not make your faction a belligerent.", left + 230, top + 345, 0xFFFFD27A);
         super.render(g, uiMx, uiMy, pt);
