@@ -555,7 +555,7 @@ public final class CampaignManager {
                 source.getName() + " declared war on " + target.getName() + ". Casus Belli: " + cb + ".",
                 day, target.getFactionTeam(), targetId, CampaignData.NewsVisibility.PUBLIC);
         CampaignToastSender.settlementWar(player.getServer(), source, target, cb);
-        if (!target.getFactionTeam().isBlank()) Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), target.getFactionTeam());
+        Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), target);
         return source.getName() + " declared a Settlement War on " + target.getName() + ". Casus Belli: " + cb + ". War ID: " + war.id();
     }
 

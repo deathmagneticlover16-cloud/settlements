@@ -620,20 +620,45 @@ public final class Campaign23Manager {
 
     public static void applyEmergencyMobilization(ServerLevel level, String factionId) {
         if (factionId == null || factionId.isBlank()) return;
-        Campaign23Data extra = Campaign23Data.get(level);
         PrototypeData settlements = PrototypeData.get(level);
+        Set<UUID> affected = new HashSet<>();
+        for (PrototypeData.SettlementRecord settlement : settlements.settlementsForFaction(factionId)) {
+            settlement.getMembers().forEach((member, role) -> {
+                if (role.canManage()) affected.add(member);
+            });
+        }
+        applyEmergencyMobilization(level, affected, mobilization -> factionId.equals(mobilization.factionId));
+    }
+
+    /** Emergency relief for an independent settlement. Only people allowed to raise its levy receive relief. */
+    public static void applyEmergencyMobilization(ServerLevel level, PrototypeData.SettlementRecord settlement) {
+        if (settlement == null) return;
+        if (!settlement.getFactionTeam().isBlank()) {
+            applyEmergencyMobilization(level, settlement.getFactionTeam());
+            return;
+        }
+        Set<UUID> affected = new HashSet<>();
+        settlement.getMembers().forEach((member, role) -> {
+            if (role.canManage()) affected.add(member);
+        });
+        if (settlement.getOwnerId() != null) affected.add(settlement.getOwnerId());
+        applyEmergencyMobilization(level, affected, mobilization -> settlement.getId().equals(mobilization.settlementId));
+    }
+
+    private static void applyEmergencyMobilization(ServerLevel level, Set<UUID> affected,
+                                                     java.util.function.Predicate<Campaign23Data.LevyMobilization> mobilizationFilter) {
+        if (affected == null || affected.isEmpty()) return;
+        Campaign23Data extra = Campaign23Data.get(level);
         long now = System.currentTimeMillis();
         double remainingMultiplier = 1.0D - SettlementConfig.LEVY_EMERGENCY_RELIEF_PERCENT.get() / 100.0D;
-        for (PrototypeData.SettlementRecord settlement : settlements.settlementsForFaction(factionId)) {
-            for (UUID member : settlement.getMembers().keySet()) {
-                long until = extra.levyCooldownUntil(member);
-                if (until > now) extra.setLevyCooldown(member, now + Math.round((until - now) * remainingMultiplier));
-            }
+        for (UUID member : affected) {
+            long until = extra.levyCooldownUntil(member);
+            if (until > now) extra.setLevyCooldown(member, now + Math.round((until - now) * remainingMultiplier));
         }
         for (Campaign23Data.LevyMobilization mobilization : extra.levyMobilizations()) {
-            if (!factionId.equals(mobilization.factionId)) continue;
+            if (!affected.contains(mobilization.ownerId) || !mobilizationFilter.test(mobilization)) continue;
             long remaining = Math.max(0L, mobilization.finishesAtMillis - now);
-            // fields are final, so debug/emergency speed is handled by advancing the settlement's campaign clock.
+            // Mobilization timestamps are immutable, so relief advances only this settlement's campaign clock.
             extra.advanceDebugTime(mobilization.settlementId, Math.round(remaining * (1.0D - remainingMultiplier)));
         }
     }
