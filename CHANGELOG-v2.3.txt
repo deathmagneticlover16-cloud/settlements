@@ -91,6 +91,7 @@ MILITARY / LEVIES
 - Return Levy action.
 - Multi-day service unrest stages: Extended Service, Weary Levies, Levy Exhaustion, Popular Outrage.
 - Casualty percentage produces escalating settlement mourning penalties, up to Levy Massacre.
+- Levy Tradition: repeated meaningful levy service with surviving veterans gradually gives future levies a small capped starting-XP bonus; immediate returns and near-total massacres do not farm it.
 - Leader traits can alter levy health, XP, morale and muster time.
 - Villager Recruits morale is used rather than a competing morale system.
 

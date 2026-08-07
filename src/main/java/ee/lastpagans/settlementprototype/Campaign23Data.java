@@ -32,6 +32,8 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<UUID, Integer> divorceCount = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
+    /** Capped settlement memory of repeated real levy service. It grants only modest starting XP. */
+    private final Map<String, Integer> levyTradition = new HashMap<>();
     /** Rolling settlement wealth deposits used to calculate Prosperity from actual economic activity. */
     private final Map<String, List<WealthDepositRecord>> wealthDeposits = new HashMap<>();
     /** Temporary manpower awarded by peace terms. It is recruitable, but never raises a settlement's native MP ceiling. */
@@ -74,6 +76,7 @@ public final class Campaign23Data extends SavedData {
         readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
         readUuidIntMap(tag, "DivorceCount", data.divorceCount);
         readStringIntMap(tag, "Prosperity", data.prosperity);
+        readStringIntMap(tag, "LevyTradition", data.levyTradition);
         for (Tag raw : tag.getList("WealthDeposits", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
             String settlement = PrototypeData.normalizeId(entry.getString("Settlement"));
@@ -191,6 +194,7 @@ public final class Campaign23Data extends SavedData {
         writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
         writeUuidIntMap(tag, "DivorceCount", divorceCount);
         writeStringIntMap(tag, "Prosperity", prosperity);
+        writeStringIntMap(tag, "LevyTradition", levyTradition);
         ListTag wealthDepositTag = new ListTag();
         wealthDeposits.forEach((settlement, samples) -> {
             CompoundTag entry = new CompoundTag(); entry.putString("Settlement", settlement);
@@ -264,6 +268,9 @@ public final class Campaign23Data extends SavedData {
 
     public int prosperity(String settlement) { return prosperity.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setProsperity(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
+    public int levyTradition(String settlement) { return levyTradition.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
+    public void setLevyTradition(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; levyTradition.put(id, clamp(value, 0, 50)); setDirty(); }
+    public int changeLevyTradition(String settlement, int delta) { setLevyTradition(settlement, levyTradition(settlement) + delta); return levyTradition(settlement); }
     public void recordWealthDeposit(String settlement, int amount, long day) {
         String id = PrototypeData.normalizeId(settlement);
         if (id.isBlank() || amount <= 0) return;

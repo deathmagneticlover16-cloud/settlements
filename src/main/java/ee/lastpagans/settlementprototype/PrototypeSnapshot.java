@@ -197,6 +197,11 @@ public record PrototypeSnapshot(
 
         Campaign23Data extra = Campaign23Data.get(player.serverLevel());
         int foreignMp = extra.foreignManpower(settlement.getId());
+        int levyTradition = extra.levyTradition(settlement.getId());
+        if (levyTradition > 0) {
+            values.add(new EffectEntry("Levy Tradition: " + levyTradition + "/50", "Repeated levy service", "minecraft:iron_helmet", "POSITIVE",
+                    "New levies from this settlement begin with +" + levyTradition + " XP. Tradition only grows after meaningful service with enough survivors returning home.", "Persistent"));
+        }
         if (foreignMp > 0) {
             values.add(new EffectEntry("Foreign manpower: " + foreignMp, "Peace treaty", "minecraft:iron_sword", "MIXED",
                     "Treaty-transferred manpower can be used for professional recruitment. It does not increase native maximum manpower and causes Local Foreign Soldiers unrest until spent.", "Until recruited"));

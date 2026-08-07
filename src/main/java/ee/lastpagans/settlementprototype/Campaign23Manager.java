@@ -325,7 +325,8 @@ public final class Campaign23Manager {
                 AttributeInstance health = recruit.getAttribute(Attributes.MAX_HEALTH);
                 if (health != null) health.setBaseValue(maxHealth);
                 recruit.setHealth(maxHealth);
-                int startXp = commander == null ? 0 : CampaignDefinitions.totalEffect(commander.getTraits(), CampaignDefinitions.EffectKind.LEVY_XP);
+                int startXp = extra.levyTradition(settlement.getId())
+                        + (commander == null ? 0 : CampaignDefinitions.totalEffect(commander.getTraits(), CampaignDefinitions.EffectKind.LEVY_XP));
                 if (startXp > 0) recruit.addXp(startXp);
                 int levyCap = SettlementConfig.effectiveLevyLevelCap();
                 if (recruit.getXpLevel() > levyCap) recruit.setXpLevel(levyCap);
@@ -395,13 +396,27 @@ public final class Campaign23Manager {
         double lossRate = totalInitial <= 0 ? 0 : (double) losses / totalInitial;
         applyLevyCasualtyModifier(player.serverLevel(), settlement, extra, lossRate);
         settleLevyServicePenaltyAfterReturn(player.serverLevel(), settlement, extra, oldestServiceAge);
+        int traditionGain = levyTraditionGain(totalInitial, totalSurvivors, oldestServiceAge);
+        int tradition = extra.levyTradition(settlement.getId());
+        if (traditionGain > 0) tradition = extra.changeLevyTradition(settlement.getId(), traditionGain);
         long fullCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_FULL_COOLDOWN_HOURS);
         long minimumCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_MIN_COOLDOWN_HOURS);
         long cooldown = Math.max(minimumCooldown, Math.round(fullCooldown * Math.min(1.0D, totalInitial / 300.0D)));
         extra.setLevyCooldown(player.getUUID(), now + cooldown);
         // Returned/dead levy MP becomes vacant and recovers through the normal manpower checker, preserving the existing design.
-        settlement.addChronicle("The levy returned: " + totalSurvivors + "/" + totalInitial + " men came home (" + losses + " lost). Cooldown: " + formatDuration(cooldown) + ".");
-        return "Returned " + totalSurvivors + " surviving levymen. Losses: " + losses + ". Levy cooldown: " + formatDuration(cooldown) + ".";
+        String traditionText = traditionGain > 0 ? " Levy Tradition +" + traditionGain + " (" + tradition + "/50)." : "";
+        settlement.addChronicle("The levy returned: " + totalSurvivors + "/" + totalInitial + " men came home (" + losses + " lost). Cooldown: " + formatDuration(cooldown) + "." + traditionText);
+        return "Returned " + totalSurvivors + " surviving levymen. Losses: " + losses + ". Levy cooldown: " + formatDuration(cooldown) + "." + traditionText;
+    }
+
+    private static int levyTraditionGain(int initial, int survivors, long serviceAge) {
+        // A levy must actually remain in service before a settlement learns anything from it.
+        // The multi-day cooldown already makes this difficult to farm; the service/survivor
+        // requirements also prevent raise-and-return loops and massacres from becoming bonuses.
+        if (initial < 10 || serviceAge < 30L * 60L * 1000L || survivors <= 0) return 0;
+        double survivalRate = Math.min(1.0D, (double) survivors / initial);
+        if (survivalRate < 0.25D) return 0;
+        return survivalRate < 0.50D ? 2 : 5;
     }
 
     private static void applyLevyCasualtyModifier(ServerLevel level, PrototypeData.SettlementRecord settlement, Campaign23Data extra, double lossRate) {
