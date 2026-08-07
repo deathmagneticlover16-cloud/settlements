@@ -372,7 +372,13 @@ public final class Campaign23Manager {
             totalSurvivors += units.size();
             for (UUID unitId : units) {
                 Entity entity = findEntity(player.getServer(), unitId);
-                if (entity instanceof AbstractRecruitEntity recruit && player.getUUID().equals(recruit.getOwnerUUID())) recruit.discard();
+                if (entity instanceof AbstractRecruitEntity recruit && player.getUUID().equals(recruit.getOwnerUUID())) {
+                    recruit.discard();
+                } else if (entity == null) {
+                    // The recruit may be in an unloaded chunk/dimension. Remember it so returning a levy really
+                    // returns the whole levy instead of letting unloaded stragglers reappear days later.
+                    extra.markRetiredLevy(unitId);
+                }
             }
             settlement.clearLevyBatch(deployment.batchId);
             extra.removeLevyDeployment(deployment.batchId);

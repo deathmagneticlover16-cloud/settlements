@@ -52,7 +52,9 @@ public final class PrototypeEvents {
 
         if (settlement == null) settlement = data.findSettlementTrackingUnit(entity.getUUID());
         if (settlement == null) return;
-        Campaign23Data.get(level).removeMercenaryContract(entity.getUUID());
+        Campaign23Data extra = Campaign23Data.get(level);
+        extra.removeMercenaryContract(entity.getUUID());
+        extra.consumeRetiredLevy(entity.getUUID());
         Campaign23Manager.onMilitaryDeath(level, entity, settlement);
         Campaign23Manager.onLevyDeath(level, entity);
         if (settlement.removeProfessional(entity.getUUID())) {
@@ -65,6 +67,13 @@ public final class PrototypeEvents {
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
         Entity entity = event.getEntity();
+        Campaign23Data extra = Campaign23Data.get(level);
+        if (extra.isRetiredLevy(entity.getUUID())
+                && "levy".equals(entity.getPersistentData().getString(PrototypeManager.TAG_KIND))) {
+            extra.consumeRetiredLevy(entity.getUUID());
+            entity.discard();
+            return;
+        }
         String settlementId = entity.getPersistentData().getString(PrototypeManager.TAG_SETTLEMENT);
         if (settlementId.isBlank()) return;
         PrototypeData.SettlementRecord settlement = PrototypeData.get(level).getSettlement(settlementId);

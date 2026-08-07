@@ -14,6 +14,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.UUID;
 
 /**
@@ -52,6 +54,8 @@ public final class Campaign23Data extends SavedData {
     private final Map<String, Long> forcedNapUntilDay = new HashMap<>();
     private final List<ReparationRecord> reparations = new ArrayList<>();
     private final Map<UUID, MercenaryContractRecord> mercenaryContracts = new LinkedHashMap<>();
+    /** Levy entities that were unloaded when their levy was returned. They are discarded on their next load. */
+    private final Set<UUID> retiredLevyUnits = new HashSet<>();
 
     public static Campaign23Data get(ServerLevel level) {
         ServerLevel storage = level.getServer().overworld();
@@ -153,6 +157,10 @@ public final class Campaign23Data extends SavedData {
             MercenaryContractRecord value = MercenaryContractRecord.fromNBT((CompoundTag) raw);
             if (value.unitId() != null && !value.settlementId().isBlank()) data.mercenaryContracts.put(value.unitId(), value);
         }
+        for (Tag raw : tag.getList("RetiredLevyUnits", Tag.TAG_INT_ARRAY)) {
+            try { data.retiredLevyUnits.add(net.minecraft.nbt.NbtUtils.loadUUID(raw)); }
+            catch (IllegalArgumentException ignored) { }
+        }
         return data;
     }
 
@@ -205,6 +213,7 @@ public final class Campaign23Data extends SavedData {
         writeStringLongMap(tag, "ForcedNapUntil", forcedNapUntilDay);
         ListTag reparationsTag = new ListTag(); reparations.forEach(value -> reparationsTag.add(value.toNBT())); tag.put("Reparations", reparationsTag);
         ListTag mercenaryTag = new ListTag(); mercenaryContracts.values().forEach(value -> mercenaryTag.add(value.toNBT())); tag.put("MercenaryContracts", mercenaryTag);
+        ListTag retiredLevyTag = new ListTag(); retiredLevyUnits.forEach(value -> retiredLevyTag.add(net.minecraft.nbt.NbtUtils.createUUID(value))); tag.put("RetiredLevyUnits", retiredLevyTag);
         return tag;
     }
 
@@ -342,6 +351,16 @@ public final class Campaign23Data extends SavedData {
         String id = factionId == null ? "" : factionId;
         return mercenaryContracts.values().stream().filter(value -> value.factionId().equals(id)).toList();
     }
+
+    public void markRetiredLevy(UUID unitId) { if (unitId != null && retiredLevyUnits.add(unitId)) setDirty(); }
+    public boolean isRetiredLevy(UUID unitId) { return unitId != null && retiredLevyUnits.contains(unitId); }
+    public boolean consumeRetiredLevy(UUID unitId) {
+        if (unitId == null) return false;
+        boolean removed = retiredLevyUnits.remove(unitId);
+        if (removed) setDirty();
+        return removed;
+    }
+    public int retiredLevyCount() { return retiredLevyUnits.size(); }
 
     public void resetPlayerData(UUID player) {
         if (player == null) return;
