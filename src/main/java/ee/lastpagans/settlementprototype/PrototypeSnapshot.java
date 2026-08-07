@@ -74,8 +74,10 @@ public record PrototypeSnapshot(
     private static MilitarySummary militarySummary(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
         int moraleTotal = 0;
         int moraleCount = 0;
-        int mercenaries = 0;
-        int wages = 0;
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        List<Campaign23Data.MercenaryContractRecord> contracts = extra.mercenariesForSettlement(settlement.getId());
+        int mercenaries = contracts.size();
+        int wages = contracts.stream().mapToInt(Campaign23Data.MercenaryContractRecord::wage).sum();
         for (UUID uuid : settlement.getAllMilitaryUnits()) {
             Entity found = null;
             for (ServerLevel level : player.getServer().getAllLevels()) {
@@ -85,10 +87,6 @@ public record PrototypeSnapshot(
             if (!(found instanceof AbstractRecruitEntity recruit)) continue;
             moraleTotal += Math.round(recruit.getMorale());
             moraleCount++;
-            if (found.getPersistentData().getBoolean(PrototypeManager.TAG_MERCENARY)) {
-                mercenaries++;
-                wages += Math.max(0, found.getPersistentData().getInt(PrototypeManager.TAG_MERCENARY_WAGE));
-            }
         }
         return new MilitarySummary(moraleCount == 0 ? 0 : Math.round((float) moraleTotal / moraleCount), mercenaries, wages);
     }

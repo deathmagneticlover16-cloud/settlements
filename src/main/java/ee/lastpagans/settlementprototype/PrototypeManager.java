@@ -340,6 +340,9 @@ public final class PrototypeManager {
             try { FactionEvents.addRecruitToTeam(recruit, team, level); }
             catch (RuntimeException exception) { level.getScoreboard().addPlayerToTeam(recruit.getScoreboardName(), team); }
         }
+        if (recruit.getPersistentData().getBoolean(TAG_MERCENARY)) {
+            registerMercenaryContract(level, recruit, settlement, actor == null ? null : actor.getUUID());
+        }
         return recruit;
     }
 
@@ -680,7 +683,9 @@ public final class PrototypeManager {
     }
 
     private static void discardSpawned(ServerLevel level, Collection<UUID> spawned) {
+        Campaign23Data extra = Campaign23Data.get(level);
         spawned.forEach(uuid -> {
+            extra.removeMercenaryContract(uuid);
             Entity entity = level.getEntity(uuid);
             if (entity != null) entity.discard();
         });
@@ -793,12 +798,13 @@ public final class PrototypeManager {
         if (server == null) return;
         PrototypeData settlements = PrototypeData.get(server.overworld());
         CampaignData campaign = CampaignData.get(server.overworld());
+        processMercenaryContracts(server, settlements, campaign, day);
         for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
             for (UUID uuid : Set.copyOf(settlement.getAllMilitaryUnits())) {
                 AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
                 if (recruit == null) continue;
                 maintainBarracksLink(recruit, settlement);
-                processMercenaryPayment(recruit, settlement, campaign, day);
+                syncMercenaryEntityFromContract(recruit, Campaign23Data.get(server.overworld()).mercenaryContract(uuid));
                 applySettlementMorale(recruit, settlement, settlements, campaign);
             }
         }
@@ -812,26 +818,77 @@ public final class PrototypeManager {
         }
     }
 
-    /** Admin/debug hook: makes every loaded tracked mercenary in a faction immediately due and processes payment once. */
+    /** Admin/debug hook: makes every registered mercenary in a faction immediately due and processes payment once. */
     public static int forceMercenaryPaymentCheck(MinecraftServer server, String faction) {
         if (server == null) return 0;
+        Campaign23Data extra = Campaign23Data.get(server.overworld());
         String wanted = faction == null ? "" : faction.trim();
-        PrototypeData settlements = PrototypeData.get(server.overworld());
-        CampaignData campaign = CampaignData.get(server.overworld());
         long day = server.overworld().getDayTime() / 24000L;
         int count = 0;
-        for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
-            if (!wanted.isBlank() && !wanted.equals(settlement.getFactionTeam())) continue;
-            for (UUID uuid : Set.copyOf(settlement.getAllMilitaryUnits())) {
-                AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
-                if (recruit == null || !recruit.getPersistentData().getBoolean(TAG_MERCENARY)) continue;
-                int interval = Math.max(1, recruit.getPersistentData().getInt(TAG_MERCENARY_INTERVAL_DAYS));
-                recruit.getPersistentData().putLong(TAG_MERCENARY_NEXT_PAYMENT_DAY, day);
-                processMercenaryPayment(recruit, settlement, campaign, day);
-                count++;
+        for (Campaign23Data.MercenaryContractRecord contract : List.copyOf(extra.mercenaryContracts())) {
+            if (!wanted.isBlank() && !wanted.equals(contract.factionId())) continue;
+            extra.putMercenaryContract(contract.update(day, contract.missedPayments(), contract.desertPending()));
+            count++;
+        }
+        if (count > 0) processMercenaryContracts(server, PrototypeData.get(server.overworld()), CampaignData.get(server.overworld()), day);
+        return count;
+    }
+
+    public static void registerMercenaryContract(ServerLevel level, AbstractRecruitEntity recruit, PrototypeData.SettlementRecord settlement, UUID originalOwner) {
+        if (level == null || recruit == null || settlement == null || !recruit.getPersistentData().getBoolean(TAG_MERCENARY)) return;
+        CompoundTag tag = recruit.getPersistentData();
+        int wage = Math.max(1, tag.getInt(TAG_MERCENARY_WAGE));
+        int interval = Math.max(1, tag.getInt(TAG_MERCENARY_INTERVAL_DAYS));
+        long next = tag.contains(TAG_MERCENARY_NEXT_PAYMENT_DAY) ? tag.getLong(TAG_MERCENARY_NEXT_PAYMENT_DAY) : level.getDayTime() / 24000L + interval;
+        int missed = Math.max(0, tag.getInt(TAG_MERCENARY_MISSED_PAYMENTS));
+        tag.putLong(TAG_MERCENARY_NEXT_PAYMENT_DAY, next);
+        Campaign23Data.get(level).putMercenaryContract(new Campaign23Data.MercenaryContractRecord(
+                recruit.getUUID(), originalOwner, settlement.getId(), settlement.getFactionTeam(), wage, interval, next, missed, missed >= MERCENARY_DESERTION_MISSES));
+    }
+
+    private static void processMercenaryContracts(MinecraftServer server, PrototypeData settlements, CampaignData campaign, long day) {
+        Campaign23Data extra = Campaign23Data.get(server.overworld());
+        for (Campaign23Data.MercenaryContractRecord original : List.copyOf(extra.mercenaryContracts())) {
+            PrototypeData.SettlementRecord settlement = settlements.getSettlement(original.settlementId());
+            if (settlement == null) { extra.removeMercenaryContract(original.unitId()); continue; }
+            Campaign23Data.MercenaryContractRecord contract = original;
+            long next = contract.nextPaymentDay();
+            int missed = contract.missedPayments();
+            boolean pending = contract.desertPending();
+            if (day >= next && !pending) {
+                int dueCycles = (int) Math.min(64L, 1L + Math.max(0L, day - next) / contract.intervalDays());
+                for (int cycle = 0; cycle < dueCycles; cycle++) {
+                    boolean paid = !contract.factionId().isBlank()
+                            ? extra.spendFactionWealth(contract.factionId(), contract.wage())
+                            : settlement.spendWealth(contract.wage());
+                    if (paid) missed = 0; else missed++;
+                    next += contract.intervalDays();
+                    if (missed >= MERCENARY_DESERTION_MISSES) { pending = true; break; }
+                }
+                contract = contract.update(next, missed, pending);
+                extra.putMercenaryContract(contract);
+                if (missed > 0) settlement.addChronicle("Mercenary wages were missed (" + missed + "/" + MERCENARY_DESERTION_MISSES + ").");
+            }
+            AbstractRecruitEntity recruit = findLoadedRecruit(server, contract.unitId());
+            if (recruit == null) continue;
+            syncMercenaryEntityFromContract(recruit, contract);
+            if (contract.desertPending()) {
+                desertMercenary(recruit, settlement, campaign, day);
+                extra.removeMercenaryContract(contract.unitId());
+            } else if (contract.missedPayments() == 0) {
+                recruit.setMoral(Math.min(100.0F, recruit.getMorale() + 1.0F));
             }
         }
-        return count;
+    }
+
+    private static void syncMercenaryEntityFromContract(AbstractRecruitEntity recruit, Campaign23Data.MercenaryContractRecord contract) {
+        if (recruit == null || contract == null) return;
+        CompoundTag tag = recruit.getPersistentData();
+        tag.putBoolean(TAG_MERCENARY, true);
+        tag.putInt(TAG_MERCENARY_WAGE, contract.wage());
+        tag.putInt(TAG_MERCENARY_INTERVAL_DAYS, contract.intervalDays());
+        tag.putLong(TAG_MERCENARY_NEXT_PAYMENT_DAY, contract.nextPaymentDay());
+        tag.putInt(TAG_MERCENARY_MISSED_PAYMENTS, contract.missedPayments());
     }
 
 
@@ -849,58 +906,11 @@ public final class PrototypeManager {
         if (upkeep != null && !upkeep.equals(recruit.getUpkeepPos())) recruit.setUpkeepPos(upkeep);
     }
 
-    private static void processMercenaryPayment(AbstractRecruitEntity recruit, PrototypeData.SettlementRecord settlement,
-                                                 CampaignData campaign, long day) {
-        CompoundTag data = recruit.getPersistentData();
-        if (!data.getBoolean(TAG_MERCENARY)) return;
-        int wage = Math.max(1, data.getInt(TAG_MERCENARY_WAGE));
-        int interval = Math.max(1, data.getInt(TAG_MERCENARY_INTERVAL_DAYS));
-        long next = data.contains(TAG_MERCENARY_NEXT_PAYMENT_DAY)
-                ? data.getLong(TAG_MERCENARY_NEXT_PAYMENT_DAY)
-                : day + interval;
-        if (!data.contains(TAG_MERCENARY_NEXT_PAYMENT_DAY)) {
-            data.putLong(TAG_MERCENARY_NEXT_PAYMENT_DAY, next);
-            return;
-        }
-        if (day < next) return;
-
-        // Catch up missed intervals when a recruit or its chunk has been unloaded. The cap prevents
-        // one very old unit from doing unbounded work in a single server tick; remaining cycles are
-        // handled on the next military-system pass.
-        int dueCycles = (int) Math.min(64L, 1L + Math.max(0L, day - next) / interval);
-        int missedThisPass = 0;
-        Campaign23Data extra = Campaign23Data.get((ServerLevel) recruit.level());
-        String payerFaction = settlement.getFactionTeam();
-        for (int cycle = 0; cycle < dueCycles; cycle++) {
-            boolean paid = !payerFaction.isBlank()
-                    ? extra.spendFactionWealth(payerFaction, wage)
-                    : settlement.spendWealth(wage);
-            if (paid) {
-                data.putInt(TAG_MERCENARY_MISSED_PAYMENTS, 0);
-                recruit.setMoral(Math.min(100.0F, recruit.getMorale() + 5.0F));
-            } else {
-                int missed = data.getInt(TAG_MERCENARY_MISSED_PAYMENTS) + 1;
-                data.putInt(TAG_MERCENARY_MISSED_PAYMENTS, missed);
-                missedThisPass++;
-                recruit.setMoral(Math.max(0.0F, recruit.getMorale() - 12.0F));
-                if (missed >= MERCENARY_DESERTION_MISSES) {
-                    desertMercenary(recruit, settlement, campaign, day);
-                    return;
-                }
-            }
-            next += interval;
-        }
-        data.putLong(TAG_MERCENARY_NEXT_PAYMENT_DAY, next);
-        if (missedThisPass > 0) {
-            int totalMissed = data.getInt(TAG_MERCENARY_MISSED_PAYMENTS);
-            settlement.addChronicle("Mercenary wages were missed (" + totalMissed + "/" + MERCENARY_DESERTION_MISSES + ").");
-        }
-    }
-
     private static void desertMercenary(AbstractRecruitEntity recruit, PrototypeData.SettlementRecord settlement,
                                          CampaignData campaign, long day) {
         CompoundTag data = recruit.getPersistentData();
         UUID unitId = recruit.getUUID();
+        Campaign23Data.get((ServerLevel) recruit.level()).removeMercenaryContract(unitId);
         boolean professional = settlement.removeProfessional(unitId);
         if (!professional) settlement.removeLevyman(unitId);
         data.remove(TAG_MANAGED);

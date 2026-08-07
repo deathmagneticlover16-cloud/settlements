@@ -48,6 +48,7 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, CandidateHistory> candidateHistory = new HashMap<>();
     private final Map<String, Long> forcedNapUntilDay = new HashMap<>();
     private final List<ReparationRecord> reparations = new ArrayList<>();
+    private final Map<UUID, MercenaryContractRecord> mercenaryContracts = new LinkedHashMap<>();
 
     public static Campaign23Data get(ServerLevel level) {
         ServerLevel storage = level.getServer().overworld();
@@ -137,6 +138,10 @@ public final class Campaign23Data extends SavedData {
             ReparationRecord value = ReparationRecord.fromNBT((CompoundTag) raw);
             if (value.id() != null && !value.payerFaction().isBlank() && !value.receiverFaction().isBlank()) data.reparations.add(value);
         }
+        for (Tag raw : tag.getList("MercenaryContracts", Tag.TAG_COMPOUND)) {
+            MercenaryContractRecord value = MercenaryContractRecord.fromNBT((CompoundTag) raw);
+            if (value.unitId() != null && !value.settlementId().isBlank()) data.mercenaryContracts.put(value.unitId(), value);
+        }
         return data;
     }
 
@@ -180,6 +185,7 @@ public final class Campaign23Data extends SavedData {
         ListTag histories = new ListTag(); candidateHistory.values().forEach(value -> histories.add(value.toNBT())); tag.put("CandidateHistory", histories);
         writeStringLongMap(tag, "ForcedNapUntil", forcedNapUntilDay);
         ListTag reparationsTag = new ListTag(); reparations.forEach(value -> reparationsTag.add(value.toNBT())); tag.put("Reparations", reparationsTag);
+        ListTag mercenaryTag = new ListTag(); mercenaryContracts.values().forEach(value -> mercenaryTag.add(value.toNBT())); tag.put("MercenaryContracts", mercenaryTag);
         return tag;
     }
 
@@ -278,6 +284,19 @@ public final class Campaign23Data extends SavedData {
     public void replaceReparations(List<ReparationRecord> values) { reparations.clear(); if (values != null) reparations.addAll(values); setDirty(); }
     public void removeReparation(UUID id) { if (id != null && reparations.removeIf(value -> id.equals(value.id()))) setDirty(); }
 
+    public Collection<MercenaryContractRecord> mercenaryContracts() { return List.copyOf(mercenaryContracts.values()); }
+    public MercenaryContractRecord mercenaryContract(UUID unitId) { return unitId == null ? null : mercenaryContracts.get(unitId); }
+    public void putMercenaryContract(MercenaryContractRecord value) { if (value != null && value.unitId() != null) { mercenaryContracts.put(value.unitId(), value); setDirty(); } }
+    public void removeMercenaryContract(UUID unitId) { if (unitId != null && mercenaryContracts.remove(unitId) != null) setDirty(); }
+    public List<MercenaryContractRecord> mercenariesForSettlement(String settlementId) {
+        String id = PrototypeData.normalizeId(settlementId);
+        return mercenaryContracts.values().stream().filter(value -> value.settlementId().equals(id)).toList();
+    }
+    public List<MercenaryContractRecord> mercenariesForFaction(String factionId) {
+        String id = factionId == null ? "" : factionId;
+        return mercenaryContracts.values().stream().filter(value -> value.factionId().equals(id)).toList();
+    }
+
     public void resetPlayerData(UUID player) {
         if (player == null) return;
         devotion.remove(player);
@@ -288,6 +307,7 @@ public final class Campaign23Data extends SavedData {
         levyMobilizations.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
         levyDeployments.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
         candidateHistory.remove(player);
+        mercenaryContracts.entrySet().removeIf(entry -> player.equals(entry.getValue().originalOwnerId()));
         setDirty();
     }
 
@@ -377,6 +397,35 @@ public final class Campaign23Data extends SavedData {
         private static AidRecord fromNBT(CompoundTag tag) { return new AidRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("From"), tag.getString("Target"), tag.getInt("Manpower"), tag.getInt("Wealth"), tag.getInt("Food"), tag.getBoolean("Recurring"), tag.getLong("NextDay")); }
     }
 
+
+
+    public record MercenaryContractRecord(UUID unitId, UUID originalOwnerId, String settlementId, String factionId,
+                                           int wage, int intervalDays, long nextPaymentDay, int missedPayments, boolean desertPending) {
+        public MercenaryContractRecord {
+            settlementId = PrototypeData.normalizeId(settlementId);
+            factionId = factionId == null ? "" : factionId;
+            wage = Math.max(1, wage);
+            intervalDays = Math.max(1, intervalDays);
+            missedPayments = Math.max(0, missedPayments);
+        }
+        private CompoundTag toNBT() {
+            CompoundTag tag = new CompoundTag();
+            if (unitId != null) tag.putUUID("Unit", unitId);
+            if (originalOwnerId != null) tag.putUUID("Owner", originalOwnerId);
+            tag.putString("Settlement", settlementId); tag.putString("Faction", factionId);
+            tag.putInt("Wage", wage); tag.putInt("Interval", intervalDays); tag.putLong("NextPayment", nextPaymentDay);
+            tag.putInt("Missed", missedPayments); tag.putBoolean("DesertPending", desertPending);
+            return tag;
+        }
+        private static MercenaryContractRecord fromNBT(CompoundTag tag) {
+            return new MercenaryContractRecord(tag.hasUUID("Unit") ? tag.getUUID("Unit") : null,
+                    tag.hasUUID("Owner") ? tag.getUUID("Owner") : null, tag.getString("Settlement"), tag.getString("Faction"),
+                    tag.getInt("Wage"), tag.getInt("Interval"), tag.getLong("NextPayment"), tag.getInt("Missed"), tag.getBoolean("DesertPending"));
+        }
+        public MercenaryContractRecord update(long nextDay, int missed, boolean pending) {
+            return new MercenaryContractRecord(unitId, originalOwnerId, settlementId, factionId, wage, intervalDays, nextDay, missed, pending);
+        }
+    }
 
     public record ReparationRecord(UUID id, String payerFaction, String receiverFaction, int wealthPerDay, int remainingDays, long nextDay) {
         public ReparationRecord { if (id == null) id = UUID.randomUUID(); payerFaction = payerFaction == null ? "" : payerFaction; receiverFaction = receiverFaction == null ? "" : receiverFaction; wealthPerDay = Math.max(0, wealthPerDay); remainingDays = Math.max(0, remainingDays); }

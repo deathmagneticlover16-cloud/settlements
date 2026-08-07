@@ -52,6 +52,7 @@ public final class PrototypeEvents {
 
         if (settlement == null) settlement = data.findSettlementTrackingUnit(entity.getUUID());
         if (settlement == null) return;
+        Campaign23Data.get(level).removeMercenaryContract(entity.getUUID());
         Campaign23Manager.onLevyDeath(level, entity);
         if (settlement.removeProfessional(entity.getUUID())) {
             settlement.addChronicle("A professional soldier died; one MP became vacant.");
@@ -73,6 +74,11 @@ public final class PrototypeEvents {
         } else if (entity.getPersistentData().getBoolean(PrototypeManager.TAG_MANAGED)
                 && "professional".equals(entity.getPersistentData().getString(PrototypeManager.TAG_KIND))) {
             settlement.addProfessional(entity.getUUID());
+            if (entity instanceof com.talhanation.recruits.entities.AbstractRecruitEntity recruit
+                    && entity.getPersistentData().getBoolean(PrototypeManager.TAG_MERCENARY)
+                    && Campaign23Data.get(level).mercenaryContract(entity.getUUID()) == null) {
+                PrototypeManager.registerMercenaryContract(level, recruit, settlement, null);
+            }
         }
     }
 
