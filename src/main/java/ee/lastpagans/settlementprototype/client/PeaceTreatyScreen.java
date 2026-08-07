@@ -84,10 +84,11 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         boolean parentJoined = viewerAttacker ? war.attackerFactionJoined() : war.defenderFactionJoined();
         String sideSettlement = viewerAttacker ? war.attackerSettlementId() : war.targetSettlementId();
         String sideFaction = viewerAttacker ? war.attackerFactionId() : war.defenderFactionId();
-        return snapshot.settlements().stream().filter(DiplomacySnapshot.SettlementTarget::manageable)
-                .filter(s -> !settlementWar || parentJoined
-                        ? (!sideFaction.isBlank() && sideFaction.equals(s.factionId())) || s.settlementId().equals(sideSettlement)
-                        : s.settlementId().equals(sideSettlement))
+        boolean viewerActsAsFaction = snapshot.canManage() && !sideFaction.isBlank() && sideFaction.equals(snapshot.ownFactionId())
+                && (!settlementWar || parentJoined);
+        return snapshot.settlements().stream()
+                .filter(s -> viewerActsAsFaction ? sideFaction.equals(s.factionId())
+                        : s.manageable() && s.settlementId().equals(sideSettlement))
                 .toList();
     }
     private List<DiplomacySnapshot.SettlementTarget> enemySettlements() {

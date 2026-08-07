@@ -195,7 +195,9 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             }
             Button peace = addRenderableWidget(Button.builder(Component.literal("Peace Terms"), b -> minecraft.setScreen(new PeaceTreatyScreen(this, snapshot, war)))
                     .bounds(left + 492, y, 58, 20).build());
-            peace.active = snapshot.canManage();
+            boolean managesWarSettlement = manageableSettlements().stream().anyMatch(s -> s.settlementId().equals(war.attackerSettlementId()) || s.settlementId().equals(war.targetSettlementId()));
+            boolean factionMayNegotiate = snapshot.canManage() && (!settlementWar || fullFactionConflict || viewerJoinedSettlementWar);
+            peace.active = managesWarSettlement || factionMayNegotiate;
         }
     }
 
