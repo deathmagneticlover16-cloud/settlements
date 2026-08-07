@@ -1,0 +1,83 @@
+LAST PAGANS SETTLEMENTS 2.0.0 — MULTIPLAYER TEST PLAN
+
+PREPARATION
+- Back up the world.
+- Remove all older settlementprototype JARs.
+- Install the same 2.0.0 JAR on server and clients.
+- Keep Villager Recruits 1.15.2 installed.
+- Test with at least two factions and two players where possible.
+
+1. CHARACTER CREATION
+- Join with a fresh/reset character.
+- Verify Faith, form of address and title open as real lists.
+- Test mouse wheel, arrow keys, Enter and Escape on a dropdown.
+- Confirm Orthodox Christianity and all other new faiths appear.
+- Verify Preview -> Go Back -> final confirmation.
+- Confirm portraits show head and shoulders, not a tiny full body.
+- Confirm the character sheet shows trait icons and exact effects on hover.
+
+2. FACTION SCREEN AND RANKS
+- Press the normal Recruits faction/team key; it should open Faction, not Diplomacy.
+- Confirm Faction and Diplomacy main-menu buttons open different screens.
+- As leader, assign a member rank and rename a tier to Jarl/Hersir/Commoner.
+- Reopen the menu and reconnect; verify persistence.
+- Verify tab/display names use [Rank] Character Name while commands still use account names.
+- Verify lower-ranked players cannot change ranks/titles by forged GUI actions.
+
+3. RESIDENT DUPLICATION
+- Register one villager repeatedly; population must only change once.
+- Use a Settler Contract, then register that spawned villager repeatedly; population must remain unchanged.
+- Copy/reuse the same contract ID in Creative; the second redemption must fail.
+- Restart the server and repeat the checks.
+
+4. LOCATIONS
+- Set a Town Square, Muster Ground and Barracks.
+- Verify contract villagers spawn only at the Town Square.
+- Verify military recruitment is blocked when the Muster Ground is absent.
+- Recruit 10 units and verify they use safe rows around the Muster Ground.
+- Link a Barracks chest, issue Return to Barracks and check loaded troops receive the order/upkeep point.
+
+5. ROSTERS
+- Create a global default roster and save all seven configured egg types.
+- Assign a faction roster and confirm its settlements inherit it.
+- Add one settlement-specific override and confirm only that unit type changes.
+- Verify a copied template does not reproduce old owner, UUID, position, team or settlement tags.
+- Verify the spawned troop is assigned to the current settlement/faction.
+
+6. MERCENARIES AND MORALE
+- Mark one held egg as a mercenary, save it to a roster and recruit it.
+- Verify an ordinary template does not receive wages.
+- Verify the Military screen displays mercenary count and wage obligation.
+- Set settlement wealth below the required wage and advance payment cycles.
+- Verify Recruits morale falls after missed payments.
+- After three missed payments, verify desertion removes settlement/faction tracking.
+- Test high/low settlement stability and Barracks rest; morale should gradually move toward different targets rather than jump instantly.
+
+7. DIPLOMACY
+- Open Declare Conflict and inspect Raid, Skirmish, Settlement War and Faction War.
+- Verify local tiers require a settlement belonging to the selected target faction.
+- Verify Faction War targets the whole faction and needs no settlement.
+- Verify each tier only offers matching war goals.
+- Read the final summary before declaring: attacker, defender, tier, goal and exact target must all be unambiguous.
+- Declare each tier in a copied world and verify the Active Wars page records the exact data.
+- Verify ordinary friendly/accidental hits do not declare war.
+- Verify non-leaders cannot declare war.
+- Test NAP, defensive alliance, military alliance, call to war, rejection and peace.
+- Verify an expired/ended linked war cannot consume a Call to War proposal as accepted.
+
+8. WORLD NEWS
+- Trigger a treaty, war, peace, marriage, settler arrival and mercenary desertion.
+- Verify records appear under the correct filter.
+- Verify faction-only news is invisible to unrelated players but visible to faction members/admins.
+- Restart the server and verify news persists.
+
+9. AI SPOUSES
+- Open Family and verify five generated candidates with first/last names, culture, faith, traits and effects.
+- Reopen/reconnect and verify the candidates do not reroll.
+- Verify refresh is locked until seven Minecraft days have passed.
+- Marry a generated spouse and confirm effects appear on settlement/morale summaries.
+
+10. SAVE/RESTART
+- Restart after every major system has data.
+- Recheck settlements, banners, ranks, rosters, wars, proposals, news, spouse, traits, locations and military UUID tracking.
+- Report the complete latest.log and crash report for any failure.

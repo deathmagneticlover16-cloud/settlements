@@ -1,0 +1,58 @@
+LAST PAGANS SETTLEMENTS 2.0.0 — IMPORTANT COMMANDS
+
+OPEN MENUS
+/campaign
+/campaign faction
+/campaign military
+/campaign diplomacy
+/campaign family
+/campaign news
+/settlements open [id]
+/settlements list
+
+SETTLEMENT CREATION AND LOCATIONS
+/settlements create <id> <name>
+/settlements settownsquare <id>
+/settlements setmusterground <id>
+/settlements setbarracks <id>
+/settlements setbarrackschest <id>        (look at the intended chest/supply block)
+/settlements barrackssettings <id> <radius> <capacity>
+/settlements linkclaim <id>
+/settlements setfaction <id>
+/settlements clearfaction <id>
+
+RESIDENTS AND SETTLEMENT MANAGEMENT
+/settlements registervillager <id>        (look directly at the villager)
+/settlements housing <id> <capacity>
+/settlements rank <id> <village|town|capital>
+/settlements notice <id> <text>
+/settlements member add <id> <player> <owner|co_owner|citizen>
+/settlements member remove <id> <player>
+
+BANNERS
+/settlements banner sethand <id>        (hold a Minecraft banner)
+/settlements banner faction <id>
+/settlements banner clear <id>
+
+MILITARY ROSTERS
+/settlements admin roster create <roster_id> <display name>
+/settlements admin roster copy <source> <new_id> <display name>
+/settlements admin roster default <roster_id>
+/settlements admin roster assignfaction <roster_id> [faction_id]
+/settlements admin roster sethand <roster_id> <unit_type>       (hold configured egg)
+/settlements admin sethand <unit_type> <settlement_id>             (hold configured egg; local override)
+
+Unit types:
+recruit, shieldman, bowman, crossbowman, horseman, nomad, levy
+
+MERCENARY TEMPLATE TAGS
+/settlements admin mercenary sethand <wage> <interval_days>
+/settlements admin mercenary clearhand
+
+Mark the held configured Recruits spawn egg before saving it into a roster slot. Only units spawned from templates carrying the tag receive selective wages.
+
+CHARACTERS/FAMILY
+/character reset <player>
+/campaign family
+
+The Faction screen itself assigns permission tiers and edits visible rank titles.

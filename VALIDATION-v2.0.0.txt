@@ -1,0 +1,19 @@
+LAST PAGANS SETTLEMENTS 2.0.0 — SOURCE VALIDATION
+
+Completed before packaging:
+- JSON resource parsing.
+- Java delimiter, string and comment scan across every source file.
+- Record-constructor field/argument count checks for all network snapshots.
+- Unique packet-registration check for all 17 network messages.
+- Recruits 1.15.2 class and method checks with javap for morale, Barracks/upkeep orders,
+  faction membership, diplomacy synchronization, banner rendering, key interception and mixin targets.
+- javac parser pass with the bundled Recruits JAR. Missing Forge/Minecraft symbols are expected
+  without the ForgeGradle dependency classpath; no Java parser/syntax failures were found.
+- ZIP path, duplicate-entry and archive-integrity checks.
+
+Not completed in this environment:
+- A full ForgeGradle compile and in-game launch. The Gradle distribution/dependency server is not
+  reachable from the build container. Run BUILD-V2.0.bat on a normal internet-connected machine.
+
+Install the resulting JAR on both the server and every client, remove all older settlementprototype
+JARs, and test a copied world before upgrading the live server.

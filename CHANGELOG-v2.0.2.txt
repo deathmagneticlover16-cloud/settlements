@@ -1,0 +1,43 @@
+LAST PAGANS SETTLEMENTS 2.0.2 — FOUNDATION AND UI HOTFIX
+
+Faction creation
+- Added a real Create Faction form to the Faction screen for independent players.
+- Added /campaign faction create <name>.
+- Added /settlements admin faction create <player> <name>.
+- A held banner is copied as the new faction banner; otherwise Recruits uses its blank/default banner.
+
+Admin controls
+- Added /settlements admin stats set <settlement> <stat> <value>.
+- Added /settlements admin stats add <settlement> <stat> <value>.
+- Supported stats: stability, food, wealth, housing, maximum_manpower, available_manpower, contracts.
+- Manpower setters preserve professional and levy commitments.
+
+Character sheet
+- Restored the full live 3D Minecraft character model.
+- Added a later-editable Dynasty and Main House section.
+- Added a dedicated identity editor and server-authoritative save packet.
+- Rebuilt the sheet layout so holdings, account name, traits and navigation no longer overlap.
+
+Settlement navigation
+- Added Previous and Next settlement controls to both Settlement and Military screens.
+- Switching updates the selected settlement server-side and reopens the correct screen.
+
+Claims
+- A settlement may now contain any number of linked Recruits claims.
+- The linked claims act as one logical settlement territory for settlement lookup and claim events.
+- /settlements linkclaim <id> adds the claim the player is standing inside.
+- /settlements unlinkclaim <id> removes only the current claim.
+- /settlements clearclaims <id> removes every linked claim.
+- One Recruits claim cannot be linked to two different settlements.
+- The Settlement screen displays linked claim count and a compact claim summary.
+
+GUI and banners
+- Reduced banner scales across the campaign, faction and settlement screens.
+- Expanded and repositioned the main, faction, diplomacy, family and character screens.
+- Corrected a Military-screen wrapped-text coordinate bug.
+- Preserved real dropdowns and existing campaign navigation.
+
+Networking and data
+- Network protocol advanced to 6. All clients and the server must run 2.0.2.
+- Existing 2.0.x settlement data remains readable. Old single claims become the primary claim automatically.
+- Added persistent Main House data to character records.

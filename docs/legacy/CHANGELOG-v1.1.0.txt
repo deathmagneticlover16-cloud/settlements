@@ -1,0 +1,36 @@
+LAST PAGANS SETTLEMENTS V1.1.0 — CAMPAIGN RELEASE
+
+ADDED
+• Campaign overview menu and keybinds.
+• Character, settlement, diplomacy, and family navigation.
+• Real expandable character-creation dropdowns.
+• One-time character preview and correction screen.
+• Custom diplomacy records, relationship points, faith/reliability modifiers, treaties, proposals, formal wars, calls to war, and peace offers.
+• Recruits diplomacy synchronization.
+• Blocking of original Recruits diplomacy-changing packets.
+• Redirects for Recruits diplomacy/faction key and original diplomacy/treaty screens.
+• Damage-war interception so a hit no longer makes two factions formal enemies.
+• Recruits world-map settlement markers with rank-sensitive icons and hover details.
+• Text NPC spouses and player marriage proposals.
+• Large settlement banners and separate local/faction banner display.
+• Global, copyable, faction, and settlement military templates stored from complete configured spawn-egg ItemStacks.
+• Military tab recruitment for Recruit, Shieldman, Bowman, Crossbowman, Horseman, and Nomad.
+• Dedicated configurable Levy template.
+• Full template sanitation for UUID, ownership, old team, group, upkeep, target, position, and settlement metadata.
+• Bidirectional Recruits diplomacy synchronization and peace cleanup for factions that joined through calls to war.
+• Server-side validation for recruitment batch sizes, character dropdown choices, and player marriage targets.
+
+CHANGED
+• Settlement screen layout and navigation were substantially refined.
+• Character sheet opened from the Campaign menu returns to the Campaign menu rather than closing everything.
+• The Recruits faction key now opens Campaign Diplomacy.
+• Settlement banners render as large banner models rather than tiny item icons.
+• Professional unit wealth costs now vary by unit category.
+• Network protocol raised for the new campaign packets.
+
+PRESERVED/FIXED
+• Duplicate villager registration protection.
+• Unique Settler Contract redemption IDs and duplicate-use protection.
+• Village/Town/Capital ranks.
+• Villager population representation and gradual Town/Capital scaling.
+• Existing food, stability, housing, wealth, manpower, professional, and levy systems.

@@ -1,0 +1,8 @@
+LAST PAGANS SETTLEMENTS 2.0.1 — COMPILE HOTFIX
+
+FIXED
+- FactionScreen and MilitaryScreen now override Screen.rebuildWidgets() with protected access.
+- Both screens recalculate their layout before rebuilding widgets, including after resize.
+- Player tab-list rank formatting now accepts the Player type supplied by Forge events.
+
+This hotfix contains the complete 2.0.0 source plus these compilation fixes.

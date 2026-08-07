@@ -1,0 +1,133 @@
+package ee.lastpagans.settlementprototype.client;
+
+import ee.lastpagans.settlementprototype.CampaignDefinitions;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+
+import java.util.List;
+
+public final class CharacterCreationScreen extends Screen {
+    private static final int PANEL_WIDTH = 440;
+    private static final int PANEL_HEIGHT = 286;
+
+    private int left;
+    private int top;
+    private EditBox first;
+    private EditBox middle;
+    private EditBox last;
+    private EditBox dynasty;
+    private DropdownWidget faith;
+    private DropdownWidget address;
+    private DropdownWidget title;
+    private String warning = "";
+    private final CharacterDraft initial;
+
+    public CharacterCreationScreen() { this(null); }
+    public CharacterCreationScreen(CharacterDraft initial) {
+        super(Component.literal("Create Your Character"));
+        this.initial = initial;
+    }
+
+    @Override
+    protected void init() {
+        left = (width - PANEL_WIDTH) / 2;
+        top = (height - PANEL_HEIGHT) / 2;
+
+        first = field(left + 170, top + 55, 112, "First name");
+        middle = field(left + 288, top + 55, 132, "Middle (optional)");
+        last = field(left + 170, top + 83, 250, "Last name");
+        dynasty = field(left + 170, top + 111, 250, "Dynasty (optional)");
+        dynasty.setMaxLength(32);
+
+        if (initial != null) {
+            first.setValue(initial.first());
+            middle.setValue(initial.middle());
+            last.setValue(initial.last());
+            dynasty.setValue(initial.dynasty());
+        }
+
+        addRenderableWidget(Button.builder(Component.literal("Preview Character"), button -> preview())
+                .bounds(left + 260, top + 252, 160, 20).build());
+
+        // Lower lists are added first so expanded upper lists render above them.
+        title = addRenderableWidget(new DropdownWidget(left + 170, top + 219, 250, 20,
+                CampaignDefinitions.PERSONAL_TITLES,
+                index(CampaignDefinitions.PERSONAL_TITLES, initial == null ? "" : initial.title()), value -> {}));
+        address = addRenderableWidget(new DropdownWidget(left + 170, top + 191, 250, 20,
+                CampaignDefinitions.ADDRESSES,
+                index(CampaignDefinitions.ADDRESSES, initial == null ? "" : initial.address()), value -> {}));
+        faith = addRenderableWidget(new DropdownWidget(left + 170, top + 163, 250, 20,
+                CampaignDefinitions.RELIGIONS,
+                index(CampaignDefinitions.RELIGIONS, initial == null ? "" : initial.faith()), value -> {}));
+        setInitialFocus(first);
+    }
+
+    private int index(List<String> values, String value) {
+        int index = values.indexOf(value);
+        return index < 0 ? 0 : index;
+    }
+
+    private EditBox field(int x, int y, int width, String hint) {
+        EditBox box = new EditBox(font, x, y, width, 20, Component.literal(hint));
+        box.setMaxLength(24);
+        box.setHint(Component.literal(hint));
+        addRenderableWidget(box);
+        return box;
+    }
+
+    private void preview() {
+        if (first.getValue().trim().isBlank() || last.getValue().trim().isBlank()) {
+            warning = "A first and last name are required.";
+            return;
+        }
+        minecraft.setScreen(new CharacterPreviewScreen(new CharacterDraft(
+                first.getValue(), middle.getValue(), last.getValue(), faith.value(), address.value(), title.value(), dynasty.getValue()
+        )));
+    }
+
+    @Override
+    public boolean mouseClicked(double x, double y, int button) {
+        if (faith.isExpanded() && faith.mouseClicked(x, y, button)) return true;
+        if (address.isExpanded() && address.mouseClicked(x, y, button)) return true;
+        if (title.isExpanded() && title.mouseClicked(x, y, button)) return true;
+        return super.mouseClicked(x, y, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double x, double y, double delta) {
+        if (faith.isExpanded() && faith.mouseScrolled(x, y, delta)) return true;
+        if (address.isExpanded() && address.mouseScrolled(x, y, delta)) return true;
+        if (title.isExpanded() && title.mouseScrolled(x, y, delta)) return true;
+        return super.mouseScrolled(x, y, delta);
+    }
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
+        graphics.fill(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, 0xF0181818);
+        graphics.fill(left + 3, top + 3, left + PANEL_WIDTH - 3, top + 40, 0xFF3B3023);
+        graphics.fill(left + 14, top + 50, left + 154, top + 239, 0xFF242424);
+        graphics.drawCenteredString(font, "CREATE YOUR CHARACTER", left + PANEL_WIDTH / 2, top + 13, 0xFFE7D8B0);
+        graphics.drawCenteredString(font, "Your account, UUID and Recruits faction remain unchanged.", left + PANEL_WIDTH / 2, top + 28, 0xFFAA9D7F);
+        graphics.drawCenteredString(font, "Character", left + 84, top + 57, 0xFFE7D8B0);
+        if (minecraft != null && minecraft.player != null) {
+            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 70, 122, 157, mouseX, mouseY);
+        }
+        graphics.drawString(font, "Name", left + 170, top + 44, 0xFFDDDDDD, false);
+        graphics.drawString(font, "Identity", left + 170, top + 147, 0xFFDDDDDD, false);
+        if (!warning.isBlank()) graphics.drawCenteredString(font, warning, left + PANEL_WIDTH / 2, top + PANEL_HEIGHT + 5, 0xFFFFC86B);
+        super.render(graphics, mouseX, mouseY, partialTick);
+    }
+
+    @Override public boolean shouldCloseOnEsc() { return false; }
+    @Override public boolean isPauseScreen() { return false; }
+
+    public record CharacterDraft(String first, String middle, String last, String faith, String address, String title, String dynasty) {
+        public String displayName() {
+            return (first + " " + middle + " " + last).replaceAll("\\s+", " ").trim();
+        }
+    }
+}

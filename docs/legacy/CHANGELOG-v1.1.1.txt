@@ -1,0 +1,7 @@
+LAST PAGANS SETTLEMENTS V1.1.1 — BANNER SCALE HOTFIX
+
+• Fixed settlement and faction banners rendering at ant-size.
+• The Recruits BannerRenderer ignores its width and height arguments and uses only the final scale argument.
+• Main settlement banner scale increased from 3 to 52.
+• Secondary faction allegiance banner scale increased from 2 to 18.
+• Campaign overview faction banner scale increased from 2 to 28.

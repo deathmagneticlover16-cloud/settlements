@@ -1,0 +1,41 @@
+LAST PAGANS SETTLEMENTS 2.0.2 — MULTIPLAYER TEST CHECKLIST
+
+1. Build and launch
+- Server and all clients use only settlementprototype-2.0.2.jar.
+- Existing 2.0.x world loads without data loss.
+
+2. Faction creation
+- Independent player opens Campaign > Faction.
+- Create with no held banner.
+- Repeat in a backup with a held patterned banner.
+- Confirm the player joins a real Recruits faction and can create/link claims normally.
+- Confirm an already-factioned player cannot create another faction.
+
+3. Admin stats
+- Test set and add for every supported stat.
+- Confirm negative additions do not produce negative food, wealth, housing or contracts.
+- Confirm available manpower cannot exceed uncommitted maximum manpower.
+
+4. Character sheet
+- Confirm the full model is visible and not cropped to head/shoulders.
+- Edit Dynasty and Main House, leave and reopen the server, and verify persistence.
+- Check traits, holdings, account text and buttons at the GUI scale used by the server community.
+
+5. Settlement switching
+- Give one player access to at least two settlements.
+- Cycle Previous/Next in Settlement and Military screens.
+- Confirm actions affect the settlement displayed in the title.
+
+6. Multiple claims
+- Link three different Recruits claims to one settlement.
+- Confirm the claim count becomes 3.
+- Stand in each claim and test settlement-dependent behaviour.
+- Try linking one of those claims to another settlement; it must be rejected.
+- Unlink the middle claim and verify the other two remain.
+- Restart and verify all links persist.
+
+7. Layout and banners
+- Open Main, Character, Faction, Settlement, Military, Diplomacy, Family and World News.
+- Test at GUI scales 2, 3 and 4 where practical.
+- Confirm messages do not overlap return buttons.
+- Confirm banners are readable without covering titles or controls.

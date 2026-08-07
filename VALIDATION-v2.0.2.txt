@@ -1,0 +1,16 @@
+LAST PAGANS SETTLEMENTS 2.0.2 — VALIDATION NOTES
+
+Completed in the source environment:
+- Java delimiter and archive structure checks.
+- PrototypeSnapshot component/constructor count: 48/48 for server and decoder constructors.
+- CharacterSnapshot component/constructor count: 13/13 for all constructors.
+- New network packet registration and protocol bump checked.
+- Recruits 1.15.2 FactionEvents.createTeam signature verified from the supplied JAR.
+- Multiple-claim NBT read/write paths and duplicate-claim rejection reviewed.
+- No Java parser-level errors were found by a javac parse pass; unresolved Minecraft/Forge classes are expected outside ForgeGradle.
+
+Not completed in this environment:
+- ForgeGradle compilation. The Gradle wrapper cannot download Gradle because services.gradle.org is unreachable here.
+- Runtime or dedicated-server testing.
+
+The first authoritative result is therefore the user's local ForgeGradle build and multiplayer test.

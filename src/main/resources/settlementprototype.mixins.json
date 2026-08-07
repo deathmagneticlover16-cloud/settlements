@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "ee.lastpagans.settlementprototype.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "RecruitsDiplomacyPacketMixin",
+    "RecruitEventsDiplomacyMixin"
+  ],
+  "client": [
+    "RecruitsTeamKeyMixin",
+    "WorldMapScreenAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

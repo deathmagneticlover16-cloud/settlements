@@ -1,0 +1,49 @@
+LAST PAGANS SETTLEMENTS 2.0.2 — NEW AND IMPORTANT COMMANDS
+
+FACTIONS
+/campaign faction
+/campaign faction create <name>
+/settlements admin faction create <player> <name>
+
+Hold a Minecraft banner while creating a faction to use that banner. Creating through this mod bypasses Recruits' normal emerald creation cost because it is the replacement campaign interface.
+
+ADMIN SETTLEMENT STATS
+/settlements admin stats set <settlement> <stat> <value>
+/settlements admin stats add <settlement> <stat> <value>
+
+Valid stat names:
+stability
+food
+wealth
+housing
+maximum_manpower
+available_manpower
+contracts
+
+Examples:
+/settlements admin stats set soraranna stability 75
+/settlements admin stats add soraranna wealth 500
+/settlements admin stats set soraranna maximum_manpower 40
+/settlements admin stats set soraranna available_manpower 30
+
+Manpower cannot be set below already committed professional and levy manpower. Available manpower is clamped to the remaining capacity.
+
+MULTIPLE CLAIMS
+Stand inside a Recruits claim, then use:
+/settlements linkclaim <settlement>
+
+Repeat from every adjacent or detached claim that belongs to the same city. All linked claims form one logical settlement territory.
+
+Remove only the claim you are standing inside:
+/settlements unlinkclaim <settlement>
+
+Remove every claim link:
+/settlements clearclaims <settlement>
+
+SETTLEMENT SWITCHING
+Use the Previous and Next buttons at the bottom-left of the Settlement and Military screens.
+Existing command alternative:
+/settlements open <settlement>
+
+CHARACTER
+Open the Character sheet and press Edit Dynasty / House. Both values may be left blank and added later.
