@@ -700,8 +700,9 @@ public final class CampaignManager {
         extra.putPeaceOffer(new Campaign23Data.PeaceOfferRecord(proposal, war.id(), proposerFaction, targetFaction,
                 proposerSettlement, targetSettlement, terms, System.currentTimeMillis()));
         String targetLabel = !targetFaction.isBlank() ? factionName(targetFaction) : settlementName(player.serverLevel(), targetSettlement);
-        CampaignToastSender.faction(player.getServer(), targetFaction, "PEACE OFFER RECEIVED", (proposerFaction.isBlank() ? settlementName(player.serverLevel(), proposerSettlement) : factionName(proposerFaction)) + " proposed peace with " + terms.size() + " term(s).");
-        if (targetFaction.isBlank()) toastSettlementManagers(player.getServer(), targetSettlement, "PEACE OFFER RECEIVED", settlementName(player.serverLevel(), proposerSettlement) + " proposed peace with " + terms.size() + " term(s).");
+        toastPoliticalSide(player.getServer(), targetFaction, targetSettlement, "PEACE OFFER RECEIVED",
+                (proposerFaction.isBlank() ? settlementName(player.serverLevel(), proposerSettlement) : factionName(proposerFaction))
+                        + " proposed peace with " + terms.size() + " term(s).");
         data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL, "Peace offer sent",
                 (proposerFaction.isBlank() ? settlementName(player.serverLevel(), proposerSettlement) : factionName(proposerFaction)) + " sent peace terms to " + targetLabel + ".",
                 day, targetFaction, targetSettlement, CampaignData.NewsVisibility.FACTION);
@@ -738,8 +739,8 @@ public final class CampaignManager {
         if (!accept && targetCapitulated) return "Your side has capitulated and cannot reject these peace terms.";
         if (!accept) {
             extra.removePeaceOffer(offerId);
-            if (!offer.proposerFaction().isBlank()) CampaignToastSender.faction(player.getServer(), offer.proposerFaction(), "PEACE REJECTED", "Your peace terms were rejected.");
-            else toastSettlementManagers(player.getServer(), offer.proposerSettlement(), "PEACE REJECTED", "Your peace terms were rejected.");
+            toastPoliticalSide(player.getServer(), offer.proposerFaction(), offer.proposerSettlement(),
+                    "PEACE REJECTED", "Your peace terms were rejected.");
             return "Peace terms rejected.";
         }
         String error = validatePeaceTerms(player.serverLevel(), offer, war);
@@ -751,8 +752,10 @@ public final class CampaignManager {
         extra.removeWarAid(war.id()); extra.removePeaceOffer(offerId);
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "Peace treaty concluded",
                 "The war ended under negotiated peace terms.", day, "", offer.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);
-        if (!offer.proposerFaction().isBlank()) CampaignToastSender.faction(player.getServer(), offer.proposerFaction(), "PEACE ACCEPTED", "The opposing side accepted your peace treaty.");
-        if (!offer.targetFaction().isBlank()) CampaignToastSender.faction(player.getServer(), offer.targetFaction(), "PEACE CONCLUDED", "The peace treaty is now in force.");
+        toastPoliticalSide(player.getServer(), offer.proposerFaction(), offer.proposerSettlement(),
+                "PEACE ACCEPTED", "The opposing side accepted your peace treaty.");
+        toastPoliticalSide(player.getServer(), offer.targetFaction(), offer.targetSettlement(),
+                "PEACE CONCLUDED", "The peace treaty is now in force.");
         return "Peace treaty accepted and applied.";
     }
 
@@ -919,6 +922,14 @@ public final class CampaignManager {
     private static void toastSettlementManagers(MinecraftServer server, String settlementId, String title, String body) {
         PrototypeData.SettlementRecord settlement = PrototypeData.get(server.overworld()).getSettlement(settlementId); if (settlement == null) return;
         for (ServerPlayer online : server.getPlayerList().getPlayers()) if (PrototypeManager.canManage(online, settlement)) CampaignToastSender.send(online, title, body);
+    }
+
+    /** Notify whichever political entity actually owns a side of a war. Settlement wars can
+     * remain independent of faction participation, so diplomacy feedback must not disappear
+     * just because a faction id is blank. */
+    private static void toastPoliticalSide(MinecraftServer server, String factionId, String settlementId, String title, String body) {
+        if (factionId != null && !factionId.isBlank()) CampaignToastSender.faction(server, factionId, title, body);
+        else if (settlementId != null && !settlementId.isBlank()) toastSettlementManagers(server, settlementId, title, body);
     }
     private static String settlementName(ServerLevel level, String id) { PrototypeData.SettlementRecord s = PrototypeData.get(level).getSettlement(id); return s == null ? id : s.getName(); }
     private static int parseInt(String raw, int min, int max) { try { return Math.max(min, Math.min(max, Integer.parseInt(raw))); } catch (Exception ignored) { return min; } }
