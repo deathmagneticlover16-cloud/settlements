@@ -23,6 +23,7 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue LEVY_EXHAUSTION_HOURS;
     public static final ForgeConfigSpec.IntValue LEVY_OUTRAGE_HOURS;
     public static final ForgeConfigSpec.IntValue LEVY_EMERGENCY_RELIEF_PERCENT;
+    public static final ForgeConfigSpec.BooleanValue BLOCK_LEVY_ARMOR_STAND_XP;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -67,6 +68,8 @@ public final class SettlementConfig {
                 .defineInRange("popularOutrageHours", 240, 1, 24 * 90);
         LEVY_EMERGENCY_RELIEF_PERCENT = builder.comment("Percentage of remaining mobilisation/cooldown time removed when the faction is newly attacked. Never removes the timer entirely.")
                 .defineInRange("emergencyReliefPercent", 40, 0, 90);
+        BLOCK_LEVY_ARMOR_STAND_XP = builder.comment("Prevents levy-tagged recruits from gaining Recruits combat XP by repeatedly attacking armor stands. Real combat XP is unaffected.")
+                .define("blockLevyArmorStandXp", true);
         builder.pop();
         SPEC = builder.build();
     }
