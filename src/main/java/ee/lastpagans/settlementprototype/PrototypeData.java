@@ -937,6 +937,16 @@ public final class PrototypeData extends SavedData {
             return professionalUnits.contains(unit) || levyUnitToBatch.containsKey(unit);
         }
 
+        /** Clears Settlements-owned military tracking. This intentionally does not delete external Recruits entities. */
+        public void clearMilitaryTracking() {
+            professionalUnits.clear();
+            levyUnitToBatch.clear();
+            levyBatches.clear();
+            availableManpower = Math.min(availableManpower, maximumManpower);
+            addChronicle("Administrative military tracking reset.");
+            dirty();
+        }
+
         public int runManpowerChecker() {
             int supported = getSupportedManpower();
             int committed = getUsedManpower() + getLevyReservedManpower();

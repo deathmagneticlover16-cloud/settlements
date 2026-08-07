@@ -270,6 +270,7 @@ public final class Campaign23Manager {
             case "levy_exhaustion" -> new Campaign23Data.ModifierRecord(id, "Levy Exhaustion", "minecraft:clock", "NEGATIVE", "Levy service", "Prolonged mobilisation is seriously harming settlement life.", -10, -10, -10, expires);
             case "popular_outrage" -> new Campaign23Data.ModifierRecord(id, "Popular Outrage", "minecraft:fire_charge", "NEGATIVE", "Levy service", "The ruler's refusal to return the levy has caused crippling popular anger.", -20, -20, -15, expires);
             case "levy_recovery" -> new Campaign23Data.ModifierRecord(id, "Levy Recovery", "minecraft:clock", "NEGATIVE", "Returned levy", "The levy is home, but families and local work need time to recover from prolonged mobilisation.", -3, -2, -1, expires);
+            case "plague" -> new Campaign23Data.ModifierRecord(id, "Plague", "minecraft:spider_eye", "NEGATIVE", "Campaign event", "Disease is disrupting settlement life, confidence and economic activity.", -3, -15, -5, expires);
             default -> new Campaign23Data.ModifierRecord(id, pretty(id), "minecraft:book", "NEUTRAL", "Debug", "Administrative test modifier.", 0, 0, 0, expires);
         };
     }

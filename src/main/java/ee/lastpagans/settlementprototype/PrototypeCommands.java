@@ -250,7 +250,30 @@ public final class PrototypeCommands {
                                 .then(Commands.literal("faction_rank").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> adminResetFactionRank(context.getSource(), EntityArgument.getPlayer(context, "player")))))
                                 .then(Commands.literal("selection").then(Commands.argument("player", EntityArgument.player())
-                                        .executes(context -> adminResetSelection(context.getSource(), EntityArgument.getPlayer(context, "player"))))))
+                                        .executes(context -> adminResetSelection(context.getSource(), EntityArgument.getPlayer(context, "player")))))
+                                .then(Commands.literal("settlement").then(Commands.argument("settlement", StringArgumentType.word())
+                                        .executes(context -> warnResetSettlement(context.getSource(), StringArgumentType.getString(context, "settlement")))
+                                        .then(Commands.literal("confirm").executes(context -> adminResetSettlement(context.getSource(), StringArgumentType.getString(context, "settlement")))))))
+                        .then(Commands.literal("setowner").then(Commands.argument("settlement", StringArgumentType.word())
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> adminSetOwner(context.getSource(), StringArgumentType.getString(context, "settlement"), EntityArgument.getPlayer(context, "player"))))))
+                        .then(Commands.literal("addcoowner").then(Commands.argument("settlement", StringArgumentType.word())
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> adminSetCoOwner(context.getSource(), StringArgumentType.getString(context, "settlement"), EntityArgument.getPlayer(context, "player"), true)))))
+                        .then(Commands.literal("removecoowner").then(Commands.argument("settlement", StringArgumentType.word())
+                                .then(Commands.argument("player", EntityArgument.player())
+                                        .executes(context -> adminSetCoOwner(context.getSource(), StringArgumentType.getString(context, "settlement"), EntityArgument.getPlayer(context, "player"), false)))))
+                        .then(Commands.literal("settier").then(Commands.argument("settlement", StringArgumentType.word())
+                                .then(Commands.argument("tier", StringArgumentType.word())
+                                        .executes(context -> adminSetTier(context.getSource(), StringArgumentType.getString(context, "settlement"), StringArgumentType.getString(context, "tier"))))))
+                        .then(Commands.literal("clearclaims").then(Commands.argument("settlement", StringArgumentType.word())
+                                .executes(context -> adminClearClaims(context.getSource(), StringArgumentType.getString(context, "settlement")))))
+                        .then(Commands.literal("clearhousing").then(Commands.argument("settlement", StringArgumentType.word())
+                                .executes(context -> adminClearHousing(context.getSource(), StringArgumentType.getString(context, "settlement")))))
+                        .then(Commands.literal("cleararmydata").then(Commands.argument("settlement", StringArgumentType.word())
+                                .executes(context -> adminClearArmyData(context.getSource(), StringArgumentType.getString(context, "settlement")))))
+                        .then(Commands.literal("clearmodifiers").then(Commands.argument("settlement", StringArgumentType.word())
+                                .executes(context -> adminDebugModifierClear(context.getSource(), StringArgumentType.getString(context, "settlement")))))
                         .then(Commands.literal("recalculate").then(Commands.argument("settlement", StringArgumentType.word())
                                 .executes(context -> adminRecalculateSettlement(context.getSource(), StringArgumentType.getString(context, "settlement")))))
                         .then(Commands.literal("inspect")
@@ -304,6 +327,17 @@ public final class PrototypeCommands {
                                 .then(Commands.literal("war_score").then(Commands.argument("war", StringArgumentType.word())
                                         .then(Commands.argument("value", IntegerArgumentType.integer(-100, 100))
                                                 .executes(context -> adminDebugWarScore(context.getSource(), StringArgumentType.getString(context, "war"), IntegerArgumentType.getInteger(context, "value"))))))
+                                .then(Commands.literal("capitulate").then(Commands.argument("war", StringArgumentType.word())
+                                        .then(Commands.argument("side", StringArgumentType.word())
+                                                .executes(context -> adminDebugCapitulate(context.getSource(), StringArgumentType.getString(context, "war"), StringArgumentType.getString(context, "side"))))))
+                                .then(Commands.literal("event")
+                                        .then(Commands.literal("trigger").then(Commands.argument("settlement", StringArgumentType.word())
+                                                .then(Commands.argument("event", StringArgumentType.word())
+                                                        .then(Commands.argument("duration_minutes", IntegerArgumentType.integer(1, 1000000))
+                                                                .executes(context -> adminDebugEvent(context.getSource(), StringArgumentType.getString(context, "settlement"), StringArgumentType.getString(context, "event"), IntegerArgumentType.getInteger(context, "duration_minutes"), true))))))
+                                        .then(Commands.literal("end").then(Commands.argument("settlement", StringArgumentType.word())
+                                                .then(Commands.argument("event", StringArgumentType.word())
+                                                        .executes(context -> adminDebugEvent(context.getSource(), StringArgumentType.getString(context, "settlement"), StringArgumentType.getString(context, "event"), 0, false))))))
                                 .then(Commands.literal("spouse_refresh").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> adminDebugSpouseRefresh(context.getSource(), EntityArgument.getPlayer(context, "player")))))
                                 .then(Commands.literal("mercenary_payment").then(Commands.argument("faction", StringArgumentType.word())
@@ -1066,6 +1100,103 @@ public final class PrototypeCommands {
         return 1;
     }
 
+    private static int warnResetSettlement(CommandSourceStack source, String id) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        source.sendFailure(Component.literal("WARNING: This permanently deletes Settlements data for " + settlement.getName()
+                + ", including roles, resident registry, housing, modifiers, mobilisation tracking and settlement history. Recruits claims/entities are not deleted. Add 'confirm' to proceed."));
+        return 0;
+    }
+
+    private static int adminResetSettlement(CommandSourceStack source, String id) {
+        PrototypeData data = PrototypeData.get(source.getLevel());
+        PrototypeData.SettlementRecord settlement = data.getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        String settlementId = settlement.getId();
+        String name = settlement.getName();
+        Campaign23Data extra = Campaign23Data.get(source.getLevel());
+        boolean keepFactionProtection = !settlement.getFactionTeam().isBlank() && extra.factionProtected(settlement.getFactionTeam());
+        if (ClaimEvents.recruitsClaimManager != null) {
+            for (PrototypeData.ClaimLink link : settlement.getClaimLinks()) {
+                RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(link.id());
+                if (claim != null) {
+                    claim.setAdminClaim(keepFactionProtection);
+                    ClaimEvents.recruitsClaimManager.addOrUpdateClaim(source.getLevel(), claim);
+                }
+            }
+            ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(source.getLevel());
+        }
+        extra.clearSettlementData(settlementId);
+        data.deleteSettlement(settlementId);
+        source.sendSuccess(() -> Component.literal("Settlement " + name + " was reset/deleted. Recruits claims and world entities were preserved."), true);
+        return 1;
+    }
+
+    private static int adminSetOwner(CommandSourceStack source, String id, ServerPlayer target) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        settlement.setOwner(target.getUUID());
+        source.sendSuccess(() -> Component.literal("Owner of " + settlement.getName() + " set to " + target.getGameProfile().getName() + "."), true);
+        return 1;
+    }
+
+    private static int adminSetCoOwner(CommandSourceStack source, String id, ServerPlayer target, boolean add) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        if (target.getUUID().equals(settlement.getOwnerId())) { source.sendFailure(Component.literal("The settlement owner cannot be changed through co-owner commands.")); return 0; }
+        settlement.setRole(target.getUUID(), add ? PrototypeData.SettlementRole.CO_OWNER : PrototypeData.SettlementRole.OUTSIDER);
+        source.sendSuccess(() -> Component.literal((add ? "Added " : "Removed ") + target.getGameProfile().getName() + (add ? " as co-owner of " : " as co-owner from ") + settlement.getName() + "."), true);
+        return 1;
+    }
+
+    private static int adminSetTier(CommandSourceStack source, String id, String rawTier) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        String normalized = rawTier.trim().toUpperCase(Locale.ROOT).replace('-', '_');
+        PrototypeData.SettlementRank rank;
+        try { rank = PrototypeData.SettlementRank.valueOf(normalized); }
+        catch (IllegalArgumentException exception) { source.sendFailure(Component.literal("Use village, town, capital, or city_state.")); return 0; }
+        if (rank == PrototypeData.SettlementRank.CAPITAL && settlement.getFactionTeam().isBlank()) {
+            source.sendFailure(Component.literal("Independent settlements cannot be faction capitals. Use city_state instead.")); return 0;
+        }
+        if (rank == PrototypeData.SettlementRank.CAPITAL) {
+            PrototypeData.get(source.getLevel()).settlementsForFaction(settlement.getFactionTeam()).stream()
+                    .filter(other -> other != settlement && other.getRank() == PrototypeData.SettlementRank.CAPITAL)
+                    .forEach(other -> other.setRank(PrototypeData.SettlementRank.TOWN));
+        }
+        settlement.setRank(rank);
+        source.sendSuccess(() -> Component.literal(settlement.getName() + " tier set to " + rank.displayName() + "."), true);
+        return 1;
+    }
+
+    private static int adminClearClaims(CommandSourceStack source, String id) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        int count = settlement.getClaimCount();
+        settlement.clearClaimLink();
+        source.sendSuccess(() -> Component.literal("Cleared " + count + " linked claim reference(s) from " + settlement.getName() + ". Recruits claims themselves were preserved."), true);
+        return 1;
+    }
+
+    private static int adminClearHousing(CommandSourceStack source, String id) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        Campaign23Data.get(source.getLevel()).clearHousingAreas(settlement.getId());
+        settlement.setHousingCapacity(0);
+        source.sendSuccess(() -> Component.literal("Cleared registered housing for " + settlement.getName() + "."), true);
+        return 1;
+    }
+
+    private static int adminClearArmyData(CommandSourceStack source, String id) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        settlement.clearMilitaryTracking();
+        Campaign23Data.get(source.getLevel()).clearSettlementArmyData(settlement.getId());
+        settlement.runManpowerChecker();
+        source.sendSuccess(() -> Component.literal("Cleared Settlements military/levy/mercenary tracking for " + settlement.getName() + ". Existing external Recruits entities were not deleted."), true);
+        return 1;
+    }
+
     private static int adminRecalculateSettlement(CommandSourceStack source, String id) {
         PrototypeData data = PrototypeData.get(source.getLevel());
         PrototypeData.SettlementRecord settlement = data.getSettlement(id);
@@ -1152,7 +1283,39 @@ public final class PrototypeCommands {
     private static int adminDebugDevotion(CommandSourceStack source, ServerPlayer target, int value) { Campaign23Data.get(target.serverLevel()).setDevotion(target.getUUID(), value); source.sendSuccess(() -> Component.literal("Devotion set to " + value + " for " + target.getGameProfile().getName() + "."), true); return 1; }
     private static int adminDebugProsperity(CommandSourceStack source, String id) { PrototypeData.SettlementRecord s = PrototypeData.get(source.getLevel()).getSettlement(id); if (s == null) return 0; int value = Campaign23Manager.recalculateProsperity(s, Campaign23Data.get(source.getLevel()), source.getLevel().getDayTime() / 24000L); source.sendSuccess(() -> Component.literal("Prosperity recalculated: " + value + "."), true); return 1; }
     private static int adminDebugManpower(CommandSourceStack source, String id) { PrototypeData.SettlementRecord s = PrototypeData.get(source.getLevel()).getSettlement(id); if (s == null) return 0; s.runManpowerChecker(); source.sendSuccess(() -> Component.literal("Manpower recovery/recalculation applied: " + s.getAvailableManpower() + "/" + s.getMaximumManpower() + "."), true); return 1; }
-    private static int adminDebugWarScore(CommandSourceStack source, String rawId, int value) { try { UUID id = UUID.fromString(rawId); Campaign23Data.get(source.getLevel()).setWarScore(id, value); source.sendSuccess(() -> Component.literal("War score set to " + value + " for " + id + ". ±90 enables capitulation logic."), true); return 1; } catch (IllegalArgumentException e) { source.sendFailure(Component.literal("Invalid war UUID.")); return 0; } }
+    private static int adminDebugWarScore(CommandSourceStack source, String rawId, int value) { try { UUID id = UUID.fromString(rawId); CampaignData.WarRecord war = CampaignData.get(source.getLevel()).getWar(id); if (war == null) { source.sendFailure(Component.literal("Unknown war UUID.")); return 0; } Campaign23Data.get(source.getLevel()).setWarScore(id, value); source.sendSuccess(() -> Component.literal("War score set to " + value + " for " + id + ". ±90 enables capitulation logic."), true); return 1; } catch (IllegalArgumentException e) { source.sendFailure(Component.literal("Invalid war UUID.")); return 0; } }
+    private static int adminDebugCapitulate(CommandSourceStack source, String rawId, String rawSide) {
+        try {
+            UUID id = UUID.fromString(rawId);
+            CampaignData.WarRecord war = CampaignData.get(source.getLevel()).getWar(id);
+            if (war == null) { source.sendFailure(Component.literal("Unknown war UUID.")); return 0; }
+            String side = rawSide.toLowerCase(Locale.ROOT);
+            int score;
+            if (side.equals("attacker")) score = -100;
+            else if (side.equals("defender")) score = 100;
+            else { source.sendFailure(Component.literal("Use attacker or defender. The named side is the side being capitulated.")); return 0; }
+            Campaign23Data.get(source.getLevel()).setWarScore(id, score);
+            source.sendSuccess(() -> Component.literal("Forced " + side + " capitulation for war " + id + " (war score " + score + ")."), true);
+            return 1;
+        } catch (IllegalArgumentException e) { source.sendFailure(Component.literal("Invalid war UUID.")); return 0; }
+    }
+    private static int adminDebugEvent(CommandSourceStack source, String id, String rawEvent, int durationMinutes, boolean trigger) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
+        if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        String event = PrototypeData.normalizeId(rawEvent);
+        if (!event.equals("plague")) { source.sendFailure(Component.literal("Unknown test event. Currently supported: plague.")); return 0; }
+        Campaign23Data extra = Campaign23Data.get(source.getLevel());
+        if (trigger) {
+            extra.addModifier(settlement.getId(), Campaign23Manager.standardModifier(source.getLevel(), settlement.getId(), event, durationMinutes * 60_000L));
+            settlement.addChronicle("Campaign event began: Plague.");
+            source.sendSuccess(() -> Component.literal("Triggered Plague for " + settlement.getName() + " for " + durationMinutes + " minute(s)."), true);
+        } else {
+            if (!extra.removeModifier(settlement.getId(), event)) { source.sendFailure(Component.literal("That event is not active.")); return 0; }
+            settlement.addChronicle("Campaign event ended: Plague.");
+            source.sendSuccess(() -> Component.literal("Ended Plague for " + settlement.getName() + "."), true);
+        }
+        return 1;
+    }
     private static int adminDebugSpouseRefresh(CommandSourceStack source, ServerPlayer target) { CampaignData data = CampaignData.get(target.serverLevel()); long day = target.serverLevel().getDayTime()/24000L; data.forceRefreshCandidates(target.getUUID(), day); source.sendSuccess(() -> Component.literal("Spouse candidates force-refreshed for " + target.getGameProfile().getName() + "."), true); return 1; }
     private static int adminDebugMercenaryPayment(CommandSourceStack source, String faction) { int count = PrototypeManager.forceMercenaryPaymentCheck(source.getServer(), faction); source.sendSuccess(() -> Component.literal("Forced mercenary payment check for " + faction + " across " + count + " tracked mercenary(ies)."), true); return 1; }
 

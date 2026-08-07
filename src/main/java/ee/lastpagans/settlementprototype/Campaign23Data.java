@@ -362,6 +362,40 @@ public final class Campaign23Data extends SavedData {
     public void addModifier(String settlement, ModifierRecord modifier) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank() || modifier == null || modifier.id.isBlank()) return; List<ModifierRecord> list = settlementModifiers.computeIfAbsent(id, key -> new ArrayList<>()); list.removeIf(value -> value.id.equalsIgnoreCase(modifier.id)); list.add(modifier); setDirty(); }
     public boolean removeModifier(String settlement, String modifierId) { List<ModifierRecord> list = settlementModifiers.get(PrototypeData.normalizeId(settlement)); if (list == null) return false; boolean removed = list.removeIf(value -> value.id.equalsIgnoreCase(modifierId)); if (removed) setDirty(); return removed; }
     public void clearModifiers(String settlement) { if (settlementModifiers.remove(PrototypeData.normalizeId(settlement)) != null) setDirty(); }
+
+    /** Clears 2.3/2.4 extension data owned by one settlement without touching the settlement record itself. */
+    public void clearSettlementData(String settlement) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (id.isBlank()) return;
+        prosperity.remove(id);
+        levyTradition.remove(id);
+        wealthDeposits.remove(id);
+        foreignManpower.remove(id);
+        debugTimeOffsetMillis.remove(id);
+        lastModifierDay.remove(id);
+        protectedSettlements.remove(id);
+        housingAreas.remove(id);
+        musterAreas.remove(id);
+        prayerSites.remove(id);
+        settlementModifiers.remove(id);
+        levyMobilizations.values().removeIf(value -> id.equals(value.settlementId));
+        levyDeployments.values().removeIf(value -> id.equals(value.settlementId));
+        mercenaryContracts.values().removeIf(value -> id.equals(value.settlementId()));
+        peaceOffers.values().removeIf(value -> id.equals(value.proposerSettlement()) || id.equals(value.targetSettlement()));
+        aidByWar.values().forEach(values -> values.removeIf(value -> id.equals(PrototypeData.normalizeId(value.targetSettlement()))));
+        aidByWar.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        setDirty();
+    }
+
+    /** Clears only army/mobilisation tracking owned by one settlement. External entities are not deleted. */
+    public void clearSettlementArmyData(String settlement) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (id.isBlank()) return;
+        levyMobilizations.values().removeIf(value -> id.equals(value.settlementId));
+        levyDeployments.values().removeIf(value -> id.equals(value.settlementId));
+        mercenaryContracts.values().removeIf(value -> id.equals(value.settlementId()));
+        setDirty();
+    }
     public int expireModifiers(String settlement) { String id = PrototypeData.normalizeId(settlement); List<ModifierRecord> list = settlementModifiers.get(id); if (list == null) return 0; long now = nowMillis(id); int before = list.size(); list.removeIf(value -> value.expiresAtMillis > 0L && value.expiresAtMillis <= now); int removed = before - list.size(); if (removed > 0) setDirty(); return removed; }
 
     public Collection<LevyMobilization> levyMobilizations() { return List.copyOf(levyMobilizations.values()); }
