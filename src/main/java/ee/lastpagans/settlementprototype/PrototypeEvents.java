@@ -15,6 +15,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
@@ -41,12 +42,8 @@ public final class PrototypeEvents {
                 ? null
                 : data.getSettlement(taggedSettlement);
 
-        if (entity instanceof Villager) {
-            if (settlement == null) settlement = data.findSettlementTrackingVillager(entity.getUUID());
-            if (settlement != null) {
-                settlement.removeVillager(entity.getUUID());
-                settlement.addChronicle("A registered villager died.");
-            }
+        if (entity instanceof Villager villager) {
+            removeResidentVillager(level, villager, "A registered villager died.");
             return;
         }
 
@@ -66,6 +63,42 @@ public final class PrototypeEvents {
         PrototypeData.LevyDeathResult levyDeath = settlement.removeLevyman(entity.getUUID());
         if (levyDeath.batchEnded() && levyBatch != null) {
             Campaign23Manager.onLevyBatchDestroyed(level, settlement, levyBatch);
+        }
+    }
+
+
+    /**
+     * Backup cleanup for resident villagers that are removed without a normal LivingDeathEvent
+     * (for example conversion/discard paths used by Minecraft or another mod). Chunk unloads and
+     * dimension changes must never unregister a living resident.
+     */
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)) return;
+        if (!(event.getEntity() instanceof Villager villager)) return;
+        Entity.RemovalReason reason = villager.getRemovalReason();
+        if (reason != Entity.RemovalReason.KILLED && reason != Entity.RemovalReason.DISCARDED) return;
+        removeResidentVillager(level, villager,
+                reason == Entity.RemovalReason.KILLED
+                        ? "A registered villager died."
+                        : "A registered villager was removed from the settlement population.");
+    }
+
+    private static void removeResidentVillager(ServerLevel level, Villager villager, String chronicle) {
+        PrototypeData data = PrototypeData.get(level);
+        String taggedSettlement = villager.getPersistentData().getString(PrototypeManager.TAG_SETTLEMENT);
+        PrototypeData.SettlementRecord settlement = taggedSettlement.isBlank()
+                ? null
+                : data.getSettlement(taggedSettlement);
+        if (settlement == null || !settlement.hasVillager(villager.getUUID())) {
+            settlement = data.findSettlementTrackingVillager(villager.getUUID());
+        }
+        if (settlement == null) return;
+
+        // removeVillager() is idempotent. LivingDeathEvent and EntityLeaveLevelEvent may both fire
+        // for a normal kill; only the first successful removal changes population / writes news.
+        if (settlement.removeVillager(villager.getUUID())) {
+            settlement.addChronicle(chronicle);
+            CampaignManager.broadcastMapMarkers(level.getServer());
         }
     }
 

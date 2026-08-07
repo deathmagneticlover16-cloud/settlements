@@ -22,6 +22,7 @@ public final class SettlementPrototype {
 
         MinecraftForge.EVENT_BUS.addListener(PrototypeCommands::onRegisterCommands);
         MinecraftForge.EVENT_BUS.addListener(PrototypeEvents::onLivingDeath);
+        MinecraftForge.EVENT_BUS.addListener(PrototypeEvents::onEntityLeave);
         MinecraftForge.EVENT_BUS.addListener(PrototypeEvents::onEntityJoin);
         MinecraftForge.EVENT_BUS.addListener(PrototypeEvents::onClaimRemoved);
         MinecraftForge.EVENT_BUS.addListener(PrototypeEvents::onClaimUpdated);
