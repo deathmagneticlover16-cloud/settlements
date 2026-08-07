@@ -202,6 +202,7 @@ public final class Campaign23Manager {
             case "weary_levies" -> new Campaign23Data.ModifierRecord(id, "Weary Levies", "minecraft:clock", "NEGATIVE", "Levy service", "The levy has remained in the field for too long.", -5, -4, -6, expires);
             case "levy_exhaustion" -> new Campaign23Data.ModifierRecord(id, "Levy Exhaustion", "minecraft:clock", "NEGATIVE", "Levy service", "Prolonged mobilisation is seriously harming settlement life.", -10, -10, -10, expires);
             case "popular_outrage" -> new Campaign23Data.ModifierRecord(id, "Popular Outrage", "minecraft:fire_charge", "NEGATIVE", "Levy service", "The ruler's refusal to return the levy has caused crippling popular anger.", -20, -20, -15, expires);
+            case "levy_recovery" -> new Campaign23Data.ModifierRecord(id, "Levy Recovery", "minecraft:clock", "NEGATIVE", "Returned levy", "The levy is home, but families and local work need time to recover from prolonged mobilisation.", -3, -2, -1, expires);
             default -> new Campaign23Data.ModifierRecord(id, pretty(id), "minecraft:book", "NEUTRAL", "Debug", "Administrative test modifier.", 0, 0, 0, expires);
         };
     }
@@ -358,9 +359,12 @@ public final class Campaign23Manager {
                 .filter(value -> player.getUUID().equals(value.ownerId) && settlement.getId().equals(value.settlementId)).toList();
         if (deployments.isEmpty()) return "You have no active levy from this settlement to return.";
         int totalInitial = 0, totalSurvivors = 0, totalManpower = 0;
+        long oldestServiceAge = 0L;
+        long now = extra.nowMillis(settlement.getId());
         for (Campaign23Data.LevyDeployment deployment : deployments) {
             totalInitial += deployment.initialUnits;
             totalManpower += deployment.manpowerSpent;
+            oldestServiceAge = Math.max(oldestServiceAge, Math.max(0L, now - deployment.deployedAtMillis));
             Set<UUID> units = settlement.getLevyUnitsForBatch(deployment.batchId);
             totalSurvivors += units.size();
             for (UUID unitId : units) {
@@ -373,7 +377,7 @@ public final class Campaign23Manager {
         int losses = Math.max(0, totalInitial - totalSurvivors);
         double lossRate = totalInitial <= 0 ? 0 : (double) losses / totalInitial;
         applyLevyCasualtyModifier(player.serverLevel(), settlement, extra, lossRate);
-        long now = extra.nowMillis(settlement.getId());
+        settleLevyServicePenaltyAfterReturn(player.serverLevel(), settlement, extra, oldestServiceAge);
         long fullCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_FULL_COOLDOWN_HOURS);
         long minimumCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_MIN_COOLDOWN_HOURS);
         long cooldown = Math.max(minimumCooldown, Math.round(fullCooldown * Math.min(1.0D, totalInitial / 300.0D)));
@@ -395,29 +399,88 @@ public final class Campaign23Manager {
         extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), modifier, duration));
     }
 
+    private static final List<String> LEVY_SERVICE_MODIFIER_IDS = List.of(
+            "extended_service", "weary_levies", "levy_exhaustion", "popular_outrage"
+    );
+
+    private static String levyServiceModifier(long age) {
+        long extendedAt = SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXTENDED_SERVICE_HOURS);
+        long wearyAt = Math.max(extendedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_WEARY_SERVICE_HOURS));
+        long exhaustedAt = Math.max(wearyAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXHAUSTION_HOURS));
+        long outrageAt = Math.max(exhaustedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_OUTRAGE_HOURS));
+        return age >= outrageAt ? "popular_outrage" : age >= exhaustedAt ? "levy_exhaustion"
+                : age >= wearyAt ? "weary_levies" : age >= extendedAt ? "extended_service" : "";
+    }
+
+    private static int levyServiceStage(String id) {
+        return switch (PrototypeData.normalizeId(id)) {
+            case "extended_service" -> 1;
+            case "weary_levies" -> 2;
+            case "levy_exhaustion" -> 3;
+            case "popular_outrage" -> 4;
+            default -> 0;
+        };
+    }
+
+    private static void clearLevyServiceModifiers(Campaign23Data extra, String settlementId, String except) {
+        for (String id : LEVY_SERVICE_MODIFIER_IDS) {
+            if (!id.equals(except)) extra.removeModifier(settlementId, id);
+        }
+    }
+
+    private static void settleLevyServicePenaltyAfterReturn(ServerLevel level, PrototypeData.SettlementRecord settlement,
+                                                              Campaign23Data extra, long oldestServiceAge) {
+        boolean stillMobilised = extra.levyDeployments().stream().anyMatch(value -> settlement.getId().equals(value.settlementId));
+        if (stillMobilised) return;
+        String endedStage = levyServiceModifier(oldestServiceAge);
+        clearLevyServiceModifiers(extra, settlement.getId(), "");
+        if (endedStage.isBlank()) return;
+        int stage = levyServiceStage(endedStage);
+        long recoveryHours = switch (stage) {
+            case 1 -> 12L;
+            case 2 -> 24L;
+            case 3 -> 48L;
+            default -> 72L;
+        };
+        extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "levy_recovery", SettlementConfig.hoursMillis(recoveryHours)));
+        settlement.addChronicle("The overdue levy returned. Mobilisation unrest is now recovering for " + recoveryHours + " hours.");
+    }
+
     private static void processLevyServicePenalties(MinecraftServer server, Campaign23Data extra, PrototypeData settlements) {
+        Map<String, String> worstStageBySettlement = new HashMap<>();
         for (Campaign23Data.LevyDeployment deployment : extra.levyDeployments()) {
             PrototypeData.SettlementRecord settlement = settlements.getSettlement(deployment.settlementId);
             if (settlement == null) continue;
             long age = extra.nowMillis(settlement.getId()) - deployment.deployedAtMillis;
-            long extendedAt = SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXTENDED_SERVICE_HOURS);
-            long wearyAt = Math.max(extendedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_WEARY_SERVICE_HOURS));
-            long exhaustedAt = Math.max(wearyAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXHAUSTION_HOURS));
-            long outrageAt = Math.max(exhaustedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_OUTRAGE_HOURS));
-            String id = age >= outrageAt ? "popular_outrage" : age >= exhaustedAt ? "levy_exhaustion"
-                    : age >= wearyAt ? "weary_levies" : age >= extendedAt ? "extended_service" : "";
-            if (!id.isBlank() && extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(id))) {
-                extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), id, 0));
-                settlement.addChronicle("Levy service penalty began: " + pretty(id) + ".");
-            }
+            String stage = levyServiceModifier(age);
+            String previous = worstStageBySettlement.getOrDefault(settlement.getId(), "");
+            if (levyServiceStage(stage) > levyServiceStage(previous)) worstStageBySettlement.put(settlement.getId(), stage);
+
             // Enforce the low level cap while preserving XP earned in real combat below that cap.
             for (UUID unitId : settlement.getLevyUnitsForBatch(deployment.batchId)) {
                 Entity entity = findEntity(server, unitId);
-                if (entity instanceof AbstractRecruitEntity recruit) { int cap = SettlementConfig.effectiveLevyLevelCap(); if (recruit.getXpLevel() > cap) recruit.setXpLevel(cap); }
+                if (entity instanceof AbstractRecruitEntity recruit) {
+                    int cap = SettlementConfig.effectiveLevyLevelCap();
+                    if (recruit.getXpLevel() > cap) recruit.setXpLevel(cap);
+                }
+            }
+        }
+
+        for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
+            String desired = worstStageBySettlement.getOrDefault(settlement.getId(), "");
+            String current = LEVY_SERVICE_MODIFIER_IDS.stream()
+                    .filter(id -> extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals(id)))
+                    .max(Comparator.comparingInt(Campaign23Manager::levyServiceStage)).orElse("");
+            clearLevyServiceModifiers(extra, settlement.getId(), desired);
+            if (desired.isBlank()) continue;
+            if (!desired.equals(current) || extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(desired))) {
+                extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), desired, 0));
+                if (levyServiceStage(desired) > levyServiceStage(current)) {
+                    settlement.addChronicle("Levy service penalty began: " + pretty(desired) + ".");
+                }
             }
         }
     }
-
 
 
     private static void processRecurringWarAid(MinecraftServer server, Campaign23Data extra, PrototypeData settlements, long day) {
