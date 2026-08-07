@@ -28,6 +28,7 @@ CHARACTERS / FAMILY
 - Player-to-player marriage and Marriage Alliances.
 - Seven-day minimum before voluntary divorce; repeated divorce creates Marital Scandal.
 - Spouse settlement effects apply to capitals/City-States.
+- Islam multi-spouse easter egg: up to four total spouses; additional NPC-wife settlement effects diminish to 50%, 25%, then 10%.
 
 FACTIONS
 - Dedicated faction management screen.

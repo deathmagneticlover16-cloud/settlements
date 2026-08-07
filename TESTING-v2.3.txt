@@ -37,6 +37,8 @@ D. CHARACTER / TRAITS / FAMILY
 [ ] Player marriage proposal/accept creates Marriage Alliance when factions differ.
 [ ] Divorce blocked before 7 Minecraft days.
 [ ] Repeated divorce produces Marital Scandal on capital/City-State.
+[ ] Islamic character with an existing marriage may add female NPC spouses up to 4 total; extra effects show 50%/25%/10% scaling.
+[ ] Ending a multi-spouse household is blocked until every active marriage is at least 7 Minecraft days old.
 
 E. SETTLEMENT WAR / ESCALATION
 [ ] Settlement War screen asks YOUR settlement then TARGET settlement, no target-faction selector.

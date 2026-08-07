@@ -28,7 +28,7 @@ MIGRATION
 KNOWN DESIGN BOUNDARIES
 - Tactical freecam, Total-War unit overview, testudo/phalanx, and commander combat abilities are intentionally NOT part of Settlements; those were separated into a future Recruits-command addon.
 - Children/heirs/fertility progression is intentionally out of scope.
-- The special multi-spouse religion easter egg is not enabled in this build; marriage remains one active spouse per character. This was left out rather than risking family-data corruption in the time-critical 2.3 pass.
+- Islam permits up to four spouses in the 2.3 family system. Additional NPC wives use diminishing capital/City-State effects (50%, 25%, 10%). Ending the primary marriage ends the full marriage household; every active marriage must be at least 7 Minecraft days old first.
 - Levy level caps are enforced; source-specific armour-stand XP suppression is not separately hooked in this build.
 - Very high Minecraft GUI scale can still reduce usable logical resolution. 2.3 layouts are substantially reorganized, but 1920x1080 users should prefer GUI scale 2-3 for the largest campaign screens.
 

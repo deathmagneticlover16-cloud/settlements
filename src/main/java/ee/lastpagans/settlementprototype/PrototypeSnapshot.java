@@ -137,6 +137,18 @@ public record PrototypeSnapshot(
             String tone = marriage.stabilityBonus() + marriage.wealthPerDay() + marriage.moraleBonus() >= 0 ? "POSITIVE" : "NEGATIVE";
             values.add(new EffectEntry("Spouse: " + marriage.spouseName(), "Marriage", "minecraft:rose_bush", tone, details, "While married"));
         }
+        if (settlement.getOwnerId() != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)) {
+            int spouseIndex = 1;
+            for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(settlement.getOwnerId())) {
+                int stability = CampaignData.scaledSpouseEffect(additional.stabilityBonus(), spouseIndex);
+                int wealth = CampaignData.scaledSpouseEffect(additional.wealthPerDay(), spouseIndex);
+                int extraMorale = CampaignData.scaledSpouseEffect(additional.moraleBonus(), spouseIndex);
+                String details = joinEffects(stability, wealth, extraMorale) + " (" + CampaignData.spouseEffectPercent(spouseIndex) + "% spouse scaling)";
+                String tone = stability + wealth + extraMorale >= 0 ? "POSITIVE" : "NEGATIVE";
+                values.add(new EffectEntry("Additional spouse: " + additional.spouseName(), "Marriage", "minecraft:rose_bush", tone, details, "While married"));
+                spouseIndex++;
+            }
+        }
 
         Campaign23Data extra = Campaign23Data.get(player.serverLevel());
         for (Campaign23Data.ModifierRecord modifier : extra.modifiers(settlement.getId())) {

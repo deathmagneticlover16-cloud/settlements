@@ -956,7 +956,12 @@ public final class PrototypeManager {
         PrototypeData.CharacterRecord ruler = settlement.getOwnerId() == null ? null : settlements.getCharacter(settlement.getOwnerId());
         if (ruler != null) target += CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.MORALE);
         CampaignData.MarriageRecord marriage = settlement.getOwnerId() == null ? null : campaign.getMarriage(settlement.getOwnerId());
-        if (marriage != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)) target += marriage.moraleBonus();
+        if (marriage != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)) {
+            target += marriage.moraleBonus();
+            int spouseIndex = 1;
+            for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(settlement.getOwnerId()))
+                target += CampaignData.scaledSpouseEffect(additional.moraleBonus(), spouseIndex++);
+        }
         if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())
                 && recruit.blockPosition().closerThan(settlement.getBarracks(), settlement.getBarracksRadius())) target += 8;
         Campaign23Data extra = Campaign23Data.get((ServerLevel) recruit.level());

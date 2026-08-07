@@ -17,6 +17,10 @@ public record FamilySnapshot(
         String spouseEffect,
         boolean playerSpouse,
         boolean canDivorce,
+        int spouseCount,
+        int maxSpouses,
+        boolean canMarryAdditional,
+        List<AdditionalSpouse> additionalSpouses,
         String preferredGender,
         UUID pendingProposer,
         String pendingProposerName,
@@ -43,7 +47,16 @@ public record FamilySnapshot(
         String spouseEffect = "";
         boolean playerSpouse = false;
         long day = player.serverLevel().getDayTime() / 24000L;
-        boolean canDivorce = marriage != null && day - marriage.marriedDay() >= 7L;
+        boolean canDivorce = marriage != null && day - marriage.marriedDay() >= 7L
+                && campaign.getAdditionalNpcMarriages(player.getUUID()).stream().allMatch(value -> day - value.marriedDay() >= 7L);
+        int maxSpouses = character != null && character.getFaith().equalsIgnoreCase("Islam") ? 4 : 1;
+        int spouseCount = campaign.spouseCount(player.getUUID());
+        List<AdditionalSpouse> additionalSpouses = new ArrayList<>();
+        int secondaryIndex = 1;
+        for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(player.getUUID())) {
+            additionalSpouses.add(new AdditionalSpouse(additional.spouseName(), additional.spouseFaith(), additional.spouseTraits(), additional.spouseEffect(), CampaignData.spouseEffectPercent(secondaryIndex++)));
+        }
+        boolean canMarryAdditional = marriage != null && maxSpouses > spouseCount;
         Campaign23Data.CandidateHistory history = Campaign23Data.get(player.serverLevel()).candidateHistory(player.getUUID());
         String preferredGender = history.preferredGender();
         if (marriage != null) {
@@ -85,7 +98,7 @@ public record FamilySnapshot(
 
         List<Candidate> candidates = campaign.candidatesFor(player.getUUID(), day).stream()
                 .filter(value -> !history.rejectedIds().contains(value.id()))
-                .filter(value -> preferredGender.equals("ANY") || value.gender().equalsIgnoreCase(preferredGender))
+                .filter(value -> canMarryAdditional ? value.gender().equalsIgnoreCase("FEMALE") : (preferredGender.equals("ANY") || value.gender().equalsIgnoreCase(preferredGender)))
                 .map(value -> new Candidate(
                         value.id(), value.name(), value.gender(), value.faith(), value.culture(), value.traitsText(), value.effect(),
                         value.stabilityBonus(), value.wealthPerDay(), value.moraleBonus()
@@ -101,6 +114,10 @@ public record FamilySnapshot(
                 spouseEffect,
                 playerSpouse,
                 canDivorce,
+                spouseCount,
+                maxSpouses,
+                canMarryAdditional,
+                List.copyOf(additionalSpouses),
                 preferredGender,
                 pending,
                 pendingName,
@@ -130,6 +147,11 @@ public record FamilySnapshot(
         buffer.writeUtf(spouseEffect, 160);
         buffer.writeBoolean(playerSpouse);
         buffer.writeBoolean(canDivorce);
+        buffer.writeVarInt(spouseCount);
+        buffer.writeVarInt(maxSpouses);
+        buffer.writeBoolean(canMarryAdditional);
+        buffer.writeVarInt(additionalSpouses.size());
+        additionalSpouses.forEach(value -> value.encode(buffer));
         buffer.writeUtf(preferredGender, 12);
         buffer.writeBoolean(pendingProposer != null);
         if (pendingProposer != null) buffer.writeUUID(pendingProposer);
@@ -154,6 +176,12 @@ public record FamilySnapshot(
         String spouseEffect = buffer.readUtf(160);
         boolean playerSpouse = buffer.readBoolean();
         boolean canDivorce = buffer.readBoolean();
+        int spouseCount = buffer.readVarInt();
+        int maxSpouses = buffer.readVarInt();
+        boolean canMarryAdditional = buffer.readBoolean();
+        int additionalCount = Math.min(3, buffer.readVarInt());
+        List<AdditionalSpouse> additionalSpouses = new ArrayList<>(additionalCount);
+        for (int i = 0; i < additionalCount; i++) additionalSpouses.add(AdditionalSpouse.decode(buffer));
         String preferredGender = buffer.readUtf(12);
         UUID pending = buffer.readBoolean() ? buffer.readUUID() : null;
         String pendingName = buffer.readUtf(80);
@@ -167,8 +195,17 @@ public record FamilySnapshot(
         long nextRefreshDay = buffer.readLong();
         boolean canRefresh = buffer.readBoolean();
         return new FamilySnapshot(name, married, spouseName, spouseFaith, spouseCulture, spouseTraits,
-                spouseEffect, playerSpouse, canDivorce, preferredGender, pending, pendingName, playerCandidates, candidates, currentDay, nextRefreshDay,
+                spouseEffect, playerSpouse, canDivorce, spouseCount, maxSpouses, canMarryAdditional, additionalSpouses, preferredGender, pending, pendingName, playerCandidates, candidates, currentDay, nextRefreshDay,
                 canRefresh, buffer.readUtf(256));
+    }
+
+    public record AdditionalSpouse(String name, String faith, String traits, String effect, int effectPercent) {
+        private void encode(FriendlyByteBuf buffer) {
+            buffer.writeUtf(name, 80); buffer.writeUtf(faith, 48); buffer.writeUtf(traits, 128); buffer.writeUtf(effect, 160); buffer.writeVarInt(effectPercent);
+        }
+        private static AdditionalSpouse decode(FriendlyByteBuf buffer) {
+            return new AdditionalSpouse(buffer.readUtf(80), buffer.readUtf(48), buffer.readUtf(128), buffer.readUtf(160), buffer.readVarInt());
+        }
     }
 
     public record PlayerCandidate(UUID id, String name) {

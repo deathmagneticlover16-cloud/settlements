@@ -38,6 +38,7 @@ public final class CampaignData extends SavedData {
     private final Map<String, Integer> factionReliability = new HashMap<>();
 
     private final Map<UUID, MarriageRecord> marriages = new HashMap<>();
+    private final Map<UUID, List<MarriageRecord>> additionalNpcMarriages = new HashMap<>();
     private final Map<UUID, UUID> pendingPlayerMarriageProposals = new HashMap<>();
     private final Map<UUID, List<NpcSpouse>> spouseCandidates = new HashMap<>();
     private final Map<UUID, Long> spouseCandidateGeneratedDay = new HashMap<>();
@@ -96,6 +97,11 @@ public final class CampaignData extends SavedData {
         for (Tag raw : tag.getList("Marriages", Tag.TAG_COMPOUND)) {
             MarriageRecord marriage = MarriageRecord.fromNBT((CompoundTag) raw);
             if (marriage.playerId != null) data.marriages.put(marriage.playerId, marriage);
+        }
+        for (Tag raw : tag.getList("AdditionalNpcMarriages", Tag.TAG_COMPOUND)) {
+            MarriageRecord marriage = MarriageRecord.fromNBT((CompoundTag) raw);
+            if (marriage.playerId != null && marriage.kind == MarriageKind.NPC)
+                data.additionalNpcMarriages.computeIfAbsent(marriage.playerId, key -> new ArrayList<>()).add(marriage);
         }
         for (Tag raw : tag.getList("MarriageProposals", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
@@ -170,6 +176,9 @@ public final class CampaignData extends SavedData {
         ListTag marriageList = new ListTag();
         marriages.values().forEach(marriage -> marriageList.add(marriage.toNBT()));
         tag.put("Marriages", marriageList);
+        ListTag additionalMarriageList = new ListTag();
+        additionalNpcMarriages.values().forEach(values -> values.forEach(marriage -> additionalMarriageList.add(marriage.toNBT())));
+        tag.put("AdditionalNpcMarriages", additionalMarriageList);
 
         ListTag marriageProposals = new ListTag();
         pendingPlayerMarriageProposals.forEach((target, proposer) -> {
@@ -419,6 +428,32 @@ public final class CampaignData extends SavedData {
         return marriages.get(playerId);
     }
 
+    public List<MarriageRecord> getAdditionalNpcMarriages(UUID playerId) {
+        return List.copyOf(additionalNpcMarriages.getOrDefault(playerId, List.of()));
+    }
+
+    public int spouseCount(UUID playerId) {
+        return (marriages.containsKey(playerId) ? 1 : 0) + additionalNpcMarriages.getOrDefault(playerId, List.of()).size();
+    }
+
+    public static int spouseEffectPercent(int spouseIndex) {
+        return switch (Math.max(0, spouseIndex)) { case 0 -> 100; case 1 -> 50; case 2 -> 25; default -> 10; };
+    }
+
+    public static int scaledSpouseEffect(int value, int spouseIndex) {
+        return Math.round(value * spouseEffectPercent(spouseIndex) / 100.0F);
+    }
+
+    public boolean marryAdditionalNpc(UUID playerId, NpcSpouse spouse, long day) {
+        if (playerId == null || spouse == null || !marriages.containsKey(playerId)) return false;
+        List<MarriageRecord> values = additionalNpcMarriages.computeIfAbsent(playerId, key -> new ArrayList<>());
+        if (values.size() >= 3) return false;
+        if (values.stream().anyMatch(value -> value.spouseId.equals(spouse.id))) return false;
+        values.add(MarriageRecord.forNpc(playerId, spouse, day));
+        setDirty();
+        return true;
+    }
+
     public void marryNpc(UUID playerId, NpcSpouse spouse, long day) {
         marriages.put(playerId, MarriageRecord.forNpc(playerId, spouse, day));
         pendingPlayerMarriageProposals.remove(playerId);
@@ -454,8 +489,10 @@ public final class CampaignData extends SavedData {
 
     public void divorce(UUID playerId) {
         MarriageRecord marriage = marriages.remove(playerId);
+        additionalNpcMarriages.remove(playerId);
         if (marriage != null && marriage.kind == MarriageKind.PLAYER && marriage.spousePlayerId != null) {
             marriages.remove(marriage.spousePlayerId);
+            additionalNpcMarriages.remove(marriage.spousePlayerId);
         }
         setDirty();
     }

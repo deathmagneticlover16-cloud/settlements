@@ -988,6 +988,15 @@ public final class PrototypeData extends SavedData {
                     if (marriage.wealthPerDay() > 0) wealth += marriage.wealthPerDay();
                     else if (marriage.wealthPerDay() < 0) wealth = Math.max(0, wealth + marriage.wealthPerDay());
                 }
+                int spouseIndex = 1;
+                for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(ownerId)) {
+                    int stability = CampaignData.scaledSpouseEffect(additional.stabilityBonus(), spouseIndex);
+                    int spouseWealth = CampaignData.scaledSpouseEffect(additional.wealthPerDay(), spouseIndex);
+                    if (stability != 0) changeStability(stability);
+                    if (spouseWealth > 0) wealth += spouseWealth;
+                    else if (spouseWealth < 0) wealth = Math.max(0, wealth + spouseWealth);
+                    spouseIndex++;
+                }
             }
 
             if ((lastContractDay == Long.MIN_VALUE || day - lastContractDay >= PrototypeManager.CONTRACT_INTERVAL_DAYS)

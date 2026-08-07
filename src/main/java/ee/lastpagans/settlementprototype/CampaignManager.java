@@ -720,16 +720,30 @@ public final class CampaignManager {
         String result;
         switch (action) {
             case "MARRY_NPC" -> {
-                if (data.getMarriage(player.getUUID()) != null) result = "You are already married.";
+                CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
+                if (spouse == null) result = "That generated candidate is no longer available.";
                 else {
-                    CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
-                    if (spouse == null) result = "That generated candidate is no longer available.";
-                    else {
+                    CampaignData.MarriageRecord existing = data.getMarriage(player.getUUID());
+                    if (existing == null) {
                         data.marryNpc(player.getUUID(), spouse, day);
                         data.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL,
                                 "Marriage", PrototypeManager.characterOrAccountName(player) + " married " + spouse.name() + ".",
                                 day, factionId(player), "", CampaignData.NewsVisibility.PUBLIC);
                         result = "You married " + spouse.name() + ".";
+                    } else {
+                        PrototypeData.CharacterRecord character = PrototypeData.get(player.serverLevel()).getCharacter(player.getUUID());
+                        boolean permitsAdditionalWives = character != null && character.getFaith().equalsIgnoreCase("Islam");
+                        if (!permitsAdditionalWives) result = "Your faith permits only one active spouse.";
+                        else if (!spouse.gender().equalsIgnoreCase("Female")) result = "Additional spouses under this faith rule must be female candidates.";
+                        else if (data.spouseCount(player.getUUID()) >= 4) result = "You already have the maximum of four spouses.";
+                        else if (data.marryAdditionalNpc(player.getUUID(), spouse, day)) {
+                            int count = data.spouseCount(player.getUUID());
+                            int percent = CampaignData.spouseEffectPercent(count - 1);
+                            data.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL,
+                                    "Marriage", PrototypeManager.characterOrAccountName(player) + " married " + spouse.name() + " as an additional spouse.",
+                                    day, factionId(player), "", CampaignData.NewsVisibility.PUBLIC);
+                            result = "You married " + spouse.name() + ". As spouse " + count + ", their settlement effects operate at " + percent + "%.";
+                        } else result = "That additional marriage cannot be made.";
                     }
                 }
             }
@@ -781,7 +795,8 @@ public final class CampaignManager {
             case "DIVORCE" -> {
                 CampaignData.MarriageRecord marriage = data.getMarriage(player.getUUID());
                 if (marriage == null) result = "You are not married.";
-                else if (day - marriage.marriedDay() < 7L) result = "A voluntary divorce is unavailable until the marriage has lasted at least 7 Minecraft days.";
+                else if (day - marriage.marriedDay() < 7L || data.getAdditionalNpcMarriages(player.getUUID()).stream().anyMatch(value -> day - value.marriedDay() < 7L))
+                    result = "A voluntary divorce is unavailable until every active marriage has lasted at least 7 Minecraft days.";
                 else {
                     UUID spouseId = marriage.spousePlayerId();
                     String firstFaction = factionId(player);
