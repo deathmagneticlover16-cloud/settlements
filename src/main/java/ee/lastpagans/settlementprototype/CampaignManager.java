@@ -810,8 +810,10 @@ public final class CampaignManager {
         boolean offerTargetsAttacker = offer.targetSettlement().equals(war.attackerSettlement());
         boolean targetFactionActuallyParticipates = !offer.targetFaction().isBlank()
                 && factionParticipatesOnSide(war, offer.targetFaction(), offerTargetsAttacker);
-        boolean authorized = (targetFactionActuallyParticipates && offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3))
-                || (targetSettlement != null && PrototypeManager.canManage(player, targetSettlement)) || player.createCommandSourceStack().hasPermission(2);
+        boolean admin = player.createCommandSourceStack().hasPermission(2);
+        boolean authorized = admin || (targetFactionActuallyParticipates
+                ? offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3)
+                : offer.targetFaction().isBlank() && targetSettlement != null && PrototypeManager.canManage(player, targetSettlement));
         if (!authorized) return "You are not authorized to answer those peace terms.";
         int score = extra.warScore(war.id());
         boolean proposerAttacker = offer.proposerSettlement().equals(war.attackerSettlement()) || (!offer.proposerFaction().isBlank() && offer.proposerFaction().equals(war.attackerFaction()));

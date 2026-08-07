@@ -78,8 +78,9 @@ public record DiplomacySnapshot(
         for (Campaign23Data.PeaceOfferRecord offer : campaign23.peaceOffers()) {
             CampaignData.WarRecord war = offer.warId() == null ? null : campaign.getWar(offer.warId());
             if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) continue;
-            boolean targetFaction = !own.isBlank() && own.equals(offer.targetFaction());
-            boolean targetSettlement = !offer.targetSettlement().isBlank() && settlementsData.getSettlement(offer.targetSettlement()) != null
+            boolean targetFaction = canManage && !own.isBlank() && own.equals(offer.targetFaction());
+            boolean targetSettlement = offer.targetFaction().isBlank() && !offer.targetSettlement().isBlank()
+                    && settlementsData.getSettlement(offer.targetSettlement()) != null
                     && PrototypeManager.canManage(player, settlementsData.getSettlement(offer.targetSettlement()));
             if (!targetFaction && !targetSettlement) continue;
             String fromName = !offer.proposerFaction().isBlank() ? CampaignManager.factionName(offer.proposerFaction())
