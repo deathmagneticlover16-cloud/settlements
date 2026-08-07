@@ -12,13 +12,13 @@ public record DiplomacyActionPacket(String action, String targetFaction, UUID pr
         buffer.writeUtf(packet.action, 40); buffer.writeUtf(packet.targetFaction, 64);
         buffer.writeBoolean(packet.proposalId != null); if (packet.proposalId != null) buffer.writeUUID(packet.proposalId);
         buffer.writeBoolean(packet.warId != null); if (packet.warId != null) buffer.writeUUID(packet.warId);
-        buffer.writeUtf(packet.extra == null ? "" : packet.extra, 128);
+        buffer.writeUtf(packet.extra == null ? "" : packet.extra, 4096);
     }
     public static DiplomacyActionPacket decode(FriendlyByteBuf buffer) {
         String action = buffer.readUtf(40); String faction = buffer.readUtf(64);
         UUID proposal = buffer.readBoolean() ? buffer.readUUID() : null;
         UUID war = buffer.readBoolean() ? buffer.readUUID() : null;
-        return new DiplomacyActionPacket(action, faction, proposal, war, buffer.readUtf(128));
+        return new DiplomacyActionPacket(action, faction, proposal, war, buffer.readUtf(4096));
     }
     public static void handle(DiplomacyActionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get(); ServerPlayer player = context.getSender();

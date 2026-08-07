@@ -789,6 +789,7 @@ public final class CampaignManager {
         List<Campaign23Data.PeaceTerm> terms = new ArrayList<>();
         if (encoded == null || encoded.isBlank()) return terms;
         for (String raw : encoded.split(";")) {
+            if (terms.size() >= 48) break;
             String[] p = raw.split("~", -1); if (p.length < 5) continue;
             int amount = parseInt(p[2], 0, 1_000_000); int duration = parseInt(p[3], 0, 3650);
             String type = p[0].toUpperCase(Locale.ROOT); String target = PrototypeData.cleanText(p[1], "", 80); String text = PrototypeData.cleanText(p[4], "", 120);
