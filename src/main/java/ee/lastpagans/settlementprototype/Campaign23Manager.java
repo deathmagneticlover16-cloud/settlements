@@ -237,7 +237,10 @@ public final class Campaign23Manager {
         int playerCap = SettlementConfig.PLAYER_LEVY_CAP.get();
         int factionCap = SettlementConfig.FACTION_LEVY_CAP.get();
         int playerRemaining = Math.max(0, playerCap - deployedForPlayer(extra, player.getUUID()));
-        int factionRemaining = Math.max(0, factionCap - deployedForFaction(extra, settlement.getFactionTeam()));
+        // Independent rulers are governed by their personal cap. Blank faction IDs must not accidentally
+        // combine every independent settlement on the server into one artificial 500-man "faction" pool.
+        int factionRemaining = settlement.getFactionTeam().isBlank()
+                ? factionCap : Math.max(0, factionCap - deployedForFaction(extra, settlement.getFactionTeam()));
         int groundRemaining = (int)Math.min(Integer.MAX_VALUE, area.horizontalArea());
         int allowedUnits = Math.min(desiredUnits, Math.min(playerRemaining, Math.min(factionRemaining, groundRemaining)));
         allowedUnits -= allowedUnits % 2;
