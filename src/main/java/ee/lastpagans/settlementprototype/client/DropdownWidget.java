@@ -40,6 +40,11 @@ public final class DropdownWidget extends AbstractWidget {
         graphics.fill(getX() + 1, getY() + 1, getX() + width - 1, getY() + height - 1, 0xFF2B2925);
         graphics.drawString(Minecraft.getInstance().font, getMessage(), getX() + 6, getY() + 6, active ? 0xFFFFFFFF : 0xFF888888, false);
         if (!expanded) return;
+        // Expanded dropdowns are overlays, not ordinary widgets. Give the list a high Z value so
+        // buttons/text rendered later by the screen cannot paint over it. This is deliberately
+        // centralized here so every campaign dropdown gets the same behaviour.
+        graphics.pose().pushPose();
+        graphics.pose().translate(0.0F, 0.0F, 500.0F);
         int rows = Math.min(visibleRows, options.size() - scroll);
         int bottom = getY() + height + rows * height;
         graphics.fill(getX(), getY() + height, getX() + width, bottom, 0xFFB8A16D);
@@ -51,6 +56,7 @@ public final class DropdownWidget extends AbstractWidget {
                     index == selectedIndex ? 0xFF564A34 : hover ? 0xFF45413A : 0xFF242424);
             graphics.drawString(Minecraft.getInstance().font, options.get(index), getX() + 6, y + 6, 0xFFFFFFFF, false);
         }
+        graphics.pose().popPose();
     }
 
     @Override

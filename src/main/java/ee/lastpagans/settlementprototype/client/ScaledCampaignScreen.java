@@ -98,7 +98,17 @@ public abstract class ScaledCampaignScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return super.mouseClicked(campaignMouseX(mouseX), campaignMouseY(mouseY), button);
+        double uiX = campaignMouseX(mouseX);
+        double uiY = campaignMouseY(mouseY);
+        // Expanded dropdowns own the pointer before every other widget. Without this, a button
+        // underneath a visually expanded menu can consume the same click.
+        for (net.minecraft.client.gui.components.events.GuiEventListener child : children()) {
+            if (child instanceof DropdownWidget dropdown && dropdown.isExpanded()) {
+                if (dropdown.mouseClicked(uiX, uiY, button)) return true;
+                dropdown.close();
+            }
+        }
+        return super.mouseClicked(uiX, uiY, button);
     }
 
     @Override
@@ -114,6 +124,11 @@ public abstract class ScaledCampaignScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        return super.mouseScrolled(campaignMouseX(mouseX), campaignMouseY(mouseY), delta);
+        double uiX = campaignMouseX(mouseX);
+        double uiY = campaignMouseY(mouseY);
+        for (net.minecraft.client.gui.components.events.GuiEventListener child : children()) {
+            if (child instanceof DropdownWidget dropdown && dropdown.isExpanded() && dropdown.mouseScrolled(uiX, uiY, delta)) return true;
+        }
+        return super.mouseScrolled(uiX, uiY, delta);
     }
 }
