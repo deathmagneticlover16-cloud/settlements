@@ -650,19 +650,38 @@ public final class CampaignManager {
         if (targetSettlement.isBlank()) return "This war has no settlement aid target.";
         String[] split = extra == null ? new String[0] : extra.split("\\|", -1);
         int manpower = parsePositive(split, 0); int wealth = parsePositive(split, 1); int food = parsePositive(split, 2);
-        boolean recurring = split.length > 3 && Boolean.parseBoolean(split[3]);
+        // 2.4 supports an independent recurrence choice for each resource. Accept the old 2.3
+        // four-field payload as well so a mismatched/stale screen fails gracefully during testing.
+        boolean legacyRecurring = split.length == 4 && Boolean.parseBoolean(split[3]);
+        boolean manpowerRecurring = split.length > 4 ? Boolean.parseBoolean(split[3]) : legacyRecurring;
+        boolean wealthRecurring = split.length > 4 ? Boolean.parseBoolean(split[4]) : legacyRecurring;
+        boolean foodRecurring = split.length > 5 ? Boolean.parseBoolean(split[5]) : legacyRecurring;
         if (manpower + wealth + food <= 0) return "Enter at least one aid amount.";
         PrototypeData.SettlementRecord target = PrototypeData.get(player.serverLevel()).getSettlement(targetSettlement);
         if (target == null) return "The aided settlement no longer exists.";
         String payment = transferFactionAid(player.serverLevel(), own, target, manpower, wealth, food);
         if (payment != null) return payment;
-        if (recurring) Campaign23Data.get(player.serverLevel()).addWarAid(war.id(),
-                new Campaign23Data.AidRecord(UUID.randomUUID(), own, targetSettlement, manpower, wealth, food, true, day + 1));
+        Campaign23Data extraData = Campaign23Data.get(player.serverLevel());
+        if (manpowerRecurring && manpower > 0) extraData.addWarAid(war.id(),
+                new Campaign23Data.AidRecord(UUID.randomUUID(), own, targetSettlement, manpower, 0, 0, true, day + 1));
+        if (wealthRecurring && wealth > 0) extraData.addWarAid(war.id(),
+                new Campaign23Data.AidRecord(UUID.randomUUID(), own, targetSettlement, 0, wealth, 0, true, day + 1));
+        if (foodRecurring && food > 0) extraData.addWarAid(war.id(),
+                new Campaign23Data.AidRecord(UUID.randomUUID(), own, targetSettlement, 0, 0, food, true, day + 1));
+        // Supporting one of your settlements is a small positive Reliability signal. It is
+        // intentionally awarded per aid order rather than per resource/daily tick to prevent
+        // trivial recurring transfers from becoming a reputation farm.
+        data.changeFactionReliability(own, 1);
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.NORMAL, "War aid sent",
                 factionName(own) + " sent aid to " + target.getName() + ".", day, own, targetSettlement, CampaignData.NewsVisibility.PUBLIC);
         if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(player.getServer(), target.getId(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
         else CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
-        return "Aid delivered to " + target.getName() + (recurring ? " and scheduled daily." : ".");
+        java.util.List<String> recurringLabels = new java.util.ArrayList<>();
+        if (manpowerRecurring && manpower > 0) recurringLabels.add("manpower");
+        if (wealthRecurring && wealth > 0) recurringLabels.add("wealth");
+        if (foodRecurring && food > 0) recurringLabels.add("food");
+        return "Aid delivered to " + target.getName() + (recurringLabels.isEmpty() ? "."
+                : ". Daily: " + String.join(", ", recurringLabels) + ".");
     }
 
     private static String cancelWarAid(ServerPlayer player, CampaignData data, String own, UUID warId, UUID aidId, long day) {

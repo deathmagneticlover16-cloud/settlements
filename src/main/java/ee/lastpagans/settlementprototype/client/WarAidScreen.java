@@ -16,7 +16,7 @@ public final class WarAidScreen extends ScaledCampaignScreen {
     private final DiplomacySnapshot.WarEntry war;
     private EditBox manpower, wealth, food;
     private String manpowerValue = "0", wealthValue = "0", foodValue = "0";
-    private boolean recurring;
+    private boolean manpowerDaily, wealthDaily, foodDaily;
     private int left, top;
 
     public WarAidScreen(Screen parent, DiplomacySnapshot snapshot, DiplomacySnapshot.WarEntry war) {
@@ -25,14 +25,19 @@ public final class WarAidScreen extends ScaledCampaignScreen {
     @Override protected void init() {
         setupCampaignScale(460, 370); left = campaignLeft(460); top = campaignTop(370);
         boolean maySend = canSendAid();
-        manpower = numberField(left + 200, top + 78, manpowerValue);
-        wealth = numberField(left + 200, top + 108, wealthValue);
-        food = numberField(left + 200, top + 138, foodValue);
+        manpower = numberField(left + 150, top + 78, 120, manpowerValue);
+        wealth = numberField(left + 150, top + 108, 120, wealthValue);
+        food = numberField(left + 150, top + 138, 120, foodValue);
         manpower.setEditable(maySend); wealth.setEditable(maySend); food.setEditable(maySend);
-        Button frequency = addRenderableWidget(Button.builder(Component.literal(recurring ? "Frequency: Daily" : "Frequency: One-time"), b -> { preserveValues(); recurring = !recurring; rebuildWidgets(); })
-                .bounds(left + 30, top + 175, 170, 20).build());
+
+        Button manpowerFrequency = addRenderableWidget(Button.builder(Component.literal(manpowerDaily ? "Daily" : "One-time"), b -> { preserveValues(); manpowerDaily = !manpowerDaily; rebuildWidgets(); })
+                .bounds(left + 285, top + 78, 125, 20).build());
+        Button wealthFrequency = addRenderableWidget(Button.builder(Component.literal(wealthDaily ? "Daily" : "One-time"), b -> { preserveValues(); wealthDaily = !wealthDaily; rebuildWidgets(); })
+                .bounds(left + 285, top + 108, 125, 20).build());
+        Button foodFrequency = addRenderableWidget(Button.builder(Component.literal(foodDaily ? "Daily" : "One-time"), b -> { preserveValues(); foodDaily = !foodDaily; rebuildWidgets(); })
+                .bounds(left + 285, top + 138, 125, 20).build());
         Button send = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> send()).bounds(left + 210, top + 175, 100, 20).build());
-        frequency.active = maySend; send.active = maySend;
+        manpowerFrequency.active = maySend; wealthFrequency.active = maySend; foodFrequency.active = maySend; send.active = maySend;
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 320, top + 175, 100, 20).build());
 
         java.util.List<DiplomacySnapshot.AidEntry> commitments = commitments();
@@ -51,13 +56,14 @@ public final class WarAidScreen extends ScaledCampaignScreen {
         if (wealth != null) wealthValue = wealth.getValue();
         if (food != null) foodValue = food.getValue();
     }
-    private EditBox numberField(int x, int y, String value) {
-        EditBox box = new EditBox(font, x, y, 170, 20, Component.empty()); box.setValue(value); box.setFilter(v -> v.isEmpty() || v.matches("[0-9]{0,7}")); addRenderableWidget(box); return box;
+    private EditBox numberField(int x, int y, int width, String value) {
+        EditBox box = new EditBox(font, x, y, width, 20, Component.empty()); box.setValue(value); box.setFilter(v -> v.isEmpty() || v.matches("[0-9]{0,7}")); addRenderableWidget(box); return box;
     }
     private int parse(EditBox box) { try { return Math.max(0, Integer.parseInt(box.getValue().isBlank() ? "0" : box.getValue())); } catch (NumberFormatException ignored) { return 0; } }
     private void send() {
         preserveValues();
-        String extra = parse(manpower) + "|" + parse(wealth) + "|" + parse(food) + "|" + recurring;
+        String extra = parse(manpower) + "|" + parse(wealth) + "|" + parse(food) + "|"
+                + manpowerDaily + "|" + wealthDaily + "|" + foodDaily;
         PrototypeNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket("SEND_AID", "", null, war.id(), extra));
         minecraft.setScreen(parent);
     }
@@ -81,6 +87,7 @@ public final class WarAidScreen extends ScaledCampaignScreen {
         g.drawCenteredString(font, canSendAid() ? "SEND AID / AID LEDGER" : "WAR AID LEDGER", left + 230, top + 14, 0xFFE7D8B0);
         g.drawCenteredString(font, war.attackerSettlementName() + " vs " + war.targetSettlementName(), left + 230, top + 49, 0xFFBBBBBB);
         g.drawString(font, "Manpower", left + 30, top + 84, 0xFFFFFFFF, false); g.drawString(font, "Wealth", left + 30, top + 114, 0xFFFFFFFF, false); g.drawString(font, "Food", left + 30, top + 144, 0xFFFFFFFF, false);
+        g.drawString(font, "Each resource can be one-time or daily.", left + 30, top + 160, 0xFFAAAAAA, false);
         if (!canSendAid()) g.drawString(font, "Read-only: only a parent faction may authorize aid.", left + 30, top + 184, 0xFFAAAAAA, false);
         g.drawString(font, "ACTIVE DAILY AID", left + 30, top + 208, 0xFFE7D8B0, false);
         java.util.List<DiplomacySnapshot.AidEntry> commitments = commitments();
