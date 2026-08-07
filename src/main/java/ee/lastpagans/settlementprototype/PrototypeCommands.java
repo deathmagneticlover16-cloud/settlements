@@ -228,7 +228,7 @@ public final class PrototypeCommands {
                                                         .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), false)))))
                                         .then(Commands.literal("add").then(Commands.argument("faction", StringArgumentType.word())
                                                 .then(Commands.argument("value", IntegerArgumentType.integer(-100000000, 100000000))
-                                                        .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), true))))))
+                                                        .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), true)))))))
                         .then(Commands.literal("reset")
                                 .then(Commands.literal("character").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> adminResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))))
