@@ -82,6 +82,10 @@ public final class SettlementConfig {
     }
 
     public static long hoursMillis(ForgeConfigSpec.IntValue hours) {
-        return Math.max(0L, hours.get().longValue()) * 60L * 60L * 1000L;
+        return hoursMillis(hours.get().longValue());
+    }
+
+    public static long hoursMillis(long hours) {
+        return Math.max(0L, hours) * 60L * 60L * 1000L;
     }
 }

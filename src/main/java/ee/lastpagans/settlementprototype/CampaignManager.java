@@ -1198,7 +1198,7 @@ public final class CampaignManager {
             return "A defensive ally can only be called when your side is defending.";
         }
         data.createProposal(CampaignData.ProposalType.CALL_TO_WAR, own, target, player.getUUID(), war.id(), day);
-        CampaignToastSender.faction(player.getServer(), target, "CALL TO WAR", factionName(own) + " requests your aid in " + war.displayConflictType() + ".");
+        CampaignToastSender.faction(player.getServer(), target, "CALL TO WAR", factionName(own) + " requests your aid in " + war.escalationName() + ".");
         return "Call to war sent to " + factionName(target) + ".";
     }
 
@@ -1402,7 +1402,7 @@ public final class CampaignManager {
             case "DIVORCE" -> {
                 CampaignData.MarriageRecord marriage = data.getMarriage(player.getUUID());
                 if (marriage == null) result = "You are not married.";
-                else if (day - marriage.marriedDay() < 7L || data.getAdditionalNpcMarriages(player.getUUID()).stream().anyMatch(value -> day - value.marriedDay() < 7L))
+                else if (day - marriage.marriedDay() < 7L || data.getAdditionalNpcMarriages(player.getUUID()).stream().anyMatch(extraMarriage -> day - extraMarriage.marriedDay() < 7L))
                     result = "A voluntary divorce is unavailable until every active marriage has lasted at least 7 Minecraft days.";
                 else {
                     UUID spouseId = marriage.spousePlayerId();
@@ -1452,7 +1452,7 @@ public final class CampaignManager {
         if (team != null) settlement.setFactionTeam(team.getName());
         PrototypeCommands.linkClaimAtPlayer(player, settlement, false);
         data.selectSettlement(player.getUUID(), settlement.getId());
-        settlement.addChronicle("Settlement founded by " + characterOrAccountName(player) + ".");
+        settlement.addChronicle("Settlement founded by " + PrototypeManager.characterOrAccountName(player) + ".");
         CampaignData.get(player.serverLevel()).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.NORMAL,
                 "Settlement founded", settlement.getName() + " was founded as a Village.",
                 player.serverLevel().getDayTime() / 24000L, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);

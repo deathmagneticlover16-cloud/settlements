@@ -289,7 +289,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
             graphics.drawString(font, fit(effect.name(), 190), left + 44, y, tone, false);
             graphics.drawString(font, fit(effect.source() + " · " + effect.duration(), 250), left + 264, y, 0xFF999999, false);
             if (mouseX >= left + 18 && mouseX <= left + W - 18 && mouseY >= y - 6 && mouseY <= y + 14) {
-                graphics.renderTooltip(font, Component.literal(effect.detail()), uiMouseX, uiMouseY);
+                graphics.renderTooltip(font, Component.literal(effect.detail()), mouseX, mouseY);
             }
         }
         if (snapshot.effects().isEmpty()) graphics.drawString(font, "No active settlement modifiers.", left + 22, top + 134, 0xFFAAAAAA, false);

@@ -124,7 +124,7 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Effects", x + 10, y + 112, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal(trait.effectsText()), x + 10, y + 127, 146, 0xFFAAAAAA);
         if (mouseX >= x && mouseX <= x + 166 && mouseY >= y && mouseY <= y + 184)
-            graphics.renderTooltip(font, Component.literal(trait.effectsText()), uiMouseX, uiMouseY);
+            graphics.renderTooltip(font, Component.literal(trait.effectsText()), mouseX, mouseY);
     }
 
     private int tone(CampaignDefinitions.TraitTone tone) {
