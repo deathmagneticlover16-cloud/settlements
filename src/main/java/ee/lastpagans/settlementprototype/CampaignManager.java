@@ -26,8 +26,10 @@ import net.minecraft.world.scores.Team;
 import net.minecraftforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 /** Server-authoritative campaign, faction, diplomacy, family and world-news actions. */
@@ -750,6 +752,28 @@ public final class CampaignManager {
         return factionId.equals(parent) || (attackerSide ? war.supportingAttackers() : war.supportingDefenders()).contains(factionId);
     }
 
+    /** Principal belligerent faction only. Supporting allies may fight and send aid, but they cannot bind
+     * either side to peace terms. */
+    private static boolean factionIsPrincipalOnSide(CampaignData.WarRecord war, String factionId, boolean attackerSide) {
+        if (war == null || factionId == null || factionId.isBlank()) return false;
+        String principal = participatingFaction(war, attackerSide);
+        return !principal.isBlank() && factionId.equals(principal);
+    }
+
+    /** Identifies a structured-peace party without relying on blank settlement ids in faction wars. */
+    static boolean peacePartyIsSide(CampaignData.WarRecord war, String factionId, String settlementId, boolean attackerSide) {
+        if (war == null) return false;
+        boolean hasFaction = factionId != null && !factionId.isBlank();
+        boolean hasSettlement = settlementId != null && !settlementId.isBlank();
+        if (!hasFaction && !hasSettlement) return false;
+        if (hasFaction && !factionIsPrincipalOnSide(war, factionId, attackerSide)) return false;
+        if (hasSettlement) {
+            String expected = attackerSide ? war.attackerSettlement() : war.defenderSettlement();
+            if (expected == null || expected.isBlank() || !settlementId.equals(expected)) return false;
+        }
+        return true;
+    }
+
 
     private static String offerPeaceTerms(ServerPlayer player, CampaignData data, UUID warId, String encoded, long day) {
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
@@ -760,8 +784,8 @@ public final class CampaignManager {
         PrototypeData.SettlementRecord defenderSettlementRecord = settlements.getSettlement(war.defenderSettlement());
         boolean managesAttackerSettlement = attackerSettlementRecord != null && PrototypeManager.canManage(player, attackerSettlementRecord);
         boolean managesDefenderSettlement = defenderSettlementRecord != null && PrototypeManager.canManage(player, defenderSettlementRecord);
-        boolean attackerByFaction = factionParticipatesOnSide(war, ownFaction, true);
-        boolean defenderByFaction = factionParticipatesOnSide(war, ownFaction, false);
+        boolean attackerByFaction = factionIsPrincipalOnSide(war, ownFaction, true);
+        boolean defenderByFaction = factionIsPrincipalOnSide(war, ownFaction, false);
         boolean attacker = attackerByFaction || managesAttackerSettlement;
         boolean defender = defenderByFaction || managesDefenderSettlement;
         if (attacker && defender) return "You are connected to both sides of this war; an administrator must resolve the conflicting ownership first.";
@@ -776,8 +800,12 @@ public final class CampaignManager {
         List<Campaign23Data.PeaceTerm> terms = parsePeaceTerms(encoded);
         UUID proposal = UUID.randomUUID();
         Campaign23Data extra = Campaign23Data.get(player.serverLevel());
-        extra.putPeaceOffer(new Campaign23Data.PeaceOfferRecord(proposal, war.id(), proposerFaction, targetFaction,
-                proposerSettlement, targetSettlement, terms, System.currentTimeMillis()));
+        Campaign23Data.PeaceOfferRecord draft = new Campaign23Data.PeaceOfferRecord(proposal, war.id(), proposerFaction, targetFaction,
+                proposerSettlement, targetSettlement, terms, System.currentTimeMillis());
+        String validationError = validatePeaceTerms(player.serverLevel(), draft, war);
+        if (validationError != null) return "Peace treaty could not be offered: " + validationError + ".";
+        int termCost = peaceTermsWarScoreCost(player.serverLevel(), terms);
+        extra.putPeaceOffer(draft);
         String targetLabel = !targetFaction.isBlank() ? factionName(targetFaction) : settlementName(player.serverLevel(), targetSettlement);
         toastPoliticalSide(player.getServer(), targetFaction, targetSettlement, "PEACE OFFER RECEIVED",
                 (proposerFaction.isBlank() ? settlementName(player.serverLevel(), proposerSettlement) : factionName(proposerFaction))
@@ -785,7 +813,7 @@ public final class CampaignManager {
         data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL, "Peace offer sent",
                 (proposerFaction.isBlank() ? settlementName(player.serverLevel(), proposerSettlement) : factionName(proposerFaction)) + " sent peace terms to " + targetLabel + ".",
                 day, targetFaction, targetSettlement, CampaignData.NewsVisibility.FACTION);
-        return "Peace treaty sent to " + targetLabel + " with " + terms.size() + " term(s).";
+        return "Peace treaty sent to " + targetLabel + " with " + terms.size() + " term(s). War-score cost: " + termCost + ".";
     }
 
     private static List<Campaign23Data.PeaceTerm> parsePeaceTerms(String encoded) {
@@ -810,18 +838,24 @@ public final class CampaignManager {
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) { extra.removePeaceOffer(offerId); return "That war has already ended."; }
         String own = factionId(player);
         PrototypeData.SettlementRecord targetSettlement = PrototypeData.get(player.serverLevel()).getSettlement(offer.targetSettlement());
-        boolean offerTargetsAttacker = offer.targetSettlement().equals(war.attackerSettlement());
+        boolean offerTargetsAttacker = peacePartyIsSide(war, offer.targetFaction(), offer.targetSettlement(), true);
+        boolean offerTargetsDefender = peacePartyIsSide(war, offer.targetFaction(), offer.targetSettlement(), false);
+        if (offerTargetsAttacker == offerTargetsDefender) return "That peace offer no longer identifies exactly one target side.";
         boolean targetFactionActuallyParticipates = !offer.targetFaction().isBlank()
-                && factionParticipatesOnSide(war, offer.targetFaction(), offerTargetsAttacker);
+                && factionIsPrincipalOnSide(war, offer.targetFaction(), offerTargetsAttacker);
         boolean admin = player.createCommandSourceStack().hasPermission(2);
         boolean authorized = admin || (targetFactionActuallyParticipates
                 ? offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3)
                 : offer.targetFaction().isBlank() && targetSettlement != null && PrototypeManager.canManage(player, targetSettlement));
         if (!authorized) return "You are not authorized to answer those peace terms.";
         int score = extra.warScore(war.id());
-        boolean proposerAttacker = offer.proposerSettlement().equals(war.attackerSettlement()) || (!offer.proposerFaction().isBlank() && offer.proposerFaction().equals(war.attackerFaction()));
-        boolean targetCapitulated = proposerAttacker ? score >= 90 : score <= -90;
-        if (!accept && targetCapitulated) return "Your side has capitulated and cannot reject these peace terms.";
+        boolean proposerAttacker = peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), true);
+        boolean proposerDefender = peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), false);
+        if (proposerAttacker == proposerDefender) return "That peace offer no longer identifies exactly one proposing side.";
+        int enforcementScore = proposerAttacker ? score : -score;
+        int termCost = peaceTermsWarScoreCost(player.serverLevel(), offer.terms());
+        boolean compulsory = enforcementScore >= 90 && termCost <= enforcementScore;
+        if (!accept && compulsory) return "Your side has capitulated and cannot reject peace terms within the dominant side's war-score budget.";
         if (!accept) {
             extra.removePeaceOffer(offerId);
             toastPoliticalSide(player.getServer(), offer.proposerFaction(), offer.proposerSettlement(),
@@ -831,7 +865,7 @@ public final class CampaignManager {
         String error = validatePeaceTerms(player.serverLevel(), offer, war);
         if (error != null) return "Peace treaty could not be applied: " + error;
         applyPeaceTerms(player.serverLevel(), offer, war, day);
-        data.endWar(war.id(), day, targetCapitulated ? "Capitulation peace terms enforced." : "Negotiated peace terms accepted.");
+        data.endWar(war.id(), day, compulsory ? "Capitulation peace terms enforced." : "Negotiated peace terms accepted.");
         extra.clearWarInterventionState(war.id());
         synchronizeWarPeace(player.serverLevel(), data, war, day);
         extra.removeWarAid(war.id()); extra.removePeaceOffer(offerId);
@@ -844,26 +878,75 @@ public final class CampaignManager {
         return "Peace treaty accepted and applied.";
     }
 
+    static int peaceTermsWarScoreCost(ServerLevel level, List<Campaign23Data.PeaceTerm> terms) {
+        if (terms == null || terms.isEmpty()) return 0;
+        long total = 0L;
+        for (Campaign23Data.PeaceTerm term : terms) total += peaceTermWarScoreCost(level, term);
+        return (int)Math.min(999L, total);
+    }
+
+    private static int peaceTermWarScoreCost(ServerLevel level, Campaign23Data.PeaceTerm term) {
+        if (term == null) return 0;
+        return switch (term.type()) {
+            case "WEALTH" -> ceilDiv(term.amount(), 100);
+            case "MANPOWER" -> ceilDiv(term.amount(), 5);
+            case "REPARATIONS" -> (int)Math.min(100L, ceilDiv((long)term.amount() * (long)term.durationDays(), 100L));
+            case "NAP" -> Math.min(20, ceilDiv(term.durationDays(), 7));
+            case "CONVERT_FAITH" -> 25;
+            case "TRANSFER_CLAIM" -> 8;
+            case "TRANSFER_SETTLEMENT" -> settlementPeaceCost(level, term.targetId(), false);
+            case "RECOGNIZE_INDEPENDENCE" -> settlementPeaceCost(level, term.targetId(), true);
+            default -> 0;
+        };
+    }
+
+    private static int settlementPeaceCost(ServerLevel level, String settlementId, boolean independence) {
+        PrototypeData.SettlementRecord settlement = level == null ? null : PrototypeData.get(level).getSettlement(settlementId);
+        int base = settlement == null ? 25 : switch (settlement.getRank()) {
+            case CAPITAL -> 60;
+            case CITY_STATE -> 55;
+            case TOWN -> 40;
+            case VILLAGE -> 25;
+        };
+        return independence ? Math.min(65, base + 5) : base;
+    }
+
+    private static int ceilDiv(int value, int divisor) { return value <= 0 ? 0 : (value + divisor - 1) / divisor; }
+    private static long ceilDiv(long value, long divisor) { return value <= 0L ? 0L : (value + divisor - 1L) / divisor; }
+
     private static String validatePeaceTerms(ServerLevel level, Campaign23Data.PeaceOfferRecord offer, CampaignData.WarRecord war) {
         Campaign23Data extra = Campaign23Data.get(level);
         PrototypeData settlements = PrototypeData.get(level);
-        boolean proposerAttacker = offer.proposerSettlement().equals(war.attackerSettlement());
-        boolean proposerDefender = offer.proposerSettlement().equals(war.defenderSettlement());
+        boolean proposerAttacker = peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), true);
+        boolean proposerDefender = peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), false);
         if (proposerAttacker == proposerDefender) return "the peace offer no longer identifies exactly one side of the war";
-        boolean targetAttacker = offer.targetSettlement().equals(war.attackerSettlement());
-        boolean targetDefender = offer.targetSettlement().equals(war.defenderSettlement());
+        boolean targetAttacker = peacePartyIsSide(war, offer.targetFaction(), offer.targetSettlement(), true);
+        boolean targetDefender = peacePartyIsSide(war, offer.targetFaction(), offer.targetSettlement(), false);
         if (targetAttacker == targetDefender || proposerAttacker == targetAttacker)
             return "the peace offer no longer targets the opposing war side";
-        if (!offer.proposerFaction().isBlank() && !factionParticipatesOnSide(war, offer.proposerFaction(), proposerAttacker))
-            return "the proposing faction has not joined this Settlement War";
-        if (!offer.targetFaction().isBlank() && !factionParticipatesOnSide(war, offer.targetFaction(), targetAttacker))
-            return "the target faction has not joined this Settlement War";
+        if (!offer.proposerFaction().isBlank() && !factionIsPrincipalOnSide(war, offer.proposerFaction(), proposerAttacker))
+            return "the proposing faction is not the principal belligerent on that side";
+        if (!offer.targetFaction().isBlank() && !factionIsPrincipalOnSide(war, offer.targetFaction(), targetAttacker))
+            return "the target faction is not the principal belligerent on that side";
 
         String winnerFaction = offer.proposerFaction();
         String loserFaction = offer.targetFaction();
         PrototypeData.SettlementRecord winnerSettlement = settlements.getSettlement(offer.proposerSettlement());
         PrototypeData.SettlementRecord loserSettlement = settlements.getSettlement(offer.targetSettlement());
         int wealthNeed = 0, manpowerNeed = 0;
+        Set<String> transferredSettlements = new HashSet<>();
+        Set<String> releasedSettlements = new HashSet<>();
+        Set<String> transferredClaims = new HashSet<>();
+        for (Campaign23Data.PeaceTerm term : offer.terms()) {
+            if ("TRANSFER_SETTLEMENT".equals(term.type()) && !transferredSettlements.add(term.targetId()))
+                return "the same settlement is listed for transfer more than once";
+            if ("RECOGNIZE_INDEPENDENCE".equals(term.type()) && !releasedSettlements.add(term.targetId()))
+                return "the same settlement is listed for independence more than once";
+            if ("TRANSFER_CLAIM".equals(term.type()) && !transferredClaims.add(term.targetId()))
+                return "the same linked claim is listed for transfer more than once";
+        }
+        for (String settlementId : transferredSettlements) if (releasedSettlements.contains(settlementId))
+            return "a settlement cannot be transferred to the victor and released as independent in the same treaty";
 
         for (Campaign23Data.PeaceTerm term : offer.terms()) {
             switch (term.type()) {

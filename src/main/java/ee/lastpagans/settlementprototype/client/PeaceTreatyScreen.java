@@ -18,7 +18,7 @@ import java.util.UUID;
 
 /** Negotiated Settlements 2.3 peace treaty builder. */
 public final class PeaceTreatyScreen extends ScaledCampaignScreen {
-    private static final int W = 520, H = 410;
+    private static final int W = 520, H = 440;
     private static final int MAX_SELECTED_CLAIMS = 40;
     private final Screen parent;
     private final DiplomacySnapshot snapshot;
@@ -26,8 +26,8 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private int left, top;
     private EditBox wealth, manpower, reparations, reparationsDays, napDays;
     private String wealthValue = "0", manpowerValue = "0", reparationsValue = "0", reparationsDaysValue = "0", napDaysValue = "0";
-    private DropdownWidget faith, settlement, claimSettlement, claim, destination;
-    private int faithIndex, settlementIndex, claimSettlementIndex, claimIndex, destinationIndex;
+    private DropdownWidget faith, settlement, claimSettlement, claim, destination, independenceSettlement;
+    private int faithIndex, settlementIndex, claimSettlementIndex, claimIndex, destinationIndex, independenceSettlementIndex;
     private final Set<UUID> selectedClaimIds = new LinkedHashSet<>();
     private boolean convertFaith, transferSettlement, transferClaim, recognizeIndependence;
 
@@ -84,8 +84,15 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
 
         addRenderableWidget(Button.builder(Component.literal(recognizeIndependence ? "☑ Recognize independence" : "☐ Recognize independence"), b -> { preserveValues(); recognizeIndependence = !recognizeIndependence; rebuildWidgets(); })
                 .bounds(left + 272, top + 276, 220, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Send Treaty"), b -> send()).bounds(left + 300, top + 355, 112, 22).build());
-        addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 418, top + 355, 74, 22).build());
+        if (recognizeIndependence) {
+            List<String> independenceNames = enemySettlements.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
+            independenceSettlementIndex = clamp(independenceSettlementIndex, independenceNames.size());
+            independenceSettlement = addRenderableWidget(new DropdownWidget(left + 272, top + 300, 220, 20,
+                    independenceNames.isEmpty() ? List.of("No releasable settlement") : independenceNames, independenceSettlementIndex,
+                    v -> independenceSettlementIndex = Math.max(0, independenceNames.indexOf(v))));
+        }
+        addRenderableWidget(Button.builder(Component.literal("Send Treaty"), b -> send()).bounds(left + 300, top + 385, 112, 22).build());
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 418, top + 385, 74, 22).build());
     }
 
     @Override protected void rebuildWidgets() { clearWidgets(); init(); }
@@ -137,6 +144,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private DiplomacySnapshot.SettlementTarget selectedEnemySettlement() { List<DiplomacySnapshot.SettlementTarget> v = enemySettlements(); return v.isEmpty() ? null : v.get(clamp(settlementIndex, v.size())); }
     private DiplomacySnapshot.SettlementTarget selectedClaimSettlement() { List<DiplomacySnapshot.SettlementTarget> v = enemySettlements(); return v.isEmpty() ? null : v.get(clamp(claimSettlementIndex, v.size())); }
     private DiplomacySnapshot.SettlementTarget selectedDestination() { List<DiplomacySnapshot.SettlementTarget> v = ownSettlements(); return v.isEmpty() ? null : v.get(clamp(destinationIndex, v.size())); }
+    private DiplomacySnapshot.SettlementTarget selectedIndependenceSettlement() { List<DiplomacySnapshot.SettlementTarget> v = enemySettlements(); return v.isEmpty() ? null : v.get(clamp(independenceSettlementIndex, v.size())); }
     private DiplomacySnapshot.ClaimTarget selectedClaim() { DiplomacySnapshot.SettlementTarget s = selectedClaimSettlement(); if (s == null || s.claims().isEmpty()) return null; return s.claims().get(clamp(claimIndex, s.claims().size())); }
     private void toggleSelectedClaim() {
         preserveValues();
@@ -164,21 +172,46 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
             for (UUID claimId : selectedClaimIds) if (validEnemyClaims.contains(claimId))
                 terms.add("TRANSFER_CLAIM~" + claimId + "~0~0~" + clean(destinationTarget.settlementId()));
         }
-        if (recognizeIndependence && enemy != null) terms.add("RECOGNIZE_INDEPENDENCE~" + clean(enemy.settlementId()) + "~0~0~");
+        DiplomacySnapshot.SettlementTarget independenceTarget = selectedIndependenceSettlement();
+        if (recognizeIndependence && independenceTarget != null) terms.add("RECOGNIZE_INDEPENDENCE~" + clean(independenceTarget.settlementId()) + "~0~0~");
         PrototypeNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket("OFFER_PEACE_TERMS", "", null, war.id(), String.join(";", terms)));
         minecraft.setScreen(parent);
     }
+    private int estimatedTreatyCost() {
+        int cost = ceilDiv(value(wealth), 100) + ceilDiv(value(manpower), 5);
+        long reparationTotal = (long)value(reparations) * (long)value(reparationsDays);
+        cost += (int)Math.min(100L, (reparationTotal + 99L) / 100L);
+        cost += Math.min(20, ceilDiv(value(napDays), 7));
+        if (convertFaith) cost += 25;
+        DiplomacySnapshot.SettlementTarget whole = selectedEnemySettlement();
+        if (transferSettlement && whole != null) cost += settlementTermCost(whole.rank(), false);
+        if (transferClaim) cost += selectedClaimIds.size() * 8;
+        DiplomacySnapshot.SettlementTarget released = selectedIndependenceSettlement();
+        if (recognizeIndependence && released != null) cost += settlementTermCost(released.rank(), true);
+        return Math.min(999, cost);
+    }
+    private static int settlementTermCost(String rank, boolean independence) {
+        String value = rank == null ? "" : rank.toUpperCase(java.util.Locale.ROOT);
+        int base = value.contains("CAPITAL") ? 60 : value.contains("CITY") ? 55 : value.contains("TOWN") ? 40 : 25;
+        return independence ? Math.min(65, base + 5) : base;
+    }
+    private static int ceilDiv(int value, int divisor) { return value <= 0 ? 0 : (value + divisor - 1) / divisor; }
+    private int enforcementBudget() {
+        int signed = isViewerAttackerSide() ? war.warScore() : -war.warScore();
+        return Math.max(0, signed);
+    }
+
     private static String clean(String s) { return s == null ? "" : s.replace('~','/').replace(';','/').replace('|','/'); }
     private static int clamp(int i, int size) { return size <= 0 ? 0 : Math.max(0, Math.min(i, size - 1)); }
 
     @Override public boolean mouseClicked(double x, double y, int button) {
         double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claimSettlement, claim, destination}) if (d != null && d.isExpanded() && d.mouseClicked(uiX, uiY, button)) return true;
+        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claimSettlement, claim, destination, independenceSettlement}) if (d != null && d.isExpanded() && d.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
     @Override public boolean mouseScrolled(double x, double y, double delta) {
         double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claimSettlement, claim, destination}) if (d != null && d.isExpanded() && d.mouseScrolled(uiX, uiY, delta)) return true;
+        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claimSettlement, claim, destination, independenceSettlement}) if (d != null && d.isExpanded() && d.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
     @Override public void render(GuiGraphics g, int mx, int my, float pt) {
@@ -190,8 +223,16 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         g.drawCenteredString(font, war.typeName() + " · War score " + (war.warScore() > 0 ? "+" : "") + war.warScore(), left + W / 2, top + 29, 0xFFAAAAAA);
         g.drawString(font, "Lump wealth", left + 25, top + 74, 0xFFFFFFFF, false); g.drawString(font, "Manpower", left + 25, top + 102, 0xFFFFFFFF, false);
         g.drawString(font, "Reparations/day", left + 25, top + 130, 0xFFFFFFFF, false); g.drawString(font, "Reparation days", left + 25, top + 158, 0xFFFFFFFF, false); g.drawString(font, "Forced NAP days", left + 25, top + 186, 0xFFFFFFFF, false);
-        g.drawWordWrap(font, Component.literal("Terms are demands on the opposing side. A side at ±90 war score is considered capitulated and cannot reject terms from the dominant side."), left + 25, top + 224, 220, 0xFFFFD27A);
-        if (transferClaim) g.drawString(font, "Selected territorial claims: " + selectedClaimIds.size() + "/" + MAX_SELECTED_CLAIMS, left + 272, top + 302, 0xFFAAAAAA, false);
+        g.drawWordWrap(font, Component.literal("Terms are demands on the opposing side. At 90+ war score, a capitulated side cannot reject valid terms within the dominant side's current war-score budget."), left + 25, top + 224, 220, 0xFFFFD27A);
+        if (transferClaim) g.drawString(font, "Selected territorial claims: " + selectedClaimIds.size() + "/" + MAX_SELECTED_CLAIMS, left + 272, top + 330, 0xFFAAAAAA, false);
+        int treatyCost = estimatedTreatyCost();
+        int budget = enforcementBudget();
+        boolean compulsory = budget >= 90 && treatyCost <= budget;
+        String costText = compulsory ? "Compulsory treaty: " + treatyCost + " / " + budget + " war score"
+                : budget >= 90 ? "Treaty cost: " + treatyCost + " · over " + budget + " WS budget"
+                : "Treaty cost: " + treatyCost + " · compulsory at 90+";
+        int costColor = budget >= 90 && treatyCost > budget ? 0xFFFFA080 : 0xFFAAAAAA;
+        g.drawString(font, costText, left + 272, top + 344, costColor, false);
         super.render(g, uiMx, uiMy, pt);
         endCampaignRender(g);
     }

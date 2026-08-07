@@ -86,9 +86,14 @@ public record DiplomacySnapshot(
             String fromName = !offer.proposerFaction().isBlank() ? CampaignManager.factionName(offer.proposerFaction())
                     : (settlementsData.getSettlement(offer.proposerSettlement()) == null ? "Independent settlement" : settlementsData.getSettlement(offer.proposerSettlement()).getName());
             int score = campaign23.warScore(war.id());
-            boolean proposerAttacker = offer.proposerSettlement().equals(war.attackerSettlement()) || (!offer.proposerFaction().isBlank() && offer.proposerFaction().equals(war.attackerFaction()));
-            boolean targetCapitulated = proposerAttacker ? score >= 90 : score <= -90;
+            boolean proposerAttacker = CampaignManager.peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), true);
+            boolean proposerDefender = CampaignManager.peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), false);
+            if (proposerAttacker == proposerDefender) continue;
+            int enforcementScore = proposerAttacker ? score : -score;
+            int treatyCost = CampaignManager.peaceTermsWarScoreCost(player.serverLevel(), offer.terms());
+            boolean targetCapitulated = enforcementScore >= 90 && treatyCost <= enforcementScore;
             String summary = offer.terms().isEmpty() ? "White peace" : offer.terms().stream().map(term -> prettyTerm(term)).reduce((a,b) -> a + "; " + b).orElse("White peace");
+            summary += " · Cost " + treatyCost + " WS";
             proposals.add(new ProposalEntry(offer.proposalId(), "PEACE_TERMS", offer.proposerFaction(), fromName, offer.warId(), summary, !targetCapitulated, true));
         }
         java.util.Set<String> managedSettlementIds = settlements.stream().filter(SettlementTarget::manageable)
