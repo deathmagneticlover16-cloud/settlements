@@ -108,3 +108,4 @@ WORLD NEWS / UI
 - Character/settlement traits and active modifiers use clearer icon-based summaries.
 - More campaign actions moved out of commands and into GUIs.
 - Screen layouts substantially reorganized to reduce 2.0.x overlap.
+- Settlement War peace negotiation now respects escalation state: parent factions cannot negotiate as belligerents until they explicitly join, and pure settlement wars cannot quietly impose faction-wide reparations/NAP terms or browse unrelated faction territory in the treaty builder.

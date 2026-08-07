@@ -697,21 +697,44 @@ public final class CampaignManager {
         }
     }
 
+    /** Returns the faction that is actually a belligerent on this side. Settlement Wars keep
+     * their parent faction ids for observer/escalation purposes, but those parents are not war
+     * parties until they explicitly Join War. */
+    private static String participatingFaction(CampaignData.WarRecord war, boolean attackerSide) {
+        if (war == null) return "";
+        if (war.type() != CampaignData.WarType.SETTLEMENT_WAR) return attackerSide ? war.attackerFaction() : war.defenderFaction();
+        if (attackerSide ? war.attackerFactionJoined() : war.defenderFactionJoined())
+            return attackerSide ? war.attackerFaction() : war.defenderFaction();
+        return "";
+    }
+
+    private static boolean factionParticipatesOnSide(CampaignData.WarRecord war, String factionId, boolean attackerSide) {
+        if (war == null || factionId == null || factionId.isBlank()) return false;
+        String parent = participatingFaction(war, attackerSide);
+        return factionId.equals(parent) || (attackerSide ? war.supportingAttackers() : war.supportingDefenders()).contains(factionId);
+    }
+
 
     private static String offerPeaceTerms(ServerPlayer player, CampaignData data, UUID warId, String encoded, long day) {
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "That war is not active.";
         PrototypeData settlements = PrototypeData.get(player.serverLevel());
         String ownFaction = factionId(player);
-        boolean attacker = (!ownFaction.isBlank() && (ownFaction.equals(war.attackerFaction()) || war.supportingAttackers().contains(ownFaction)))
-                || (!war.attackerSettlement().isBlank() && settlements.getSettlement(war.attackerSettlement()) != null && PrototypeManager.canManage(player, settlements.getSettlement(war.attackerSettlement())));
-        boolean defender = (!ownFaction.isBlank() && (ownFaction.equals(war.defenderFaction()) || war.supportingDefenders().contains(ownFaction)))
-                || (!war.defenderSettlement().isBlank() && settlements.getSettlement(war.defenderSettlement()) != null && PrototypeManager.canManage(player, settlements.getSettlement(war.defenderSettlement())));
-        if (!attacker && !defender && !player.createCommandSourceStack().hasPermission(2)) return "You are not authorized to negotiate this war.";
-        if (!ownFaction.isBlank() && !canManageDiplomacy(player, ownFaction, 3) && !player.createCommandSourceStack().hasPermission(2))
+        PrototypeData.SettlementRecord attackerSettlementRecord = settlements.getSettlement(war.attackerSettlement());
+        PrototypeData.SettlementRecord defenderSettlementRecord = settlements.getSettlement(war.defenderSettlement());
+        boolean managesAttackerSettlement = attackerSettlementRecord != null && PrototypeManager.canManage(player, attackerSettlementRecord);
+        boolean managesDefenderSettlement = defenderSettlementRecord != null && PrototypeManager.canManage(player, defenderSettlementRecord);
+        boolean attackerByFaction = factionParticipatesOnSide(war, ownFaction, true);
+        boolean defenderByFaction = factionParticipatesOnSide(war, ownFaction, false);
+        boolean attacker = attackerByFaction || managesAttackerSettlement;
+        boolean defender = defenderByFaction || managesDefenderSettlement;
+        if (attacker && defender) return "You are connected to both sides of this war; an administrator must resolve the conflicting ownership first.";
+        if (!attacker && !defender) return "You are not an actual belligerent in this war. A parent faction must Join War before negotiating on behalf of its settlement.";
+        boolean actingAsFaction = attacker ? attackerByFaction : defenderByFaction;
+        if (actingAsFaction && !ownFaction.isBlank() && !canManageDiplomacy(player, ownFaction, 3) && !player.createCommandSourceStack().hasPermission(2))
             return "Your faction rank cannot negotiate peace.";
-        String proposerFaction = ownFaction;
-        String targetFaction = attacker ? war.defenderFaction() : war.attackerFaction();
+        String proposerFaction = actingAsFaction ? ownFaction : "";
+        String targetFaction = participatingFaction(war, !attacker);
         String proposerSettlement = attacker ? war.attackerSettlement() : war.defenderSettlement();
         String targetSettlement = attacker ? war.defenderSettlement() : war.attackerSettlement();
         List<Campaign23Data.PeaceTerm> terms = parsePeaceTerms(encoded);
@@ -750,7 +773,10 @@ public final class CampaignManager {
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) { extra.removePeaceOffer(offerId); return "That war has already ended."; }
         String own = factionId(player);
         PrototypeData.SettlementRecord targetSettlement = PrototypeData.get(player.serverLevel()).getSettlement(offer.targetSettlement());
-        boolean authorized = (!offer.targetFaction().isBlank() && offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3))
+        boolean offerTargetsAttacker = offer.targetSettlement().equals(war.attackerSettlement());
+        boolean targetFactionActuallyParticipates = !offer.targetFaction().isBlank()
+                && factionParticipatesOnSide(war, offer.targetFaction(), offerTargetsAttacker);
+        boolean authorized = (targetFactionActuallyParticipates && offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3))
                 || (targetSettlement != null && PrototypeManager.canManage(player, targetSettlement)) || player.createCommandSourceStack().hasPermission(2);
         if (!authorized) return "You are not authorized to answer those peace terms.";
         int score = extra.warScore(war.id());
@@ -782,6 +808,18 @@ public final class CampaignManager {
     private static String validatePeaceTerms(ServerLevel level, Campaign23Data.PeaceOfferRecord offer, CampaignData.WarRecord war) {
         Campaign23Data extra = Campaign23Data.get(level);
         PrototypeData settlements = PrototypeData.get(level);
+        boolean proposerAttacker = offer.proposerSettlement().equals(war.attackerSettlement());
+        boolean proposerDefender = offer.proposerSettlement().equals(war.defenderSettlement());
+        if (proposerAttacker == proposerDefender) return "the peace offer no longer identifies exactly one side of the war";
+        boolean targetAttacker = offer.targetSettlement().equals(war.attackerSettlement());
+        boolean targetDefender = offer.targetSettlement().equals(war.defenderSettlement());
+        if (targetAttacker == targetDefender || proposerAttacker == targetAttacker)
+            return "the peace offer no longer targets the opposing war side";
+        if (!offer.proposerFaction().isBlank() && !factionParticipatesOnSide(war, offer.proposerFaction(), proposerAttacker))
+            return "the proposing faction has not joined this Settlement War";
+        if (!offer.targetFaction().isBlank() && !factionParticipatesOnSide(war, offer.targetFaction(), targetAttacker))
+            return "the target faction has not joined this Settlement War";
+
         String winnerFaction = offer.proposerFaction();
         String loserFaction = offer.targetFaction();
         PrototypeData.SettlementRecord winnerSettlement = settlements.getSettlement(offer.proposerSettlement());

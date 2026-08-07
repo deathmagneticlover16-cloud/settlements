@@ -78,13 +78,29 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private EditBox number(int x, int y, int w, String value) { EditBox box = new EditBox(font, x, y, w, 20, Component.empty()); box.setValue(value == null || value.isBlank() ? "0" : value); box.setFilter(v -> v.isEmpty() || v.matches("[0-9]{0,7}")); addRenderableWidget(box); return box; }
     private int value(EditBox box) { try { return Math.max(0, Integer.parseInt(box.getValue().isBlank() ? "0" : box.getValue())); } catch (NumberFormatException ignored) { return 0; } }
 
-    private List<DiplomacySnapshot.SettlementTarget> ownSettlements() { return snapshot.settlements().stream().filter(DiplomacySnapshot.SettlementTarget::manageable).toList(); }
+    private List<DiplomacySnapshot.SettlementTarget> ownSettlements() {
+        boolean viewerAttacker = isViewerAttackerSide();
+        boolean settlementWar = "SETTLEMENT_WAR".equals(war.type());
+        boolean parentJoined = viewerAttacker ? war.attackerFactionJoined() : war.defenderFactionJoined();
+        String sideSettlement = viewerAttacker ? war.attackerSettlementId() : war.targetSettlementId();
+        String sideFaction = viewerAttacker ? war.attackerFactionId() : war.defenderFactionId();
+        return snapshot.settlements().stream().filter(DiplomacySnapshot.SettlementTarget::manageable)
+                .filter(s -> !settlementWar || parentJoined
+                        ? (!sideFaction.isBlank() && sideFaction.equals(s.factionId())) || s.settlementId().equals(sideSettlement)
+                        : s.settlementId().equals(sideSettlement))
+                .toList();
+    }
     private List<DiplomacySnapshot.SettlementTarget> enemySettlements() {
         boolean viewerAttacker = isViewerAttackerSide();
+        boolean settlementWar = "SETTLEMENT_WAR".equals(war.type());
+        boolean enemyParentJoined = viewerAttacker ? war.defenderFactionJoined() : war.attackerFactionJoined();
         String enemyFaction = viewerAttacker ? war.defenderFactionId() : war.attackerFactionId();
         String enemySettlement = viewerAttacker ? war.targetSettlementId() : war.attackerSettlementId();
-        List<DiplomacySnapshot.SettlementTarget> values = snapshot.settlements().stream().filter(s -> (!enemyFaction.isBlank() && enemyFaction.equals(s.factionId())) || (!enemySettlement.isBlank() && enemySettlement.equals(s.settlementId()))).toList();
-        return values;
+        return snapshot.settlements().stream()
+                .filter(s -> !settlementWar || enemyParentJoined
+                        ? (!enemyFaction.isBlank() && enemyFaction.equals(s.factionId())) || s.settlementId().equals(enemySettlement)
+                        : s.settlementId().equals(enemySettlement))
+                .toList();
     }
     private boolean isViewerAttackerSide() {
         if (!snapshot.ownFactionId().isBlank() && (snapshot.ownFactionId().equals(war.attackerFactionId()) || war.viewerIsAttackerParent())) return true;
