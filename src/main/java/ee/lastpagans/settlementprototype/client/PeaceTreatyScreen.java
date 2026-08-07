@@ -104,8 +104,13 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
                 .toList();
     }
     private boolean isViewerAttackerSide() {
-        if (!snapshot.ownFactionId().isBlank() && (snapshot.ownFactionId().equals(war.attackerFactionId()) || war.viewerIsAttackerParent())) return true;
-        return ownSettlements().stream().anyMatch(s -> s.settlementId().equals(war.attackerSettlementId()));
+        String ownFaction = snapshot.ownFactionId();
+        if (!ownFaction.isBlank()) {
+            if (ownFaction.equals(war.attackerFactionId()) || war.viewerIsAttackerParent()) return true;
+            if (ownFaction.equals(war.defenderFactionId()) || war.viewerIsDefenderParent()) return false;
+        }
+        return snapshot.settlements().stream()
+                .anyMatch(s -> s.manageable() && s.settlementId().equals(war.attackerSettlementId()));
     }
     private DiplomacySnapshot.SettlementTarget selectedEnemySettlement() { List<DiplomacySnapshot.SettlementTarget> v = enemySettlements(); return v.isEmpty() ? null : v.get(clamp(settlementIndex, v.size())); }
     private DiplomacySnapshot.SettlementTarget selectedDestination() { List<DiplomacySnapshot.SettlementTarget> v = ownSettlements(); return v.isEmpty() ? null : v.get(clamp(destinationIndex, v.size())); }
