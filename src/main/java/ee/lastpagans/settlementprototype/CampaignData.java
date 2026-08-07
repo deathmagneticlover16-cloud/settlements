@@ -535,9 +535,13 @@ public final class CampaignData extends SavedData {
     }
 
     public List<NpcSpouse> candidatesFor(UUID playerId, long day) {
+        return candidatesFor(playerId, day, List.of(), List.of(), 0);
+    }
+
+    public List<NpcSpouse> candidatesFor(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
         List<NpcSpouse> values = spouseCandidates.get(playerId);
         if (values == null || values.isEmpty()) {
-            values = generateCandidates(playerId, day, 10);
+            values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus);
             spouseCandidates.put(playerId, values);
             spouseCandidateGeneratedDay.put(playerId, day);
             setDirty();
@@ -550,8 +554,12 @@ public final class CampaignData extends SavedData {
     }
 
     public List<NpcSpouse> refreshCandidates(UUID playerId, long day) {
-        if (!canRefreshCandidates(playerId, day)) return candidatesFor(playerId, day);
-        List<NpcSpouse> values = generateCandidates(playerId, day, 10);
+        return refreshCandidates(playerId, day, List.of(), List.of(), 0);
+    }
+
+    public List<NpcSpouse> refreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
+        if (!canRefreshCandidates(playerId, day)) return candidatesFor(playerId, day, rejectedNames, seenNames, qualityBonus);
+        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus);
         spouseCandidates.put(playerId, values);
         spouseCandidateGeneratedDay.put(playerId, day);
         setDirty();
@@ -559,7 +567,11 @@ public final class CampaignData extends SavedData {
     }
 
     public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day) {
-        List<NpcSpouse> values = generateCandidates(playerId, day, 10);
+        return forceRefreshCandidates(playerId, day, List.of(), List.of(), 0);
+    }
+
+    public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
+        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus);
         spouseCandidates.put(playerId, values);
         spouseCandidateGeneratedDay.put(playerId, day);
         setDirty();
@@ -642,7 +654,8 @@ public final class CampaignData extends SavedData {
         while (worldNews.size() > 1000) worldNews.remove(worldNews.size() - 1);
     }
 
-    private static List<NpcSpouse> generateCandidates(UUID playerId, long day, int count) {
+    private static List<NpcSpouse> generateCandidates(UUID playerId, long day, int count,
+                                                       List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
         String[] cultures = {"Baltic", "Finnic", "Norse", "Germanic", "Slavic"};
         String[][] firstNames = {
                 {"Aino", "Linda", "Maia", "Leelo", "Ilmar", "Jaan", "Lembit", "Marek"},
@@ -665,28 +678,82 @@ public final class CampaignData extends SavedData {
                 {"Catholic Christianity", "Orthodox Christianity"},
                 {"Slavic Paganism", "Orthodox Christianity", "Catholic Christianity"}
         };
-        List<String> traitPool = new ArrayList<>(CampaignDefinitions.playableTraits().stream().map(CampaignDefinitions.TraitDefinition::id).toList());
+        List<String> traitPool = CampaignDefinitions.playableTraits().stream().map(CampaignDefinitions.TraitDefinition::id).toList();
         long seed = day * 341873128712L;
         if (playerId != null) seed ^= playerId.getMostSignificantBits() ^ playerId.getLeastSignificantBits();
         java.util.Random random = new java.util.Random(seed);
         List<NpcSpouse> result = new ArrayList<>();
+        List<String> generatedNames = new ArrayList<>();
+        int qualityRolls = 1 + Math.max(0, Math.min(2, qualityBonus));
         for (int i = 0; i < count; i++) {
-            int culture = random.nextInt(cultures.length);
             String gender = i < count / 2 ? "Female" : "Male";
-            int firstIndex = "Female".equals(gender) ? random.nextInt(4) : 4 + random.nextInt(Math.max(1, firstNames[culture].length - 4));
-            String first = firstNames[culture][firstIndex];
-            String last = lastNames[culture][random.nextInt(lastNames[culture].length)];
+            int culture = 0;
+            String first = "";
+            String last = "";
+            String fullName = "";
+            boolean acceptedName = false;
+            // Rejected people should stay gone. Previously-seen names have a 75% reroll chance, so they
+            // remain possible without dominating every weekly candidate refresh.
+            for (int attempt = 0; attempt < 64; attempt++) {
+                culture = random.nextInt(cultures.length);
+                int firstIndex = "Female".equals(gender) ? random.nextInt(4) : 4 + random.nextInt(Math.max(1, firstNames[culture].length - 4));
+                first = firstNames[culture][firstIndex];
+                last = lastNames[culture][random.nextInt(lastNames[culture].length)];
+                fullName = first + " " + last;
+                if (containsIgnoreCase(rejectedNames, fullName) || containsIgnoreCase(generatedNames, fullName)) continue;
+                if (containsIgnoreCase(seenNames, fullName) && random.nextDouble() < 0.75D) continue;
+                acceptedName = true;
+                break;
+            }
+            if (!acceptedName) {
+                // The finite default name pool can theoretically be exhausted after many years of rejections.
+                // Keep the candidate generic while guaranteeing that a deliberately rejected person never returns.
+                int suffix = 2;
+                String base = first + " " + last;
+                fullName = base;
+                while (containsIgnoreCase(rejectedNames, fullName) || containsIgnoreCase(generatedNames, fullName))
+                    fullName = base + " " + suffix++;
+            }
+            generatedNames.add(fullName);
             String faith = religions[culture][random.nextInt(religions[culture].length)];
-            java.util.Collections.shuffle(traitPool, random);
-            List<String> traits = List.of(traitPool.get(0), traitPool.get(1), traitPool.get(2));
+
+            List<String> traits = List.of();
+            int bestScore = Integer.MIN_VALUE;
+            for (int roll = 0; roll < qualityRolls; roll++) {
+                List<String> shuffled = new ArrayList<>(traitPool);
+                java.util.Collections.shuffle(shuffled, random);
+                List<String> attempt = List.copyOf(shuffled.subList(0, Math.min(3, shuffled.size())));
+                int score = spouseTraitScore(attempt);
+                if (score > bestScore) { bestScore = score; traits = attempt; }
+            }
             int stability = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.STABILITY);
             int wealth = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.WEALTH);
             int morale = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.MORALE);
             String id = "generated_" + Long.toUnsignedString(random.nextLong(), 36);
             String effect = describeSpouseEffects(stability, wealth, morale);
-            result.add(new NpcSpouse(id, first + " " + last, gender, faith, cultures[culture], traits, effect, stability, wealth, morale));
+            result.add(new NpcSpouse(id, fullName, gender, faith, cultures[culture], traits, effect, stability, wealth, morale));
         }
         return result;
+    }
+
+    private static int spouseTraitScore(List<String> traits) {
+        int score = 0;
+        for (String id : traits) {
+            CampaignDefinitions.TraitDefinition definition = CampaignDefinitions.trait(id);
+            if (definition == null) continue;
+            score += switch (definition.tone()) {
+                case POSITIVE -> 2;
+                case MIXED -> 1;
+                case NEUTRAL -> 0;
+                case NEGATIVE -> -2;
+            };
+        }
+        return score;
+    }
+
+    private static boolean containsIgnoreCase(List<String> values, String wanted) {
+        if (values == null || wanted == null) return false;
+        return values.stream().anyMatch(value -> value != null && value.equalsIgnoreCase(wanted));
     }
 
     private static String describeSpouseEffects(int stability, int wealth, int morale) {

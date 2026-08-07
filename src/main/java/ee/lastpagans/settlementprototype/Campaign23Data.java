@@ -559,8 +559,16 @@ public final class Campaign23Data extends SavedData {
         public void setPreferredGender(String value) { preferredGender = value == null ? "ANY" : value.toUpperCase(Locale.ROOT); }
         public List<String> rejectedIds() { return List.copyOf(rejectedIds); }
         public List<String> seenIds() { return List.copyOf(seenIds); }
-        public void reject(String id) { if (id != null && !rejectedIds.contains(id)) rejectedIds.add(id); }
-        public void seen(String id) { if (id != null && !seenIds.contains(id)) seenIds.add(id); }
+        public void reject(String id) {
+            if (id != null && rejectedIds.stream().noneMatch(value -> value.equalsIgnoreCase(id))) {
+                rejectedIds.add(id); while (rejectedIds.size() > 256) rejectedIds.remove(0);
+            }
+        }
+        public void seen(String id) {
+            if (id != null && seenIds.stream().noneMatch(value -> value.equalsIgnoreCase(id))) {
+                seenIds.add(id); while (seenIds.size() > 256) seenIds.remove(0);
+            }
+        }
         private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); if (playerId != null) tag.putUUID("Player", playerId); tag.putString("Gender", preferredGender); ListTag rejected = new ListTag(); rejectedIds.forEach(value -> rejected.add(net.minecraft.nbt.StringTag.valueOf(value))); tag.put("Rejected", rejected); ListTag seen = new ListTag(); seenIds.forEach(value -> seen.add(net.minecraft.nbt.StringTag.valueOf(value))); tag.put("Seen", seen); return tag; }
         private static CandidateHistory fromNBT(CompoundTag tag) { CandidateHistory history = new CandidateHistory(tag.hasUUID("Player") ? tag.getUUID("Player") : null); history.preferredGender = tag.getString("Gender").isBlank() ? "ANY" : tag.getString("Gender"); for (Tag raw : tag.getList("Rejected", Tag.TAG_STRING)) history.rejectedIds.add(raw.getAsString()); for (Tag raw : tag.getList("Seen", Tag.TAG_STRING)) history.seenIds.add(raw.getAsString()); return history; }
     }

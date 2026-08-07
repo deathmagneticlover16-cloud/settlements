@@ -57,8 +57,10 @@ public record FamilySnapshot(
             additionalSpouses.add(new AdditionalSpouse(additional.spouseName(), additional.spouseFaith(), additional.spouseTraits(), additional.spouseEffect(), CampaignData.spouseEffectPercent(secondaryIndex++)));
         }
         boolean canMarryAdditional = marriage != null && maxSpouses > spouseCount;
-        Campaign23Data.CandidateHistory history = Campaign23Data.get(player.serverLevel()).candidateHistory(player.getUUID());
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        Campaign23Data.CandidateHistory history = extra.candidateHistory(player.getUUID());
         String preferredGender = history.preferredGender();
+        int spouseQuality = character == null ? 0 : CampaignDefinitions.totalEffect(character.getTraits(), CampaignDefinitions.EffectKind.SPOUSE_QUALITY);
         if (marriage != null) {
             if (marriage.kind() == CampaignData.MarriageKind.PLAYER && marriage.spousePlayerId() != null) {
                 PrototypeData.CharacterRecord spouse = characters.getCharacter(marriage.spousePlayerId());
@@ -96,8 +98,10 @@ public record FamilySnapshot(
                 .sorted(java.util.Comparator.comparing(PlayerCandidate::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
-        List<Candidate> candidates = campaign.candidatesFor(player.getUUID(), day).stream()
-                .filter(value -> !history.rejectedIds().contains(value.id()))
+        List<CampaignData.NpcSpouse> generatedCandidates = campaign.candidatesFor(player.getUUID(), day, history.rejectedIds(), history.seenIds(), spouseQuality);
+        generatedCandidates.forEach(value -> extra.markCandidateSeen(player.getUUID(), value.name()));
+        List<Candidate> candidates = generatedCandidates.stream()
+                .filter(value -> history.rejectedIds().stream().noneMatch(rejected -> rejected.equalsIgnoreCase(value.id()) || rejected.equalsIgnoreCase(value.name())))
                 .filter(value -> canMarryAdditional ? value.gender().equalsIgnoreCase("FEMALE") : (preferredGender.equals("ANY") || value.gender().equalsIgnoreCase(preferredGender)))
                 .map(value -> new Candidate(
                         value.id(), value.name(), value.gender(), value.faith(), value.culture(), value.traitsText(), value.effect(),

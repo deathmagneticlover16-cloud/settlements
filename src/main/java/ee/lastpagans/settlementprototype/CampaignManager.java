@@ -1068,7 +1068,14 @@ public final class CampaignManager {
             }
             case "REFRESH" -> {
                 if (!data.canRefreshCandidates(player.getUUID(), day)) result = "New candidates become available on day " + data.nextCandidateRefreshDay(player.getUUID()) + ".";
-                else { data.refreshCandidates(player.getUUID(), day); result = "A new set of spouse candidates has arrived."; }
+                else {
+                    Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+                    Campaign23Data.CandidateHistory history = extra.candidateHistory(player.getUUID());
+                    PrototypeData.CharacterRecord character = PrototypeData.get(player.serverLevel()).getCharacter(player.getUUID());
+                    int quality = character == null ? 0 : CampaignDefinitions.totalEffect(character.getTraits(), CampaignDefinitions.EffectKind.SPOUSE_QUALITY);
+                    data.refreshCandidates(player.getUUID(), day, history.rejectedIds(), history.seenIds(), quality);
+                    result = quality > 0 ? "A new set of spouse candidates has arrived. Your Charisma improved the selection." : "A new set of spouse candidates has arrived.";
+                }
             }
             case "SET_GENDER" -> {
                 String gender = value == null ? "ANY" : value.toUpperCase(Locale.ROOT);
@@ -1078,7 +1085,7 @@ public final class CampaignManager {
             case "REJECT_CANDIDATE" -> {
                 CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
                 if (spouse == null) result = "That candidate is no longer available.";
-                else { Campaign23Data.get(player.serverLevel()).rejectCandidate(player.getUUID(), spouse.id()); data.rejectCandidate(player.getUUID(), spouse.id()); result = spouse.name() + " was rejected and will not appear again in this candidate set."; }
+                else { Campaign23Data extra = Campaign23Data.get(player.serverLevel()); extra.rejectCandidate(player.getUUID(), spouse.id()); extra.rejectCandidate(player.getUUID(), spouse.name()); data.rejectCandidate(player.getUUID(), spouse.id()); result = spouse.name() + " was rejected and will not be generated for you again."; }
             }
             case "PROPOSE_PLAYER" -> {
                 ServerPlayer target = targetPlayer == null || player.getServer() == null ? null : player.getServer().getPlayerList().getPlayer(targetPlayer);
