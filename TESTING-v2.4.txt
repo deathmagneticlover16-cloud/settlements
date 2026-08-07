@@ -1,0 +1,89 @@
+LAST PAGANS SETTLEMENTS 2.4.0 — FOCUSED TEST CHECKLIST
+
+BUILD / BOOT
+[ ] BUILD-V2.4.bat completes with Java 17.
+[ ] Server starts with Villager Recruits 1.15.2.
+[ ] Client connects with the same 2.4.0 JAR (protocol 27).
+[ ] Existing 2.3 test world loads from a backup copy.
+
+DROPDOWNS / MANAGE GUI
+[ ] Open every large dropdown and confirm its menu renders above buttons/text below it.
+[ ] Clicking an expanded dropdown option does not activate a covered button.
+[ ] Manage > Locations, Identity, Claims and Members have no overlapping controls at supported GUI scales.
+[ ] Claims page Link / Unlink Current / Unlink All works; Unlink All still confirms.
+[ ] Members page can add Citizen, add Co-owner and remove a non-owner member.
+[ ] Owner cannot be removed from Members page.
+
+PRIVACY / ADMIN PROTECTION
+[ ] Same-faction player with no settlement role sees only the limited public summary.
+[ ] That outsider cannot open Military or receive private treasury/claim/effect details.
+[ ] Protected admin settlement cannot be managed by a normal player even if an old role record exists.
+[ ] Protected admin faction/settlement cannot be targeted through normal or forged diplomacy actions.
+
+DIPLOMACY / RELATIONS
+[ ] Negative peaceful relationship slowly moves toward 0 over campaign days.
+[ ] NAP/alliances can slowly improve relationship up to their configured/state cap.
+[ ] War prevents passive relationship improvement.
+[ ] Hostile/Neutral/Friendly threshold crossings produce a toast, not every +1 change.
+[ ] Diplomatic/Warlike/etc. relation trait modifiers appear in political relationship calculations.
+[ ] Zealous same-faith relation bonus does not apply across incompatible faiths.
+
+WAR AID
+[ ] Manpower, Wealth and Food each independently select One-time or Daily.
+[ ] Mixed schedule in one aid order works (example: daily manpower + one-time wealth + daily food).
+[ ] Recurring aid appears in ledger and can be cancelled.
+[ ] Ledger scrolls when more than four commitments exist.
+[ ] Aid cannot consume manpower that the target has no capacity to receive.
+[ ] Successful aid affects Reliability once per aid order without runaway farming.
+
+PEACE
+[ ] Multiple specific linked claims can be selected in one treaty.
+[ ] Transfer Claim moves claim linkage into the chosen receiving settlement.
+[ ] Renounce Claim removes the losing side's claim from its settlement and Recruits claim manager.
+[ ] Settlement transfer changes both political control and usable management ownership.
+[ ] Recognize Independence targets the explicitly selected settlement.
+[ ] Joined parent faction requires proper faction diplomacy authority to accept faction-wide terms.
+[ ] Supporting ally cannot sign peace for the principal belligerent.
+[ ] Capitulation only forces terms within available war-score budget.
+
+MERCENARIES
+[ ] Military screen shows mercenary count, obligation, status and next payment.
+[ ] Paid payroll resets missed-payment state and improves faction Reliability modestly.
+[ ] Missed payroll progresses status and reduces Reliability.
+[ ] Three misses reach Deserting and the loaded mercenary becomes neutral/deserts.
+
+RELIGION / FAMILY
+[ ] Holy Site and Prayer Site Devotion gains work.
+[ ] Donate Silver to Faith consumes exactly one tagged silver currency and adds configured Devotion.
+[ ] Donation at 100 Devotion consumes nothing.
+[ ] Observant/Faithful/Devout/Exalted ruler tiers create the expected capital/settlement devotion modifier effects.
+[ ] Religion maximum spouse counts obey config.
+[ ] Additional spouse effects obey configured diminishing percentages.
+[ ] Divorce that breaks a cross-faction Marriage Alliance reduces initiator faction Reliability.
+
+SETTLEMENTS
+[ ] Registered villager death decreases registered villagers/population immediately after refresh.
+[ ] Chunk unload/dimension movement does not remove a living registered villager.
+[ ] Village -> Town requires population/prosperity/stability/housing.
+[ ] Independent Town -> City-State also requires housing.
+[ ] Faction Unit Color Blue actually becomes Recruits Blue; test several entries across all 25 colors.
+
+EFFECTS
+[ ] More than seven simultaneous settlement effects can be scrolled and inspected.
+[ ] Effect tooltip shows source/detail and values.
+
+ADMIN RECOVERY
+[ ] reset character requires confirm and preserves settlements/faction membership.
+[ ] reset settlement requires confirm and removes Settlements state while preserving Recruits world claims/entities.
+[ ] setowner / addcoowner / removecoowner repair ownership safely.
+[ ] settier accepts village/town/capital/city_state and prevents independent Capital.
+[ ] clearclaims / clearhousing / cleararmydata / clearmodifiers do exactly what their messages say.
+[ ] debug capitulate sets the intended side into forced-peace range.
+[ ] debug event trigger/end plague adds/removes the timed Plague modifier.
+
+REGRESSION
+[ ] Raise/return levy still works and 300/player + 500/faction caps remain enforced.
+[ ] Levy anti-armor-stand-training mixin no longer crashes production launch.
+[ ] Faction creator still requires a patterned banner and preserves selected team/unit colors.
+[ ] Settlement War remains settlement-vs-settlement and parent factions remain observers until joining.
+[ ] World News and major diplomacy toasts still fire.

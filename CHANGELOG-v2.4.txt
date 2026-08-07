@@ -1,0 +1,60 @@
+LAST PAGANS SETTLEMENTS 2.4.0 — CONSOLIDATION / COMPLETION PASS
+
+2.4 is the follow-up to the oversized 2.3 campaign overhaul. It folds in user feedback, fixes scope items that 2.3 only partially implemented, and hardens multiplayer/admin behavior discovered during real testing.
+
+DIPLOMACY
+- Gradual relationship recovery: peaceful relations slowly recover toward Neutral; long-standing NAPs/alliances can gradually build positive relations to state-specific caps. War blocks passive improvement.
+- Relationship-category toasts fire when numerical relations cross Hostile / Neutral / Friendly boundaries.
+- Character RELATIONS trait effects now actually feed political relationship displays/calculation; Zealous only grants its relation bonus to compatible same-faith leadership.
+- Dynamic Reliability now reacts to additional real behavior, including sending war aid, maintaining mercenary payrolls, missed mercenary wages, and breaking a Marriage Alliance through divorce.
+- War aid now has independent One-time / Daily controls for Manpower, Wealth and Food, matching the original aid GUI design.
+- Recurring aid ledger is scrollable and can be cancelled from the war interface.
+- Peace treaties support multiple linked claims and a distinct Renounce Claim term as well as claim transfer.
+- Peace/war authority checks were hardened so supporting factions cannot sign peace for principal belligerents and settlement managers cannot bind joined parent factions without faction authority.
+- Capitulation only forces terms within the dominant side's available war-score budget.
+
+GUI / UX
+- Expanded dropdown menus render in a top overlay layer and receive input before controls underneath them.
+- Settlement Manage remains split into Locations / Identity / Claims and now also includes Members.
+- Settlement member management is available in the GUI: add Citizen, add Co-owner, remove non-owner member.
+- Same-faction outsiders receive only a limited public settlement summary; private treasury, residents, claims, effects and military data are not sent to them.
+- Settlement Effects list scrolls instead of silently hiding effect #8 and beyond.
+- Recurring war-aid ledger scrolls when many commitments exist.
+
+MERCENARIES
+- Military snapshot/UI exposes mercenary status and next payment information in addition to count and wage obligation.
+- Contract payment success/failure contributes to faction Reliability.
+
+RELIGION / FAMILY
+- Prayer Devotion gain is configurable.
+- Players can donate silver to their faith from the Character Sheet for configurable Devotion gain.
+- Devotion tiers now have real ruler-settlement effects instead of being labels only; higher tiers grant increasing prosperity/morale and, at high devotion, daily stability support.
+- Religion spouse limits and extra-spouse effect scaling are configurable instead of hardcoded.
+- Character reset now clears devotion/divorce/candidate/cooldown state promised by the campaign reset design.
+
+SETTLEMENTS
+- City-State progression now retains the housing requirement.
+- Settlement member management moved into the campaign GUI.
+- Population cleanup is hardened so dead/discarded registered villagers are removed without treating chunk unload/dimension changes as deaths.
+- Faction Unit Color selection now uses Villager Recruits' real 25-color palette instead of Minecraft dye ordinals.
+
+PROTECTED ADMIN POLITIES
+- Protected settlements/factions are rejected server-side by diplomacy paths, not merely hidden from normal GUI choices.
+- Non-admin players cannot manage protected settlements even if an old save still gives them a settlement role.
+
+ADMIN / RECOVERY / DEBUG
+- Destructive character reset requires explicit confirmation and matches the documented reset scope.
+- Added confirmed settlement reset/delete while preserving Recruits world entities/claims.
+- Added admin setowner / addcoowner / removecoowner / settier repair commands.
+- Added admin clearclaims / clearhousing / cleararmydata / clearmodifiers repair commands.
+- Added debug forced-capitulation helper.
+- Added first concrete campaign-event debug hook: Plague can be triggered/ended as a timed settlement modifier.
+- Existing inspect/recalculate/modifier/time/levy/mercenary/devotion/war-score tools remain available.
+
+NETWORK
+- Campaign protocol is now 27. Every client and server must use the same 2.4.0 build.
+
+INTENTIONAL BOUNDARIES
+- Children/heirs/fertility remain out of scope.
+- Tactical freecam, formations, testudo/phalanx, Total War unit overview and commander-combat systems remain in the separate Recruits addon line.
+- Direct Independence War declaration remains reserved for a future sovereignty/vassal system; 2.4 retains independent diplomacy and Recognize Independence peace terms.
