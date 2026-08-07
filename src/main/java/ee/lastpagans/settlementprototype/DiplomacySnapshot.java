@@ -28,6 +28,8 @@ public record DiplomacySnapshot(
         String own = CampaignManager.factionId(player);
         String ownName = CampaignManager.factionName(own);
         CampaignData campaign = CampaignData.get(player.serverLevel());
+        Campaign23Data campaign23 = Campaign23Data.get(player.serverLevel());
+        boolean adminViewer = player.createCommandSourceStack().hasPermission(2);
         RecruitsFaction ownFaction = own.isBlank() || FactionEvents.recruitsFactionManager == null ? null
                 : FactionEvents.recruitsFactionManager.getFactionByStringID(own);
         boolean leader = ownFaction != null && player.getUUID().equals(ownFaction.getTeamLeaderUUID());
@@ -39,6 +41,9 @@ public record DiplomacySnapshot(
         if (FactionEvents.recruitsFactionManager != null) {
             for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
                 if (faction == null || faction.getStringID() == null || faction.getStringID().equals(own)) continue;
+                // Protected admin polities are intentionally absent from ordinary player diplomacy. Operators can
+                // still see them for diagnostics, but every mutating action remains server-authoritative.
+                if (!adminViewer && campaign23.factionProtected(faction.getStringID())) continue;
                 CampaignData.DiplomacyRecord relation = campaign.relation(own, faction.getStringID());
                 PrototypeData.CharacterRecord ownCharacter = PrototypeData.get(player.serverLevel()).getCharacter(player.getUUID());
                 String ownFaith = ownCharacter == null ? "" : ownCharacter.getFaith();
@@ -54,6 +59,8 @@ public record DiplomacySnapshot(
 
         PrototypeData settlementsData = PrototypeData.get(player.serverLevel());
         List<SettlementTarget> settlements = settlementsData.getSettlements().stream()
+                .filter(value -> adminViewer || (!campaign23.settlementProtected(value.getId())
+                        && !campaign23.factionProtected(value.getFactionTeam())))
                 .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
                         CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(),
                         PrototypeManager.canManage(player, value), value.getClaimLinks().stream()
@@ -66,7 +73,6 @@ public record DiplomacySnapshot(
         if (!own.isBlank()) proposals.addAll(campaign.proposalsFor(own).stream()
                 .map(value -> new ProposalEntry(value.id(), value.type().name(), value.fromFaction(), CampaignManager.factionName(value.fromFaction()), value.linkedWar(), "", true, false))
                 .toList());
-        Campaign23Data campaign23 = Campaign23Data.get(player.serverLevel());
         for (Campaign23Data.PeaceOfferRecord offer : campaign23.peaceOffers()) {
             CampaignData.WarRecord war = offer.warId() == null ? null : campaign.getWar(offer.warId());
             if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) continue;
