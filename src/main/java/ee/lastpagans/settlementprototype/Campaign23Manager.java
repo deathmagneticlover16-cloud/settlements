@@ -613,12 +613,13 @@ public final class Campaign23Manager {
         String current = LEVY_SERVICE_MODIFIER_IDS.stream()
                 .filter(id -> extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals(id)))
                 .max(Comparator.comparingInt(Campaign23Manager::levyServiceStage)).orElse("");
-        clearLevyServiceModifiers(extra, settlement.getId(), desired);
-        if (desired.isBlank()) return;
-        if (!desired.equals(current) || extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(desired))) {
-            extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), desired, 0));
-            if (levyServiceStage(desired) > levyServiceStage(current)) {
-                settlement.addChronicle("Levy service penalty began: " + pretty(desired) + ".");
+        final String desiredModifier = desired;
+        clearLevyServiceModifiers(extra, settlement.getId(), desiredModifier);
+        if (desiredModifier.isBlank()) return;
+        if (!desiredModifier.equals(current) || extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(desiredModifier))) {
+            extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), desiredModifier, 0));
+            if (levyServiceStage(desiredModifier) > levyServiceStage(current)) {
+                settlement.addChronicle("Levy service penalty began: " + pretty(desiredModifier) + ".");
             }
         }
     }
