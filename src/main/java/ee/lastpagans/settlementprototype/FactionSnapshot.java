@@ -34,6 +34,8 @@ public record FactionSnapshot(
         List<RankEntry> ranks,
         List<FactionChoice> availableFactions,
         List<RequestEntry> joinRequests,
+        List<InvitationEntry> invitations,
+        List<PlayerChoice> inviteCandidates,
         String message
 ) {
     public static FactionSnapshot from(ServerPlayer player, String message) {
@@ -44,7 +46,7 @@ public record FactionSnapshot(
         RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
         if (faction == null) {
             return new FactionSnapshot(factionId, factionId, new CompoundTag(), "Unknown", false, 0, "Commoner",
-                    "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(), List.of(), List.of(),
+                    "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(), List.of(), List.of(), List.of(), List.of(),
                     message == null ? "" : message);
         }
 
@@ -124,6 +126,16 @@ public record FactionSnapshot(
                 viewerTier >= 3 ? faction.getJoinRequests().stream()
                         .map(name -> new RequestEntry(name, player.getServer() != null && player.getServer().getPlayerList().getPlayerByName(name) != null))
                         .sorted(Comparator.comparing(RequestEntry::accountName, String.CASE_INSENSITIVE_ORDER)).toList() : List.of(),
+                List.of(),
+                viewerTier >= 3 && player.getServer() != null ? player.getServer().getPlayerList().getPlayers().stream()
+                        .filter(candidate -> candidate.getTeam() == null && !candidate.getUUID().equals(player.getUUID()))
+                        .map(candidate -> {
+                            PrototypeData.CharacterRecord character = settlementData.getCharacter(candidate.getUUID());
+                            String characterName = character != null && character.isCreated() ? character.getDisplayName() : candidate.getGameProfile().getName();
+                            boolean invited = Campaign23Data.get(player.serverLevel()).hasFactionInvitation(factionId, candidate.getUUID());
+                            return new PlayerChoice(candidate.getUUID(), candidate.getGameProfile().getName(), characterName, invited);
+                        })
+                        .sorted(Comparator.comparing(PlayerChoice::characterName, String.CASE_INSENSITIVE_ORDER)).toList() : List.of(),
                 message == null ? "" : message
         );
     }
@@ -142,8 +154,18 @@ public record FactionSnapshot(
             }
             factions.sort(Comparator.comparing(FactionChoice::name, String.CASE_INSENSITIVE_ORDER));
         }
+        List<InvitationEntry> invitations = new ArrayList<>();
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        if (FactionEvents.recruitsFactionManager != null) {
+            for (Campaign23Data.FactionInvitationRecord invitation : extra.factionInvitationsFor(player.getUUID())) {
+                RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(invitation.factionId());
+                if (faction == null || extra.factionProtected(invitation.factionId())) continue;
+                invitations.add(new InvitationEntry(invitation.factionId(), faction.getTeamDisplayName()));
+            }
+            invitations.sort(Comparator.comparing(InvitationEntry::factionName, String.CASE_INSENSITIVE_ORDER));
+        }
         return new FactionSnapshot("", "Independent", new CompoundTag(), "None", false, 0, "Independent",
-                "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(), factions, List.of(),
+                "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(), factions, List.of(), invitations, List.of(),
                 message == null ? "" : message);
     }
 
@@ -173,6 +195,8 @@ public record FactionSnapshot(
         writeList(buffer, ranks, RankEntry::encode);
         writeList(buffer, availableFactions, FactionChoice::encode);
         writeList(buffer, joinRequests, RequestEntry::encode);
+        writeList(buffer, invitations, InvitationEntry::encode);
+        writeList(buffer, inviteCandidates, PlayerChoice::encode);
         buffer.writeUtf(message, 256);
     }
 
@@ -201,8 +225,10 @@ public record FactionSnapshot(
         List<RankEntry> ranks = readList(buffer, RankEntry::decode, 16);
         List<FactionChoice> availableFactions = readList(buffer, FactionChoice::decode, 512);
         List<RequestEntry> joinRequests = readList(buffer, RequestEntry::decode, 512);
+        List<InvitationEntry> invitations = readList(buffer, InvitationEntry::decode, 512);
+        List<PlayerChoice> inviteCandidates = readList(buffer, PlayerChoice::decode, 512);
         return new FactionSnapshot(factionId, factionName, banner, leaderName, viewerLeader, viewerTier, viewerRank, rosterName,
-                wealth, treasury, population, activeWars, members, settlements, allies, enemies, ranks, availableFactions, joinRequests, buffer.readUtf(256));
+                wealth, treasury, population, activeWars, members, settlements, allies, enemies, ranks, availableFactions, joinRequests, invitations, inviteCandidates, buffer.readUtf(256));
     }
 
     private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, Encoder<T> encoder) {
@@ -274,6 +300,24 @@ public record FactionSnapshot(
         }
         private static RequestEntry decode(FriendlyByteBuf buffer) {
             return new RequestEntry(buffer.readUtf(80), buffer.readBoolean());
+        }
+    }
+
+    public record InvitationEntry(String factionId, String factionName) {
+        private static void encode(InvitationEntry value, FriendlyByteBuf buffer) {
+            buffer.writeUtf(value.factionId, 64); buffer.writeUtf(value.factionName, 64);
+        }
+        private static InvitationEntry decode(FriendlyByteBuf buffer) {
+            return new InvitationEntry(buffer.readUtf(64), buffer.readUtf(64));
+        }
+    }
+
+    public record PlayerChoice(UUID playerId, String accountName, String characterName, boolean alreadyInvited) {
+        private static void encode(PlayerChoice value, FriendlyByteBuf buffer) {
+            buffer.writeUUID(value.playerId); buffer.writeUtf(value.accountName, 40); buffer.writeUtf(value.characterName, 80); buffer.writeBoolean(value.alreadyInvited);
+        }
+        private static PlayerChoice decode(FriendlyByteBuf buffer) {
+            return new PlayerChoice(buffer.readUUID(), buffer.readUtf(40), buffer.readUtf(80), buffer.readBoolean());
         }
     }
 

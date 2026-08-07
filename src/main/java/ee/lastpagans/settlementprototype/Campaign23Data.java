@@ -54,6 +54,7 @@ public final class Campaign23Data extends SavedData {
     private final Map<String, Long> forcedNapUntilDay = new HashMap<>();
     private final List<ReparationRecord> reparations = new ArrayList<>();
     private final Map<UUID, MercenaryContractRecord> mercenaryContracts = new LinkedHashMap<>();
+    private final List<FactionInvitationRecord> factionInvitations = new ArrayList<>();
     /** Levy entities that were unloaded when their levy was returned. They are discarded on their next load. */
     private final Set<UUID> retiredLevyUnits = new HashSet<>();
 
@@ -157,6 +158,10 @@ public final class Campaign23Data extends SavedData {
             MercenaryContractRecord value = MercenaryContractRecord.fromNBT((CompoundTag) raw);
             if (value.unitId() != null && !value.settlementId().isBlank()) data.mercenaryContracts.put(value.unitId(), value);
         }
+        for (Tag raw : tag.getList("FactionInvitations", Tag.TAG_COMPOUND)) {
+            FactionInvitationRecord value = FactionInvitationRecord.fromNBT((CompoundTag) raw);
+            if (value.id() != null && value.targetPlayer() != null && !value.factionId().isBlank()) data.factionInvitations.add(value);
+        }
         for (Tag raw : tag.getList("RetiredLevyUnits", Tag.TAG_INT_ARRAY)) {
             try { data.retiredLevyUnits.add(net.minecraft.nbt.NbtUtils.loadUUID(raw)); }
             catch (IllegalArgumentException ignored) { }
@@ -213,6 +218,7 @@ public final class Campaign23Data extends SavedData {
         writeStringLongMap(tag, "ForcedNapUntil", forcedNapUntilDay);
         ListTag reparationsTag = new ListTag(); reparations.forEach(value -> reparationsTag.add(value.toNBT())); tag.put("Reparations", reparationsTag);
         ListTag mercenaryTag = new ListTag(); mercenaryContracts.values().forEach(value -> mercenaryTag.add(value.toNBT())); tag.put("MercenaryContracts", mercenaryTag);
+        ListTag invitationTag = new ListTag(); factionInvitations.forEach(value -> invitationTag.add(value.toNBT())); tag.put("FactionInvitations", invitationTag);
         ListTag retiredLevyTag = new ListTag(); retiredLevyUnits.forEach(value -> retiredLevyTag.add(net.minecraft.nbt.NbtUtils.createUUID(value))); tag.put("RetiredLevyUnits", retiredLevyTag);
         return tag;
     }
@@ -352,6 +358,29 @@ public final class Campaign23Data extends SavedData {
         return mercenaryContracts.values().stream().filter(value -> value.factionId().equals(id)).toList();
     }
 
+    public List<FactionInvitationRecord> factionInvitationsFor(UUID player) {
+        if (player == null) return List.of();
+        return factionInvitations.stream().filter(value -> player.equals(value.targetPlayer())).toList();
+    }
+    public boolean hasFactionInvitation(String factionId, UUID player) {
+        if (factionId == null || factionId.isBlank() || player == null) return false;
+        return factionInvitations.stream().anyMatch(value -> player.equals(value.targetPlayer()) && factionId.equals(value.factionId()));
+    }
+    public void addFactionInvitation(String factionId, UUID player, UUID inviter, long createdAtMillis) {
+        if (factionId == null || factionId.isBlank() || player == null || hasFactionInvitation(factionId, player)) return;
+        factionInvitations.add(new FactionInvitationRecord(UUID.randomUUID(), factionId, player, inviter, Math.max(0L, createdAtMillis)));
+        setDirty();
+    }
+    public boolean removeFactionInvitation(String factionId, UUID player) {
+        if (factionId == null || factionId.isBlank() || player == null) return false;
+        boolean removed = factionInvitations.removeIf(value -> player.equals(value.targetPlayer()) && factionId.equals(value.factionId()));
+        if (removed) setDirty();
+        return removed;
+    }
+    public void clearFactionInvitations(UUID player) {
+        if (player != null && factionInvitations.removeIf(value -> player.equals(value.targetPlayer()))) setDirty();
+    }
+
     public void markRetiredLevy(UUID unitId) { if (unitId != null && retiredLevyUnits.add(unitId)) setDirty(); }
     public boolean isRetiredLevy(UUID unitId) { return unitId != null && retiredLevyUnits.contains(unitId); }
     public boolean consumeRetiredLevy(UUID unitId) {
@@ -373,6 +402,7 @@ public final class Campaign23Data extends SavedData {
         levyDeployments.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
         candidateHistory.remove(player);
         mercenaryContracts.entrySet().removeIf(entry -> player.equals(entry.getValue().originalOwnerId()));
+        factionInvitations.removeIf(value -> player.equals(value.targetPlayer()) || player.equals(value.inviter()));
         setDirty();
     }
 
@@ -463,6 +493,26 @@ public final class Campaign23Data extends SavedData {
     }
 
 
+
+    public record FactionInvitationRecord(UUID id, String factionId, UUID targetPlayer, UUID inviter, long createdAtMillis) {
+        public FactionInvitationRecord {
+            if (id == null) id = UUID.randomUUID();
+            factionId = factionId == null ? "" : factionId;
+            createdAtMillis = Math.max(0L, createdAtMillis);
+        }
+        private CompoundTag toNBT() {
+            CompoundTag tag = new CompoundTag();
+            tag.putUUID("Id", id); tag.putString("Faction", factionId);
+            if (targetPlayer != null) tag.putUUID("Target", targetPlayer);
+            if (inviter != null) tag.putUUID("Inviter", inviter);
+            tag.putLong("Created", createdAtMillis);
+            return tag;
+        }
+        private static FactionInvitationRecord fromNBT(CompoundTag tag) {
+            return new FactionInvitationRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("Faction"),
+                    tag.hasUUID("Target") ? tag.getUUID("Target") : null, tag.hasUUID("Inviter") ? tag.getUUID("Inviter") : null, tag.getLong("Created"));
+        }
+    }
 
     public record MercenaryContractRecord(UUID unitId, UUID originalOwnerId, String settlementId, String factionId,
                                            int wage, int intervalDays, long nextPaymentDay, int missedPayments, boolean desertPending) {

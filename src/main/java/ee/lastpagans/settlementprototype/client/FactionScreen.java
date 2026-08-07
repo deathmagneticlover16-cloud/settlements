@@ -16,7 +16,7 @@ import java.util.List;
 
 public final class FactionScreen extends ScaledCampaignScreen {
     private static final int W = 560;
-    private static final int H = 410;
+    private static final int H = 440;
     private final FactionSnapshot snapshot;
     private int left;
     private int top;
@@ -28,6 +28,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private DropdownWidget settlementDrop;
     private DropdownWidget availableFactionDrop;
     private DropdownWidget requestDrop;
+    private DropdownWidget invitationDrop;
+    private DropdownWidget inviteCandidateDrop;
     private EditBox titleEdit;
     private EditBox factionNameEdit;
     private DropdownWidget teamColorDrop;
@@ -40,6 +42,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private int settlementIndex;
     private int availableFactionIndex;
     private int requestIndex;
+    private int invitationIndex;
+    private int inviteCandidateIndex;
 
     public FactionScreen(FactionSnapshot snapshot) {
         super(Component.literal("Faction"));
@@ -73,6 +77,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
         settlementDrop = null;
         availableFactionDrop = null;
         requestDrop = null;
+        invitationDrop = null;
+        inviteCandidateDrop = null;
         titleEdit = null;
         factionNameEdit = null;
         teamColorDrop = null;
@@ -106,6 +112,16 @@ public final class FactionScreen extends ScaledCampaignScreen {
                         .bounds(left + 360, top + 274, 92, 20).build());
                 addRenderableWidget(Button.builder(Component.literal("Withdraw"), button -> factionApplication(true))
                         .bounds(left + 458, top + 274, 78, 20).build());
+            }
+            if (!snapshot.invitations().isEmpty()) {
+                List<String> invitations = snapshot.invitations().stream().map(FactionSnapshot.InvitationEntry::factionName).toList();
+                invitationIndex = Math.max(0, Math.min(invitationIndex, invitations.size() - 1));
+                invitationDrop = addRenderableWidget(new DropdownWidget(left + 96, top + 332, 258, 20, invitations, invitationIndex,
+                        value -> invitationIndex = Math.max(0, invitations.indexOf(value))));
+                addRenderableWidget(Button.builder(Component.literal("Accept"), button -> factionInvitation(true))
+                        .bounds(left + 360, top + 332, 82, 20).build());
+                addRenderableWidget(Button.builder(Component.literal("Decline"), button -> factionInvitation(false))
+                        .bounds(left + 448, top + 332, 88, 20).build());
             }
             setInitialFocus(factionNameEdit);
             return;
@@ -156,10 +172,20 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 addRenderableWidget(Button.builder(Component.literal("Decline"), button -> processApplication(false))
                         .bounds(left + 312, top + 342, 88, 20).build());
             }
+            if (snapshot.viewerTier() >= 3 && !snapshot.inviteCandidates().isEmpty()) {
+                List<String> candidates = snapshot.inviteCandidates().stream()
+                        .map(value -> value.characterName() + " (" + value.accountName() + ")" + (value.alreadyInvited() ? " • invited" : ""))
+                        .toList();
+                inviteCandidateIndex = Math.max(0, Math.min(inviteCandidateIndex, candidates.size() - 1));
+                inviteCandidateDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 368, 278, 20, candidates, inviteCandidateIndex,
+                        value -> inviteCandidateIndex = Math.max(0, candidates.indexOf(value))));
+                addRenderableWidget(Button.builder(Component.literal("Send Invitation"), button -> sendInvitation())
+                        .bounds(left + 306, top + 368, 110, 20).build());
+            }
             if (!snapshot.viewerLeader()) {
                 addRenderableWidget(Button.builder(Component.literal("Leave Faction"), button ->
                                 PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("LEAVE_FACTION", null, 0, "")))
-                        .bounds(left + 438, top + 102, 100, 20).build());
+                        .bounds(left + 424, top + 368, 114, 20).build());
             }
         }
         if (tab == Tab.RANKS && snapshot.viewerLeader() && !snapshot.ranks().isEmpty()) {
@@ -205,6 +231,18 @@ public final class FactionScreen extends ScaledCampaignScreen {
         if (snapshot.settlements().isEmpty()) return;
         FactionSnapshot.SettlementEntry settlement = snapshot.settlements().get(Math.min(settlementIndex, snapshot.settlements().size() - 1));
         PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket(action, null, 100, settlement.id()));
+    }
+
+    private void factionInvitation(boolean accept) {
+        if (snapshot.invitations().isEmpty()) return;
+        FactionSnapshot.InvitationEntry invitation = snapshot.invitations().get(Math.min(invitationIndex, snapshot.invitations().size() - 1));
+        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket(accept ? "ACCEPT_FACTION_INVITE" : "DECLINE_FACTION_INVITE", null, 0, invitation.factionId()));
+    }
+
+    private void sendInvitation() {
+        if (snapshot.inviteCandidates().isEmpty()) return;
+        FactionSnapshot.PlayerChoice candidate = snapshot.inviteCandidates().get(Math.min(inviteCandidateIndex, snapshot.inviteCandidates().size() - 1));
+        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("SEND_FACTION_INVITE", candidate.playerId(), 0, ""));
     }
 
     private void factionApplication(boolean withdraw) {
@@ -254,6 +292,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
         if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseClicked(uiX, uiY, button)) return true;
         if (availableFactionDrop != null && availableFactionDrop.isExpanded() && availableFactionDrop.mouseClicked(uiX, uiY, button)) return true;
         if (requestDrop != null && requestDrop.isExpanded() && requestDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (invitationDrop != null && invitationDrop.isExpanded() && invitationDrop.mouseClicked(uiX, uiY, button)) return true;
+        if (inviteCandidateDrop != null && inviteCandidateDrop.isExpanded() && inviteCandidateDrop.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
@@ -268,6 +308,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
         if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseScrolled(uiX, uiY, delta)) return true;
         if (availableFactionDrop != null && availableFactionDrop.isExpanded() && availableFactionDrop.mouseScrolled(uiX, uiY, delta)) return true;
         if (requestDrop != null && requestDrop.isExpanded() && requestDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (invitationDrop != null && invitationDrop.isExpanded() && invitationDrop.mouseScrolled(uiX, uiY, delta)) return true;
+        if (inviteCandidateDrop != null && inviteCandidateDrop.isExpanded() && inviteCandidateDrop.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
 
@@ -295,7 +337,9 @@ public final class FactionScreen extends ScaledCampaignScreen {
             } else {
                 graphics.drawCenteredString(font, "Select a faction to apply, or withdraw an existing application.", left + W / 2, top + 300, 0xFFAAAAAA);
             }
-            if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 50), left + W / 2, top + 366, 0xFFFFD27A);
+            graphics.drawCenteredString(font, "FACTION INVITATIONS", left + W / 2, top + 312, 0xFFE7D8B0);
+            if (snapshot.invitations().isEmpty()) graphics.drawCenteredString(font, "No pending invitations.", left + W / 2, top + 338, 0xFF999999);
+            if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 50), left + W / 2, top + 398, 0xFFFFD27A);
             super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
             return;
@@ -312,7 +356,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             case SETTLEMENTS -> renderSettlements(graphics);
             case RANKS -> renderRanks(graphics);
         }
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 366, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 398, 0xFFFFD27A);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -360,6 +404,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
         }
         if (snapshot.viewerTier() >= 3) {
             graphics.drawString(font, "Application review", left + 24, top + 330, 0xFFAAAAAA, false);
+            graphics.drawString(font, "Invite an online independent player", left + 24, top + 356, 0xFFAAAAAA, false);
         }
     }
 
