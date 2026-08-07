@@ -817,6 +817,26 @@ public final class PrototypeData extends SavedData {
 
         public void updateClaimName(String value) { claimName = value == null ? "" : value; dirty(); }
 
+        /** Updates the display name of one linked Recruits claim without disturbing the rest of a multi-claim city. */
+        public boolean updateClaimName(String dimension, UUID id, String value) {
+            if (id == null) return false;
+            String safeName = value == null ? "" : value;
+            if (id.equals(claimId) && safeEquals(dimension, claimDimension)) {
+                claimName = safeName;
+                dirty();
+                return true;
+            }
+            for (int i = 0; i < additionalClaims.size(); i++) {
+                ClaimLink link = additionalClaims.get(i);
+                if (id.equals(link.id()) && safeEquals(dimension, link.dimension())) {
+                    additionalClaims.set(i, new ClaimLink(link.dimension(), link.id(), safeName));
+                    dirty();
+                    return true;
+                }
+            }
+            return false;
+        }
+
         public void addFood(int amount, String contributor) {
             if (amount <= 0) return;
             food += amount;

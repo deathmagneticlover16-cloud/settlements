@@ -91,7 +91,10 @@ public final class PrototypeEvents {
                 event.getLevel().dimension().location().toString(),
                 claim.getUUID()
         );
-        if (settlement != null) settlement.clearClaimLink();
+        if (settlement != null) {
+            settlement.unlinkClaim(event.getLevel().dimension().location().toString(), claim.getUUID());
+            settlement.addChronicle("A linked Recruits claim was removed: " + claim.getName() + ".");
+        }
     }
 
     public static void onClaimUpdated(ClaimEvent.Updated event) {
@@ -103,8 +106,14 @@ public final class PrototypeEvents {
                 claim.getUUID()
         );
         if (settlement != null) {
-            settlement.updateClaimName(claim.getName());
-            if (claim.getOwnerFactionStringID() != null) settlement.setFactionTeam(claim.getOwnerFactionStringID());
+            settlement.updateClaimName(event.getLevel().dimension().location().toString(), claim.getUUID(), claim.getName());
+            // A multi-claim city may temporarily contain claims with different Recruits owners during a war.
+            // Do not let one claim update silently transfer the entire Settlements polity. Whole-settlement
+            // ownership changes are handled explicitly by Settlements diplomacy/admin actions.
+            if (settlement.getClaimCount() == 1 && claim.getOwnerFactionStringID() != null
+                    && !claim.getOwnerFactionStringID().isBlank()) {
+                settlement.setFactionTeam(claim.getOwnerFactionStringID());
+            }
         }
     }
 
