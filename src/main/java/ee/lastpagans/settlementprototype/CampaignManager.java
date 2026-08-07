@@ -101,6 +101,11 @@ public final class CampaignManager {
             openMain(player);
             return;
         }
+        if ("REQUEST_JOIN".equals(action) || "CANCEL_JOIN_REQUEST".equals(action)) {
+            String result = "REQUEST_JOIN".equals(action) ? requestFactionJoin(player, value) : cancelFactionJoinRequest(player, value);
+            openFaction(player, result);
+            return;
+        }
         String factionId = factionId(player);
         if (factionId.isBlank()) {
             openFaction(player, "You are not a member of a faction. Create one below or ask to join an existing faction.");
@@ -110,6 +115,10 @@ public final class CampaignManager {
         boolean leader = isFactionLeader(player, factionId);
         String result;
         switch (action) {
+            case "ACCEPT_JOIN_REQUEST" -> result = acceptFactionJoinRequest(player, factionId, value);
+            case "REJECT_JOIN_REQUEST" -> result = rejectFactionJoinRequest(player, factionId, value);
+            case "LEAVE_FACTION" -> result = leaveFaction(player, factionId);
+            case "KICK_MEMBER" -> result = kickFactionMember(player, factionId, targetPlayer);
             case "SET_MEMBER_RANK" -> {
                 if (!leader) result = "Only the faction leader may assign ranks.";
                 else if (targetPlayer == null) result = "Select a faction member.";
@@ -169,6 +178,141 @@ public final class CampaignManager {
             default -> result = "Unknown faction action.";
         }
         openFaction(player, result);
+    }
+
+    private static String requestFactionJoin(ServerPlayer player, String requestedFactionId) {
+        if (player.getTeam() != null) return "Leave your current faction before requesting to join another one.";
+        if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
+        String targetId = requestedFactionId == null ? "" : requestedFactionId.trim();
+        RecruitsFaction target = FactionEvents.recruitsFactionManager.getFactionByStringID(targetId);
+        if (target == null) return "That faction no longer exists.";
+        if (Campaign23Data.get(player.serverLevel()).factionProtected(targetId)) return "Protected admin factions do not accept player applications.";
+        if (!target.canAddPlayer()) return target.getTeamDisplayName() + " has reached its member limit.";
+
+        String applicant = player.getDisplayName().getString();
+        for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
+            if (faction == null) continue;
+            boolean pending = faction.getJoinRequests().stream().anyMatch(name -> name.equalsIgnoreCase(applicant));
+            if (!pending) continue;
+            if (targetId.equals(faction.getStringID())) return "Your application to " + target.getTeamDisplayName() + " is already pending.";
+            return "You already have a pending application to " + faction.getTeamDisplayName() + ". Cancel it before applying elsewhere.";
+        }
+
+        FactionEvents.sendJoinRequest(player.serverLevel(), player, targetId);
+        boolean recorded = target.getJoinRequests().stream().anyMatch(name -> name.equalsIgnoreCase(applicant));
+        if (!recorded) return "Recruits did not record the faction application.";
+        CampaignToastSender.send(player, "FACTION APPLICATION", "Application sent to " + target.getTeamDisplayName() + ".");
+        CampaignToastSender.faction(player.getServer(), targetId, "FACTION APPLICATION",
+                player.getGameProfile().getName() + " has requested to join your faction.");
+        return "Application sent to " + target.getTeamDisplayName() + ".";
+    }
+
+    private static String cancelFactionJoinRequest(ServerPlayer player, String requestedFactionId) {
+        if (player.getTeam() != null) return "You are already a faction member.";
+        if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
+        RecruitsFaction target = FactionEvents.recruitsFactionManager.getFactionByStringID(requestedFactionId == null ? "" : requestedFactionId.trim());
+        if (target == null) return "That faction no longer exists.";
+        String applicant = player.getDisplayName().getString();
+        String stored = target.getJoinRequests().stream().filter(name -> name.equalsIgnoreCase(applicant)).findFirst().orElse("");
+        if (stored.isBlank()) return "You do not have a pending application to " + target.getTeamDisplayName() + ".";
+        target.removeJoinRequest(stored);
+        FactionEvents.recruitsFactionManager.save(player.serverLevel());
+        FactionEvents.recruitsFactionManager.broadcastFactionsToAll(player.serverLevel());
+        CampaignToastSender.send(player, "APPLICATION WITHDRAWN", "Your application to " + target.getTeamDisplayName() + " was withdrawn.");
+        return "Application to " + target.getTeamDisplayName() + " withdrawn.";
+    }
+
+    private static String acceptFactionJoinRequest(ServerPlayer player, String factionId, String applicantName) {
+        if (!canProcessFactionApplications(player, factionId)) return "Your faction rank cannot process membership applications.";
+        RecruitsFaction faction = FactionEvents.recruitsFactionManager == null ? null : FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (faction == null) return "Faction data is unavailable.";
+        String requested = applicantName == null ? "" : applicantName.trim();
+        String stored = faction.getJoinRequests().stream().filter(name -> name.equalsIgnoreCase(requested)).findFirst().orElse("");
+        if (stored.isBlank()) return "That membership application no longer exists.";
+        ServerPlayer applicant = player.getServer() == null ? null : player.getServer().getPlayerList().getPlayerByName(stored);
+        if (applicant == null) return stored + " must be online before their application can be accepted.";
+        if (applicant.getTeam() != null) {
+            faction.removeJoinRequest(stored);
+            FactionEvents.recruitsFactionManager.save(player.serverLevel());
+            return stored + " has already joined another faction.";
+        }
+        if (!faction.canAddPlayer()) return faction.getTeamDisplayName() + " has reached its member limit.";
+
+        FactionEvents.addPlayerToTeam(player, player.serverLevel(), factionId, applicant.getGameProfile().getName());
+        if (applicant.getTeam() == null || !factionId.equals(applicant.getTeam().getName())) {
+            return "Recruits did not confirm " + stored + " as a faction member.";
+        }
+        CampaignData.get(player.serverLevel()).setFactionMemberRank(factionId, applicant.getUUID(), 0);
+        PrototypeManager.broadcastProfiles(player.getServer());
+        CampaignToastSender.send(applicant, "APPLICATION ACCEPTED", "You have joined " + faction.getTeamDisplayName() + ".");
+        CampaignToastSender.faction(player.getServer(), factionId, "NEW FACTION MEMBER", applicant.getGameProfile().getName() + " joined the faction.");
+        return applicant.getGameProfile().getName() + " joined " + faction.getTeamDisplayName() + ".";
+    }
+
+    private static String rejectFactionJoinRequest(ServerPlayer player, String factionId, String applicantName) {
+        if (!canProcessFactionApplications(player, factionId)) return "Your faction rank cannot process membership applications.";
+        RecruitsFaction faction = FactionEvents.recruitsFactionManager == null ? null : FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (faction == null) return "Faction data is unavailable.";
+        String requested = applicantName == null ? "" : applicantName.trim();
+        String stored = faction.getJoinRequests().stream().filter(name -> name.equalsIgnoreCase(requested)).findFirst().orElse("");
+        if (stored.isBlank()) return "That membership application no longer exists.";
+        faction.removeJoinRequest(stored);
+        FactionEvents.recruitsFactionManager.save(player.serverLevel());
+        FactionEvents.recruitsFactionManager.broadcastFactionsToAll(player.serverLevel());
+        ServerPlayer applicant = player.getServer() == null ? null : player.getServer().getPlayerList().getPlayerByName(stored);
+        if (applicant != null) CampaignToastSender.send(applicant, "APPLICATION DECLINED", faction.getTeamDisplayName() + " declined your membership application.");
+        return stored + "'s application was declined.";
+    }
+
+    private static String leaveFaction(ServerPlayer player, String factionId) {
+        RecruitsFaction faction = FactionEvents.recruitsFactionManager == null ? null : FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (faction == null) return "Faction data is unavailable.";
+        if (player.getUUID().equals(faction.getTeamLeaderUUID())) return "The faction leader cannot leave. Transfer or dissolve leadership first.";
+        boolean ownsSettlement = PrototypeData.get(player.serverLevel()).settlementsForFaction(factionId).stream()
+                .anyMatch(settlement -> player.getUUID().equals(settlement.getOwnerId()));
+        if (ownsSettlement) return "Transfer ownership of your faction settlements before leaving the faction.";
+        String name = player.getGameProfile().getName();
+        FactionEvents.leaveTeam(false, player, factionId, player.serverLevel(), false);
+        if (player.getTeam() != null && factionId.equals(player.getTeam().getName())) return "Recruits did not confirm that you left the faction.";
+        CampaignData.get(player.serverLevel()).clearFactionMemberRank(factionId, player.getUUID());
+        PrototypeData.get(player.serverLevel()).clearSelection(player.getUUID());
+        PrototypeManager.broadcastProfiles(player.getServer());
+        CampaignToastSender.send(player, "FACTION LEFT", "You left " + faction.getTeamDisplayName() + ".");
+        CampaignToastSender.faction(player.getServer(), factionId, "FACTION MEMBER LEFT", name + " left the faction.");
+        return "You left " + faction.getTeamDisplayName() + ".";
+    }
+
+    private static String kickFactionMember(ServerPlayer player, String factionId, UUID targetId) {
+        if (!isFactionLeader(player, factionId)) return "Only the faction leader may remove members.";
+        if (targetId == null || targetId.equals(player.getUUID())) return "Select another faction member.";
+        RecruitsFaction faction = FactionEvents.recruitsFactionManager == null ? null : FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (faction == null) return "Faction data is unavailable.";
+        if (targetId.equals(faction.getTeamLeaderUUID())) return "The faction leader cannot be removed.";
+        String account = faction.getMembers().stream().filter(info -> info != null && targetId.equals(info.getUUID()))
+                .map(info -> info.getName()).findFirst().orElse("");
+        if (account.isBlank()) return "That player is no longer a member of your faction.";
+        boolean ownsSettlement = PrototypeData.get(player.serverLevel()).settlementsForFaction(factionId).stream()
+                .anyMatch(settlement -> targetId.equals(settlement.getOwnerId()));
+        if (ownsSettlement) return "Transfer that player's settlement ownership before removing them from the faction.";
+
+        ServerPlayer target = player.getServer() == null ? null : player.getServer().getPlayerList().getPlayer(targetId);
+        if (target != null) {
+            FactionEvents.tryToRemoveFromTeam(player.getTeam(), player, target, player.serverLevel(), target.getDisplayName().getString(), true);
+        } else {
+            FactionEvents.removeOfflinePlayerFromTeam(player, account, player.serverLevel());
+        }
+        boolean remains = faction.getMembers().stream().anyMatch(info -> info != null && targetId.equals(info.getUUID()));
+        if (remains) return "Recruits did not confirm removal of " + account + ".";
+        CampaignData.get(player.serverLevel()).clearFactionMemberRank(factionId, targetId);
+        PrototypeManager.broadcastProfiles(player.getServer());
+        if (target != null) CampaignToastSender.send(target, "REMOVED FROM FACTION", "You were removed from " + faction.getTeamDisplayName() + ".");
+        CampaignToastSender.faction(player.getServer(), factionId, "FACTION MEMBER REMOVED", account + " was removed from the faction.");
+        return account + " was removed from " + faction.getTeamDisplayName() + ".";
+    }
+
+    private static boolean canProcessFactionApplications(ServerPlayer player, String factionId) {
+        if (player.createCommandSourceStack().hasPermission(2) || isFactionLeader(player, factionId)) return true;
+        return CampaignData.get(player.serverLevel()).factionRankTier(factionId, player.getUUID(), false) >= 3;
     }
 
     public static void handleDiplomacyAction(ServerPlayer player, String actionRaw, String targetFaction,

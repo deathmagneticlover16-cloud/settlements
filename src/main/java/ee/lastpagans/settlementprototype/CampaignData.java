@@ -607,6 +607,12 @@ public final class CampaignData extends SavedData {
         setDirty();
     }
 
+    public void clearFactionMemberRank(String factionId, UUID playerId) {
+        if (factionId == null || factionId.isBlank() || playerId == null) return;
+        FactionProfile profile = factionProfiles.get(factionId);
+        if (profile != null && profile.memberRanks.remove(playerId) != null) setDirty();
+    }
+
     public void setFactionRankTitle(String factionId, int tier, String title) {
         if (factionId == null || factionId.isBlank()) return;
         factionProfile(factionId).rankTitles.put(clamp(tier, 0, 4), PrototypeData.cleanText(title, CampaignDefinitions.defaultRankTitle(tier), 24));

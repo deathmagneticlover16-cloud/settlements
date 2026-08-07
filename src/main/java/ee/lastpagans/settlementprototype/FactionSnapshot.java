@@ -20,6 +20,7 @@ public record FactionSnapshot(
         CompoundTag banner,
         String leaderName,
         boolean viewerLeader,
+        int viewerTier,
         String viewerRank,
         String rosterName,
         int realmWealth,
@@ -31,26 +32,28 @@ public record FactionSnapshot(
         List<String> allies,
         List<String> enemies,
         List<RankEntry> ranks,
+        List<FactionChoice> availableFactions,
+        List<RequestEntry> joinRequests,
         String message
 ) {
     public static FactionSnapshot from(ServerPlayer player, String message) {
         String factionId = player.getTeam() == null ? "" : player.getTeam().getName();
         if (factionId.isBlank() || FactionEvents.recruitsFactionManager == null) {
-            return new FactionSnapshot("", "Independent", new CompoundTag(), "None", false, "Independent",
-                    "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(),
-                    message == null ? "" : message);
+            return independentSnapshot(player, message);
         }
         RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
         if (faction == null) {
-            return new FactionSnapshot(factionId, factionId, new CompoundTag(), "Unknown", false, "Commoner",
-                    "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(),
+            return new FactionSnapshot(factionId, factionId, new CompoundTag(), "Unknown", false, 0, "Commoner",
+                    "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(), List.of(), List.of(),
                     message == null ? "" : message);
         }
 
         PrototypeData settlementData = PrototypeData.get(player.serverLevel());
         CampaignData campaign = CampaignData.get(player.serverLevel());
-        boolean viewerLeader = player.createCommandSourceStack().hasPermission(2) || player.getUUID().equals(faction.getTeamLeaderUUID());
-        String viewerRank = campaign.factionRankTitle(factionId, player.getUUID(), player.getUUID().equals(faction.getTeamLeaderUUID()));
+        boolean actualLeader = player.getUUID().equals(faction.getTeamLeaderUUID());
+        boolean viewerLeader = player.createCommandSourceStack().hasPermission(2) || actualLeader;
+        int viewerTier = viewerLeader ? 4 : campaign.factionRankTier(factionId, player.getUUID(), false);
+        String viewerRank = campaign.factionRankTitle(factionId, player.getUUID(), actualLeader);
 
         Map<UUID, String> accountNames = new LinkedHashMap<>();
         for (RecruitsPlayerInfo info : faction.getMembers()) {
@@ -105,6 +108,7 @@ public record FactionSnapshot(
                 faction.getBanner() == null ? new CompoundTag() : faction.getBanner().copy(),
                 faction.getTeamLeaderName(),
                 viewerLeader,
+                viewerTier,
                 viewerRank,
                 owned.isEmpty() ? campaign.getDefaultRosterId() : campaign.assignedRosterName(owned.get(0)),
                 owned.stream().mapToInt(PrototypeData.SettlementRecord::getWealth).sum(),
@@ -116,8 +120,31 @@ public record FactionSnapshot(
                 allies,
                 enemies,
                 ranks,
+                List.of(),
+                viewerTier >= 3 ? faction.getJoinRequests().stream()
+                        .map(name -> new RequestEntry(name, player.getServer() != null && player.getServer().getPlayerList().getPlayerByName(name) != null))
+                        .sorted(Comparator.comparing(RequestEntry::accountName, String.CASE_INSENSITIVE_ORDER)).toList() : List.of(),
                 message == null ? "" : message
         );
+    }
+
+    private static FactionSnapshot independentSnapshot(ServerPlayer player, String message) {
+        List<FactionChoice> factions = new ArrayList<>();
+        if (FactionEvents.recruitsFactionManager != null) {
+            String requesterName = player.getDisplayName().getString();
+            Campaign23Data campaign23 = Campaign23Data.get(player.serverLevel());
+            for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
+                if (faction == null || faction.getStringID() == null || faction.getStringID().isBlank()) continue;
+                if (campaign23.factionProtected(faction.getStringID())) continue;
+                boolean pending = faction.getJoinRequests().stream().anyMatch(name -> name.equalsIgnoreCase(requesterName));
+                factions.add(new FactionChoice(faction.getStringID(), faction.getTeamDisplayName(), faction.getPlayers(),
+                        faction.getMaxPlayers(), pending));
+            }
+            factions.sort(Comparator.comparing(FactionChoice::name, String.CASE_INSENSITIVE_ORDER));
+        }
+        return new FactionSnapshot("", "Independent", new CompoundTag(), "None", false, 0, "Independent",
+                "None", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(), factions, List.of(),
+                message == null ? "" : message);
     }
 
     private static List<RankEntry> defaultRanks() {
@@ -132,6 +159,7 @@ public record FactionSnapshot(
         buffer.writeNbt(banner);
         buffer.writeUtf(leaderName, 80);
         buffer.writeBoolean(viewerLeader);
+        buffer.writeVarInt(viewerTier);
         buffer.writeUtf(viewerRank, 32);
         buffer.writeUtf(rosterName, 64);
         buffer.writeVarInt(realmWealth);
@@ -143,6 +171,8 @@ public record FactionSnapshot(
         buffer.writeVarInt(allies.size()); allies.forEach(value -> buffer.writeUtf(value, 64));
         buffer.writeVarInt(enemies.size()); enemies.forEach(value -> buffer.writeUtf(value, 64));
         writeList(buffer, ranks, RankEntry::encode);
+        writeList(buffer, availableFactions, FactionChoice::encode);
+        writeList(buffer, joinRequests, RequestEntry::encode);
         buffer.writeUtf(message, 256);
     }
 
@@ -153,6 +183,7 @@ public record FactionSnapshot(
         if (banner == null) banner = new CompoundTag();
         String leaderName = buffer.readUtf(80);
         boolean viewerLeader = buffer.readBoolean();
+        int viewerTier = buffer.readVarInt();
         String viewerRank = buffer.readUtf(32);
         String rosterName = buffer.readUtf(64);
         int wealth = buffer.readVarInt();
@@ -168,8 +199,10 @@ public record FactionSnapshot(
         List<String> enemies = new ArrayList<>(enemyCount);
         for (int i = 0; i < enemyCount; i++) enemies.add(buffer.readUtf(64));
         List<RankEntry> ranks = readList(buffer, RankEntry::decode, 16);
-        return new FactionSnapshot(factionId, factionName, banner, leaderName, viewerLeader, viewerRank, rosterName,
-                wealth, treasury, population, activeWars, members, settlements, allies, enemies, ranks, buffer.readUtf(256));
+        List<FactionChoice> availableFactions = readList(buffer, FactionChoice::decode, 512);
+        List<RequestEntry> joinRequests = readList(buffer, RequestEntry::decode, 512);
+        return new FactionSnapshot(factionId, factionName, banner, leaderName, viewerLeader, viewerTier, viewerRank, rosterName,
+                wealth, treasury, population, activeWars, members, settlements, allies, enemies, ranks, availableFactions, joinRequests, buffer.readUtf(256));
     }
 
     private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, Encoder<T> encoder) {
@@ -218,6 +251,29 @@ public record FactionSnapshot(
         private static SettlementEntry decode(FriendlyByteBuf buffer) {
             return new SettlementEntry(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32),
                     buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean());
+        }
+    }
+
+    public record FactionChoice(String id, String name, int players, int maxPlayers, boolean pending) {
+        private static void encode(FactionChoice value, FriendlyByteBuf buffer) {
+            buffer.writeUtf(value.id, 64);
+            buffer.writeUtf(value.name, 64);
+            buffer.writeVarInt(value.players);
+            buffer.writeVarInt(value.maxPlayers);
+            buffer.writeBoolean(value.pending);
+        }
+        private static FactionChoice decode(FriendlyByteBuf buffer) {
+            return new FactionChoice(buffer.readUtf(64), buffer.readUtf(64), buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean());
+        }
+    }
+
+    public record RequestEntry(String accountName, boolean online) {
+        private static void encode(RequestEntry value, FriendlyByteBuf buffer) {
+            buffer.writeUtf(value.accountName, 80);
+            buffer.writeBoolean(value.online);
+        }
+        private static RequestEntry decode(FriendlyByteBuf buffer) {
+            return new RequestEntry(buffer.readUtf(80), buffer.readBoolean());
         }
     }
 
