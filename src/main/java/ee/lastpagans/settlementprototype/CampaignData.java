@@ -417,8 +417,12 @@ public final class CampaignData extends SavedData {
         war.status = WarStatus.ENDED;
         war.endedDay = day;
         war.peaceTerms = PrototypeData.cleanText(terms, "Peace agreed.", 180);
-        if (!war.attackerFaction.isBlank() && !war.defenderFaction.isBlank() && !war.attackerFaction.equals(war.defenderFaction))
-            relation(war.attackerFaction, war.defenderFaction).state = TreatyState.NEUTRAL;
+        boolean parentFactionsWereBelligerents = war.type != WarType.SETTLEMENT_WAR
+                || (war.attackerFactionJoined && war.defenderFactionJoined);
+        if (parentFactionsWereBelligerents && !war.attackerFaction.isBlank() && !war.defenderFaction.isBlank()
+                && !war.attackerFaction.equals(war.defenderFaction)) {
+            relation(war.attackerFaction, war.defenderFaction).setState(TreatyState.NEUTRAL, day);
+        }
         setDirty();
     }
 
