@@ -613,8 +613,8 @@ public final class CampaignManager {
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "War escalated",
                 factionName(own) + " joined the " + side + " settlement, escalating the conflict to " + escalation + ".",
                 day, own, settlementId, CampaignData.NewsVisibility.PUBLIC);
-        CampaignToastSender.faction(player.getServer(), war.attackerFaction(), "WAR ESCALATED", factionName(own) + " joined " + settlementName + ". Conflict: " + escalation);
-        CampaignToastSender.faction(player.getServer(), war.defenderFaction(), "WAR ESCALATED", factionName(own) + " joined " + settlementName + ". Conflict: " + escalation);
+        toastPoliticalSide(player.getServer(), war.attackerFaction(), war.attackerSettlement(), "WAR ESCALATED", factionName(own) + " joined " + settlementName + ". Conflict: " + escalation);
+        toastPoliticalSide(player.getServer(), war.defenderFaction(), war.defenderSettlement(), "WAR ESCALATED", factionName(own) + " joined " + settlementName + ". Conflict: " + escalation);
         Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), attackerSide ? war.defenderFaction() : war.attackerFaction());
         return "Your faction joined the war. Conflict is now " + escalation + ".";
     }
@@ -626,6 +626,11 @@ public final class CampaignManager {
         if (!own.equals(war.defenderFaction())) return "Only the defending settlement's parent faction may formally ignore the conflict.";
         if (war.defenderFactionJoined()) return "Your faction has already joined this war.";
         Campaign23Data.get(player.serverLevel()).setIgnoredWarIntervention(war.id(), own, true);
+        String defenderSettlement = war.defenderSettlement();
+        String response = factionName(own) + " has chosen not to formally intervene in this Settlement War.";
+        CampaignToastSender.faction(player.getServer(), own, "WAR RESPONSE", "Your faction will not formally intervene. Aid or later escalation remain possible.");
+        toastSettlementManagers(player.getServer(), defenderSettlement, "PARENT FACTION DECLINES", response);
+        toastSettlementManagers(player.getServer(), war.attackerSettlement(), "WAR RESPONSE", response);
         return "Your faction will not intervene in this Settlement War. You may still send aid or join later if circumstances change.";
     }
 

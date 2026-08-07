@@ -114,3 +114,4 @@ WORLD NEWS / UI
 - Returning a bloodied levy now immediately notifies settlement managers of the casualty modifier; losses of 50%+ create Military news, and 75%+ catastrophes become public major news.
 - Settlements' replacement faction creator now preserves Recruits' configured creation requirements/cost, rejects duplicate display names/banners, and verifies that Recruits actually created the faction before reporting success.
 - Ending a local Settlement War no longer resets diplomacy between parent factions that never joined the conflict; only actual faction belligerents/supporters are synchronized back to Neutral.
+- Settlement-war Join/Ignore responses now notify the real political sides, including independent settlement managers; a defending parent that chooses Ignore visibly informs both local settlements instead of changing state silently.
