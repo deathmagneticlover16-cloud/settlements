@@ -3,6 +3,7 @@ package ee.lastpagans.settlementprototype;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsDiplomacyManager;
 import com.talhanation.recruits.world.RecruitsFaction;
+import com.talhanation.recruits.world.RecruitsFactionManager;
 import ee.lastpagans.settlementprototype.network.CampaignSnapshotPacket;
 import ee.lastpagans.settlementprototype.network.DiplomacySnapshotPacket;
 import ee.lastpagans.settlementprototype.network.FactionSnapshotPacket;
@@ -77,7 +78,15 @@ public final class CampaignManager {
     public static void handleFactionAction(ServerPlayer player, String actionRaw, UUID targetPlayer, int tier, String value) {
         String action = actionRaw == null ? "" : actionRaw.toUpperCase(Locale.ROOT);
         if ("CREATE_FACTION".equals(action)) {
-            openFaction(player, createFaction(player, value));
+            String[] parts = value == null ? new String[0] : value.split("\\|", 2);
+            ChatFormatting teamColor = ChatFormatting.WHITE;
+            String name = value;
+            if (parts.length == 2) {
+                try { teamColor = ChatFormatting.valueOf(parts[0].toUpperCase(Locale.ROOT)); }
+                catch (IllegalArgumentException ignored) {}
+                name = parts[1];
+            }
+            openFaction(player, createFaction(player, name, teamColor, (byte)Math.max(0, Math.min(15, tier))));
             return;
         }
         String factionId = factionId(player);
@@ -120,12 +129,16 @@ public final class CampaignManager {
                                              UUID proposalId, UUID warId, String extra) {
         String action = actionRaw == null ? "" : actionRaw.toUpperCase(Locale.ROOT);
         String own = factionId(player);
-        if (own.isBlank()) {
-            openDiplomacy(player, "You must belong to a Recruits faction to use diplomacy.");
-            return;
-        }
         CampaignData data = CampaignData.get(player.serverLevel());
         long day = player.serverLevel().getDayTime() / 24000L;
+        if ("DECLARE_WAR".equals(action) && extra != null && extra.toUpperCase(Locale.ROOT).startsWith("SETTLEMENT_WAR|")) {
+            openDiplomacy(player, declareSettlementWar(player, data, extra, day));
+            return;
+        }
+        if (own.isBlank()) {
+            openDiplomacy(player, "Independent rulers may declare Settlement Wars from a settlement they manage; faction treaties require a faction.");
+            return;
+        }
         String result = switch (action) {
             case "PROPOSE_NAP" -> propose(player, data, CampaignData.ProposalType.NON_AGGRESSION, own, targetFaction, null, day);
             case "PROPOSE_DEFENSIVE" -> propose(player, data, CampaignData.ProposalType.DEFENSIVE_ALLIANCE, own, targetFaction, null, day);
@@ -133,6 +146,8 @@ public final class CampaignManager {
             case "DECLARE_WAR" -> declareWar(player, data, own, targetFaction, extra, day);
             case "OFFER_PEACE" -> offerPeace(player, data, own, warId, day);
             case "CALL_TO_WAR" -> callToWar(player, data, own, targetFaction, warId, day);
+            case "JOIN_SETTLEMENT_WAR" -> joinSettlementWar(player, data, own, warId, day);
+            case "SEND_AID" -> sendWarAid(player, data, own, warId, extra, day);
             case "ACCEPT_PROPOSAL" -> acceptProposal(player, data, own, proposalId, day);
             case "REJECT_PROPOSAL" -> rejectProposal(player, data, own, proposalId);
             case "BREAK_TREATY" -> breakTreaty(player, data, own, targetFaction, day);
@@ -158,6 +173,8 @@ public final class CampaignManager {
                                      String extra, long day) {
         if (!isFactionLeader(player, own)) return "Only the faction leader may declare war.";
         if (!validOtherFaction(own, target)) return "Select another faction.";
+        Campaign23Data extraData = Campaign23Data.get(player.serverLevel());
+        if (extraData.factionProtected(own) || extraData.factionProtected(target)) return "Protected admin factions cannot participate in wars.";
         CampaignData.TreatyState previousState = data.relation(own, target).state();
         if (previousState == CampaignData.TreatyState.WAR) return "Your factions are already at war.";
 
@@ -190,12 +207,137 @@ public final class CampaignManager {
             default -> -5;
         };
         data.changeFactionReliability(own, reliabilityPenalty);
-        syncRelation(player.serverLevel(), own, target, CampaignData.TreatyState.WAR);
+        if (!syncRelation(player.serverLevel(), own, target, CampaignData.TreatyState.WAR)) {
+            data.endWar(war.id(), day, "Declaration aborted: Recruits relation synchronization failed.");
+            return "War declaration aborted because Recruits did not confirm ENEMY relations in both directions.";
+        }
+        Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), target);
+        CampaignToastSender.warDeclared(player.getServer(), own, target, type.displayName(), goal.displayName());
         String targetText = targetSettlement == null ? factionName(target) : targetSettlement.getName() + " (" + factionName(target) + ")";
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR,
                 type.displayName() + " declared", factionName(own) + " declared a " + type.displayName() + " against " + targetText
                         + ". War goal: " + goal.displayName() + ".", day, own, settlementId, CampaignData.NewsVisibility.PUBLIC);
         return type.displayName() + " declared against " + targetText + " for the goal “" + goal.displayName() + "”. War ID: " + war.id();
+    }
+
+    private static String declareSettlementWar(ServerPlayer player, CampaignData data, String extra, long day) {
+        String[] split = extra == null ? new String[0] : extra.split("\\|", -1);
+        if (split.length < 4) return "Settlement War declaration is incomplete.";
+        String sourceId = PrototypeData.normalizeId(split[1]);
+        String targetId = PrototypeData.normalizeId(split[2]);
+        CampaignData.WarGoal goal = parseWarGoal(split[3], CampaignData.WarType.SETTLEMENT_WAR);
+        String custom = split.length > 4 ? PrototypeData.cleanText(split[4], "", 100) : "";
+        PrototypeData settlements = PrototypeData.get(player.serverLevel());
+        PrototypeData.SettlementRecord source = settlements.getSettlement(sourceId);
+        PrototypeData.SettlementRecord target = settlements.getSettlement(targetId);
+        if (source == null || target == null) return "Select both your settlement and the target settlement.";
+        if (source.getId().equals(target.getId())) return "A settlement cannot declare war on itself.";
+        if (!PrototypeManager.canManage(player, source)) return "You do not have permission to declare war for " + source.getName() + ".";
+        Campaign23Data extraData = Campaign23Data.get(player.serverLevel());
+        if (extraData.settlementProtected(source.getId()) || extraData.settlementProtected(target.getId())
+                || extraData.factionProtected(source.getFactionTeam()) || extraData.factionProtected(target.getFactionTeam())) {
+            return "Protected admin settlements and factions cannot participate in wars.";
+        }
+        boolean duplicate = data.getWars().stream().anyMatch(war -> war.status() == CampaignData.WarStatus.ACTIVE
+                && war.type() == CampaignData.WarType.SETTLEMENT_WAR
+                && ((sourceId.equals(war.attackerSettlement()) && targetId.equals(war.defenderSettlement()))
+                || (targetId.equals(war.attackerSettlement()) && sourceId.equals(war.defenderSettlement()))));
+        if (duplicate) return "Those settlements are already in an active Settlement War.";
+        CampaignData.WarRecord war = data.createSettlementWar(sourceId, targetId, source.getFactionTeam(), target.getFactionTeam(), goal, custom, player.getUUID(), day);
+        String cb = war.casusBelliName();
+        data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "Settlement War declared",
+                source.getName() + " declared war on " + target.getName() + ". Casus Belli: " + cb + ".",
+                day, target.getFactionTeam(), targetId, CampaignData.NewsVisibility.PUBLIC);
+        CampaignToastSender.settlementWar(player.getServer(), source, target, cb);
+        if (!target.getFactionTeam().isBlank()) Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), target.getFactionTeam());
+        return source.getName() + " declared a Settlement War on " + target.getName() + ". Casus Belli: " + cb + ". War ID: " + war.id();
+    }
+
+    private static String joinSettlementWar(ServerPlayer player, CampaignData data, String own, UUID warId, long day) {
+        if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot commit the faction to a war.";
+        CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.SETTLEMENT_WAR) return "Select an active Settlement War.";
+        boolean attackerSide;
+        if (own.equals(war.attackerFaction())) attackerSide = true;
+        else if (own.equals(war.defenderFaction())) attackerSide = false;
+        else return "Your faction is not the parent faction of either settlement.";
+        if ((attackerSide && war.attackerFactionJoined()) || (!attackerSide && war.defenderFactionJoined())) return "Your faction has already joined this war.";
+        war.joinParentFaction(attackerSide);
+        data.setDirty();
+        String side = attackerSide ? "attacking" : "defending";
+        String settlementId = attackerSide ? war.attackerSettlement() : war.defenderSettlement();
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(player.serverLevel()).getSettlement(settlementId);
+        String settlementName = settlement == null ? settlementId : settlement.getName();
+        String escalation = war.escalationName();
+        if (war.attackerFactionJoined() && war.defenderFactionJoined()
+                && !war.attackerFaction().isBlank() && !war.defenderFaction().isBlank()
+                && !war.attackerFaction().equals(war.defenderFaction())) {
+            CampaignData.DiplomacyRecord relation = data.relation(war.attackerFaction(), war.defenderFaction());
+            relation.setState(CampaignData.TreatyState.WAR, day);
+            relation.changeRelationship(-40);
+            if (!syncRelation(player.serverLevel(), war.attackerFaction(), war.defenderFaction(), CampaignData.TreatyState.WAR)) {
+                return "Campaign escalation was recorded, but Recruits relation synchronization failed. An administrator should inspect the war.";
+            }
+        }
+        data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "War escalated",
+                factionName(own) + " joined the " + side + " settlement, escalating the conflict to " + escalation + ".",
+                day, own, settlementId, CampaignData.NewsVisibility.PUBLIC);
+        CampaignToastSender.faction(player.getServer(), war.attackerFaction(), "WAR ESCALATED", factionName(own) + " joined " + settlementName + ". Conflict: " + escalation);
+        CampaignToastSender.faction(player.getServer(), war.defenderFaction(), "WAR ESCALATED", factionName(own) + " joined " + settlementName + ". Conflict: " + escalation);
+        Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), attackerSide ? war.defenderFaction() : war.attackerFaction());
+        return "Your faction joined the war. Conflict is now " + escalation + ".";
+    }
+
+    private static String sendWarAid(ServerPlayer player, CampaignData data, String own, UUID warId, String extra, long day) {
+        if (!canManageDiplomacy(player, own, 2)) return "Your faction rank cannot authorize war aid.";
+        CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "Select an active war.";
+        if (!own.equals(war.attackerFaction()) && !own.equals(war.defenderFaction())) return "Only a parent faction may send settlement aid through this panel.";
+        String targetSettlement = own.equals(war.attackerFaction()) ? war.attackerSettlement() : war.defenderSettlement();
+        if (targetSettlement.isBlank()) return "This war has no settlement aid target.";
+        String[] split = extra == null ? new String[0] : extra.split("\\|", -1);
+        int manpower = parsePositive(split, 0); int wealth = parsePositive(split, 1); int food = parsePositive(split, 2);
+        boolean recurring = split.length > 3 && Boolean.parseBoolean(split[3]);
+        if (manpower + wealth + food <= 0) return "Enter at least one aid amount.";
+        PrototypeData.SettlementRecord target = PrototypeData.get(player.serverLevel()).getSettlement(targetSettlement);
+        if (target == null) return "The aided settlement no longer exists.";
+        String payment = transferFactionAid(player.serverLevel(), own, target, manpower, wealth, food);
+        if (payment != null) return payment;
+        if (recurring) Campaign23Data.get(player.serverLevel()).addWarAid(war.id(),
+                new Campaign23Data.AidRecord(UUID.randomUUID(), own, targetSettlement, manpower, wealth, food, true, day + 1));
+        data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.NORMAL, "War aid sent",
+                factionName(own) + " sent aid to " + target.getName() + ".", day, own, targetSettlement, CampaignData.NewsVisibility.PUBLIC);
+        CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
+        return "Aid delivered to " + target.getName() + (recurring ? " and scheduled daily." : ".");
+    }
+
+    private static int parsePositive(String[] split, int index) {
+        if (index >= split.length) return 0;
+        try { return Math.max(0, Integer.parseInt(split[index])); } catch (NumberFormatException ignored) { return 0; }
+    }
+
+    private static String transferFactionAid(ServerLevel level, String faction, PrototypeData.SettlementRecord target, int manpower, int wealth, int food) {
+        Campaign23Data extra = Campaign23Data.get(level);
+        if (extra.factionWealth(faction) < wealth) return "Your faction treasury does not have enough wealth.";
+        List<PrototypeData.SettlementRecord> sources = PrototypeData.get(level).settlementsForFaction(faction);
+        int availableMp = sources.stream().mapToInt(PrototypeData.SettlementRecord::getAvailableManpower).sum();
+        int availableFood = sources.stream().mapToInt(PrototypeData.SettlementRecord::getFood).sum();
+        if (availableMp < manpower) return "Your faction settlements do not have enough available manpower.";
+        if (availableFood < food) return "Your faction settlements do not have enough food.";
+        extra.spendFactionWealth(faction, wealth);
+        int mpLeft = manpower, foodLeft = food;
+        for (PrototypeData.SettlementRecord source : sources) {
+            if (source.getId().equals(target.getId())) continue;
+            int mpTake = Math.min(mpLeft, source.getAvailableManpower());
+            if (mpTake > 0) { source.spendAvailableManpower(mpTake); mpLeft -= mpTake; }
+            int foodTake = Math.min(foodLeft, source.getFood());
+            if (foodTake > 0) { source.spendFood(foodTake); foodLeft -= foodTake; }
+            if (mpLeft <= 0 && foodLeft <= 0) break;
+        }
+        target.changeAvailableManpower(manpower);
+        target.changeFood(food);
+        target.changeWealth(wealth);
+        return null;
     }
 
     private static CampaignData.WarType parseWarType(String raw) {
@@ -281,6 +423,7 @@ public final class CampaignManager {
         relation.setState(state, day);
         relation.changeRelationship(state.isAlliance() ? 15 : 8);
         syncRelation(player.serverLevel(), proposal.fromFaction(), proposal.toFaction(), state);
+        CampaignToastSender.relationChanged(player.getServer(), proposal.fromFaction(), proposal.toFaction(), state.displayName());
         return pretty(proposal.type().name()) + " accepted.";
     }
 
@@ -302,6 +445,7 @@ public final class CampaignManager {
         relation.changeRelationship(-20);
         data.changeFactionReliability(own, -15);
         syncRelation(player.serverLevel(), own, target, CampaignData.TreatyState.NEUTRAL);
+        CampaignToastSender.relationChanged(player.getServer(), own, target, "Neutral — treaty broken");
         data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL,
                 "Treaty broken", factionName(own) + " broke its treaty with " + factionName(target) + ".",
                 day, own, "", CampaignData.NewsVisibility.PUBLIC);
@@ -374,11 +518,22 @@ public final class CampaignManager {
 
 
     public static String createFaction(ServerPlayer player, String rawName) {
+        return createFaction(player, rawName, ChatFormatting.WHITE, (byte)0);
+    }
+
+    public static String createFaction(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor) {
         if (player == null) return "No player supplied.";
         if (player.getTeam() != null) return "Leave your current faction before creating another one.";
         if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
         String displayName = PrototypeData.cleanText(rawName, "", 32);
         if (displayName.isBlank()) return "Enter a faction name.";
+        ItemStack held = player.getMainHandItem();
+        if (!(held.getItem() instanceof BannerItem)) return "Faction creation failed: You are not holding a banner!";
+        ItemStack banner = held.copy();
+        banner.setCount(1);
+        if (RecruitsFactionManager.isBannerBlank(banner)) {
+            return "Faction creation failed: Your faction banner must contain at least one pattern.";
+        }
         String baseId = PrototypeData.normalizeId(displayName);
         if (baseId.isBlank()) return "That faction name cannot produce a valid internal ID.";
         String factionId = baseId;
@@ -388,22 +543,21 @@ public final class CampaignManager {
             factionId = baseId + "_" + suffix++;
             if (suffix > 99) return "Too many factions already use that name.";
         }
-        ItemStack held = player.getMainHandItem();
-        ItemStack banner = held.getItem() instanceof BannerItem ? held.copy() : null;
-        if (banner != null) banner.setCount(1);
         try {
             FactionEvents.createTeam(false, player, player.serverLevel(), factionId, displayName,
-                    player.getScoreboardName(), banner, ChatFormatting.WHITE, (byte) 0);
+                    player.getScoreboardName(), banner, teamColor == null ? ChatFormatting.WHITE : teamColor, unitColor);
         } catch (RuntimeException exception) {
             return "Faction creation failed: " + exception.getClass().getSimpleName();
         }
         CampaignData campaign = CampaignData.get(player.serverLevel());
         campaign.factionProfile(factionId);
+        Campaign23Data.get(player.serverLevel()).setFactionWealth(factionId, 0);
         long day = player.serverLevel().getDayTime() / 24000L;
         campaign.addNews(CampaignData.NewsCategory.FACTIONS, CampaignData.NewsImportance.MAJOR,
                 "Faction founded", displayName + " was founded by " + PrototypeManager.characterOrAccountName(player) + ".",
                 day, factionId, "", CampaignData.NewsVisibility.PUBLIC);
         PrototypeManager.broadcastProfiles(player.getServer());
+        CampaignToastSender.factionFounded(player, displayName);
         return "Created faction " + displayName + " (" + factionId + ").";
     }
 
@@ -430,8 +584,8 @@ public final class CampaignManager {
         for (CampaignData.DiplomacyRecord record : data.getDiplomacy()) syncRelation(level, record.firstFaction(), record.secondFaction(), record.state());
     }
 
-    public static void syncRelation(ServerLevel level, String first, String second, CampaignData.TreatyState state) {
-        if (FactionEvents.recruitsDiplomacyManager == null || first.isBlank() || second.isBlank()) return;
+    public static boolean syncRelation(ServerLevel level, String first, String second, CampaignData.TreatyState state) {
+        if (FactionEvents.recruitsDiplomacyManager == null || first == null || second == null || first.isBlank() || second.isBlank()) return false;
         RecruitsDiplomacyManager.DiplomacyStatus status = switch (state) {
             case DEFENSIVE_ALLIANCE, MILITARY_ALLIANCE -> RecruitsDiplomacyManager.DiplomacyStatus.ALLY;
             case WAR -> RecruitsDiplomacyManager.DiplomacyStatus.ENEMY;
@@ -439,6 +593,10 @@ public final class CampaignManager {
         };
         FactionEvents.recruitsDiplomacyManager.setRelation(first, second, status, level, false);
         FactionEvents.recruitsDiplomacyManager.setRelation(second, first, status, level, false);
+        boolean verified = FactionEvents.recruitsDiplomacyManager.getRelation(first, second) == status
+                && FactionEvents.recruitsDiplomacyManager.getRelation(second, first) == status;
+        if (verified) FactionEvents.recruitsDiplomacyManager.broadcastDiplomacyMapToAll(level);
+        return verified;
     }
 
     public static String factionId(ServerPlayer player) { return player.getTeam() == null ? "" : player.getTeam().getName(); }

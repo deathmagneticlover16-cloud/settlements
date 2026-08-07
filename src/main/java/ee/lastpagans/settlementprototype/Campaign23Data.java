@@ -27,6 +27,7 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, Integer> devotion = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
     private final Map<String, Long> debugTimeOffsetMillis = new HashMap<>();
+    private final Map<String, Long> lastModifierDay = new HashMap<>();
     private final Map<String, Boolean> protectedSettlements = new HashMap<>();
     private final Map<String, Boolean> protectedFactions = new HashMap<>();
     private final Map<String, List<RegionRecord>> housingAreas = new HashMap<>();
@@ -53,6 +54,7 @@ public final class Campaign23Data extends SavedData {
         readUuidIntMap(tag, "Devotion", data.devotion);
         readStringIntMap(tag, "Prosperity", data.prosperity);
         readStringLongMap(tag, "DebugOffsets", data.debugTimeOffsetMillis);
+        readStringLongMap(tag, "LastModifierDay", data.lastModifierDay);
         readStringBooleanMap(tag, "ProtectedSettlements", data.protectedSettlements);
         readStringBooleanMap(tag, "ProtectedFactions", data.protectedFactions);
 
@@ -129,6 +131,7 @@ public final class Campaign23Data extends SavedData {
         writeUuidIntMap(tag, "Devotion", devotion);
         writeStringIntMap(tag, "Prosperity", prosperity);
         writeStringLongMap(tag, "DebugOffsets", debugTimeOffsetMillis);
+        writeStringLongMap(tag, "LastModifierDay", lastModifierDay);
         writeStringBooleanMap(tag, "ProtectedSettlements", protectedSettlements);
         writeStringBooleanMap(tag, "ProtectedFactions", protectedFactions);
 
@@ -174,6 +177,13 @@ public final class Campaign23Data extends SavedData {
     public long nowMillis(String settlement) { return System.currentTimeMillis() + debugTimeOffsetMillis.getOrDefault(PrototypeData.normalizeId(settlement), 0L); }
     public void advanceDebugTime(String settlement, long millis) { String id = PrototypeData.normalizeId(settlement); debugTimeOffsetMillis.put(id, debugTimeOffsetMillis.getOrDefault(id, 0L) + Math.max(0L, millis)); setDirty(); }
     public void clearDebugTime(String settlement) { if (debugTimeOffsetMillis.remove(PrototypeData.normalizeId(settlement)) != null) setDirty(); }
+    public boolean beginModifierDay(String settlement, long day) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (lastModifierDay.getOrDefault(id, Long.MIN_VALUE) == day) return false;
+        lastModifierDay.put(id, day);
+        setDirty();
+        return true;
+    }
 
     public boolean settlementProtected(String settlement) { return protectedSettlements.getOrDefault(PrototypeData.normalizeId(settlement), false); }
     public void setSettlementProtected(String settlement, boolean value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; protectedSettlements.put(id, value); setDirty(); }
@@ -220,6 +230,26 @@ public final class Campaign23Data extends SavedData {
     public void changeWarScore(UUID war, int delta) { setWarScore(war, warScore(war) + delta); }
 
     public CandidateHistory candidateHistory(UUID player) { return candidateHistory.computeIfAbsent(player, CandidateHistory::new); }
+
+    public void resetPlayerData(UUID player) {
+        if (player == null) return;
+        devotion.remove(player);
+        levyCooldownUntil.remove(player);
+        levyMobilizations.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
+        levyDeployments.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
+        candidateHistory.remove(player);
+        setDirty();
+    }
+
+    public void resetReligion(UUID player) { if (player != null && devotion.remove(player) != null) setDirty(); }
+    public void resetLevy(UUID player) {
+        if (player == null) return;
+        levyCooldownUntil.remove(player);
+        levyMobilizations.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
+        levyDeployments.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
+        setDirty();
+    }
+    public void resetCandidateHistory(UUID player) { if (player != null && candidateHistory.remove(player) != null) setDirty(); }
 
     public record RegionRecord(String dimension, BlockPos min, BlockPos max) {
         public RegionRecord {

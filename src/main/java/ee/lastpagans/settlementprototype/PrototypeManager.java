@@ -169,7 +169,8 @@ public final class PrototypeManager {
                 if (amount != 1 && amount != 5 && amount != 10 && amount != 25) return "Recruitment amount must be 1, 5, 10, or 25.";
                 return recruitProfessionals(player, settlement, type, amount);
             });
-            case RAISE_LEVY -> requireManager(player, settlement, () -> raiseLevy(player, settlement));
+            case RAISE_LEVY -> requireManager(player, settlement, () -> Campaign23Manager.raiseLevy(player, settlement));
+            case RETURN_LEVY -> requireManager(player, settlement, () -> Campaign23Manager.returnLevy(player, settlement));
             case RETURN_TO_BARRACKS -> requireManager(player, settlement, () -> returnToBarracks(player, settlement));
             case RUN_CHECKER -> requireManager(player, settlement, () -> {
                 int recovered = settlement.runManpowerChecker();
@@ -282,7 +283,7 @@ public final class PrototypeManager {
         return "Raised " + count + " Levymen using " + manpowerSpent + " available MP (" + percent + "% mobilisation).";
     }
 
-    private static AbstractRecruitEntity spawnRecruit(ServerLevel level, ServerPlayer actor, PrototypeData.SettlementRecord settlement,
+    static AbstractRecruitEntity spawnRecruit(ServerLevel level, ServerPlayer actor, PrototypeData.SettlementRecord settlement,
                                                        CampaignData.UnitType unitType, int index, PlayerTeam team, boolean levy, UUID batchId) {
         ItemStack template = CampaignData.get(level).resolveUnitTemplate(settlement, unitType);
         EntityType<?> entityType = null;
@@ -294,7 +295,7 @@ public final class PrototypeManager {
         if (entityType == null) entityType = fallbackType(unitType);
         Entity raw = entityType.create(level);
         if (!(raw instanceof AbstractRecruitEntity recruit)) return null;
-        BlockPos spawnPos = findSafeSpawn(level, settlement.getMusterGround(), index);
+        BlockPos spawnPos = Campaign23Manager.findMusterSpawn(level, settlement, index);
         recruit.moveTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F, 0.0F);
         recruit.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos), MobSpawnType.COMMAND, null, null);
         if (templateTag != null) {
@@ -870,7 +871,7 @@ public final class PrototypeManager {
 
     public enum SettlementAction {
         RECRUIT_ONE, RECRUIT_FIVE, RECRUIT_TEN, RECRUIT_TWENTY_FIVE, RECRUIT_UNIT,
-        RAISE_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_SILVER,
+        RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_SILVER,
         WITHDRAW_SILVER_ONE, WITHDRAW_SILVER_TEN, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER,
         OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH

@@ -62,10 +62,12 @@ public final class MilitaryScreen extends Screen {
         }
         addRenderableWidget(Button.builder(Component.literal("Raise Levy"), button -> send(PrototypeManager.SettlementAction.RAISE_LEVY))
                 .bounds(left + 24, top + 250, 106, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Return to Barracks"), button -> send(PrototypeManager.SettlementAction.RETURN_TO_BARRACKS))
-                .bounds(left + 136, top + 250, 136, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Return Levy"), button -> send(PrototypeManager.SettlementAction.RETURN_LEVY))
+                .bounds(left + 136, top + 250, 106, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("To Barracks"), button -> send(PrototypeManager.SettlementAction.RETURN_TO_BARRACKS))
+                .bounds(left + 248, top + 250, 104, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Recover MP"), button -> send(PrototypeManager.SettlementAction.RUN_CHECKER))
-                .bounds(left + 278, top + 250, 96, 20).build());
+                .bounds(left + 358, top + 250, 96, 20).build());
 
         addRenderableWidget(Button.builder(Component.literal("◀ Previous"), button -> switchSettlement(false))
                 .bounds(left + 14, top + 301, 92, 18).build());

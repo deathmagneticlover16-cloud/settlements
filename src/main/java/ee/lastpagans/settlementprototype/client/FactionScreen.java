@@ -27,6 +27,10 @@ public final class FactionScreen extends Screen {
     private DropdownWidget titleRankDrop;
     private EditBox titleEdit;
     private EditBox factionNameEdit;
+    private DropdownWidget teamColorDrop;
+    private DropdownWidget unitColorDrop;
+    private int teamColorIndex;
+    private int unitColorIndex;
     private int memberIndex;
     private int rankIndex;
     private int titleRankIndex;
@@ -60,18 +64,26 @@ public final class FactionScreen extends Screen {
         titleRankDrop = null;
         titleEdit = null;
         factionNameEdit = null;
+        teamColorDrop = null;
+        unitColorDrop = null;
 
         addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
                         PrototypeNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
                 .bounds(left + W - 128, top + H - 28, 112, 18).build());
 
         if (snapshot.factionId().isBlank()) {
-            factionNameEdit = new EditBox(font, left + 132, top + 142, 296, 22, Component.literal("Faction name"));
+            factionNameEdit = new EditBox(font, left + 132, top + 116, 296, 22, Component.literal("Faction name"));
             factionNameEdit.setMaxLength(32);
             factionNameEdit.setHint(Component.literal("Faction name"));
             addRenderableWidget(factionNameEdit);
+            List<String> teamColors = List.of("White","Red","Dark Red","Gold","Yellow","Green","Dark Green","Aqua","Dark Aqua","Blue","Dark Blue","Light Purple","Dark Purple","Gray","Dark Gray","Black");
+            List<String> unitColors = List.of("White","Orange","Magenta","Light Blue","Yellow","Lime","Pink","Gray","Light Gray","Cyan","Purple","Blue","Brown","Green","Red","Black");
+            teamColorIndex = Math.max(0, Math.min(teamColorIndex, teamColors.size() - 1));
+            unitColorIndex = Math.max(0, Math.min(unitColorIndex, unitColors.size() - 1));
+            teamColorDrop = addRenderableWidget(new DropdownWidget(left + 132, top + 150, 142, 20, teamColors, teamColorIndex, value -> teamColorIndex = teamColors.indexOf(value)));
+            unitColorDrop = addRenderableWidget(new DropdownWidget(left + 286, top + 150, 142, 20, unitColors, unitColorIndex, value -> unitColorIndex = unitColors.indexOf(value)));
             addRenderableWidget(Button.builder(Component.literal("Create Faction"), button -> createFaction())
-                    .bounds(left + 196, top + 178, 168, 22).build());
+                    .bounds(left + 196, top + 202, 168, 22).build());
             setInitialFocus(factionNameEdit);
             return;
         }
@@ -128,7 +140,9 @@ public final class FactionScreen extends Screen {
         if (factionNameEdit == null) return;
         String name = factionNameEdit.getValue().trim();
         if (name.isBlank()) return;
-        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("CREATE_FACTION", null, 0, name));
+        String[] formatting = {"WHITE","RED","DARK_RED","GOLD","YELLOW","GREEN","DARK_GREEN","AQUA","DARK_AQUA","BLUE","DARK_BLUE","LIGHT_PURPLE","DARK_PURPLE","GRAY","DARK_GRAY","BLACK"};
+        String teamColor = formatting[Math.max(0, Math.min(teamColorIndex, formatting.length - 1))];
+        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("CREATE_FACTION", null, Math.max(0, Math.min(15, unitColorIndex)), teamColor + "|" + name));
     }
 
     private void renameRank() {
@@ -150,6 +164,8 @@ public final class FactionScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseClicked(x, y, button)) return true;
+        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseClicked(x, y, button)) return true;
         if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseClicked(x, y, button)) return true;
         if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseClicked(x, y, button)) return true;
         if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseClicked(x, y, button)) return true;
@@ -158,6 +174,8 @@ public final class FactionScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
+        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseScrolled(x, y, delta)) return true;
+        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseScrolled(x, y, delta)) return true;
         if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseScrolled(x, y, delta)) return true;
         if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseScrolled(x, y, delta)) return true;
         if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseScrolled(x, y, delta)) return true;
@@ -174,10 +192,12 @@ public final class FactionScreen extends Screen {
         if (snapshot.factionId().isBlank()) {
             graphics.drawCenteredString(font, "CREATE A FACTION", left + W / 2, top + 18, 0xFFE7D8B0);
             graphics.drawCenteredString(font, "You are currently independent.", left + W / 2, top + 42, 0xFFCCCCCC);
-            graphics.drawCenteredString(font, "Hold a banner to use it as the faction banner, or create the faction with a plain default banner.",
-                    left + W / 2, top + 112, 0xFFAA9D7F);
-            graphics.drawString(font, "Faction name", left + 132, top + 128, 0xFFE7D8B0, false);
-            if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, snapshot.message(), left + W / 2, top + 222, 0xFFFFD27A);
+            graphics.drawCenteredString(font, "A patterned banner is mandatory. Hold it in your main hand before creating the faction.",
+                    left + W / 2, top + 88, 0xFFAA9D7F);
+            graphics.drawString(font, "Faction name", left + 132, top + 104, 0xFFE7D8B0, false);
+            graphics.drawString(font, "Team color", left + 132, top + 140, 0xFFE7D8B0, false);
+            graphics.drawString(font, "Unit color", left + 286, top + 140, 0xFFE7D8B0, false);
+            if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 50), left + W / 2, top + 238, 0xFFFFD27A);
             super.render(graphics, mouseX, mouseY, partialTick);
             return;
         }

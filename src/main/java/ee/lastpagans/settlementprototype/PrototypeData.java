@@ -265,7 +265,48 @@ public final class PrototypeData extends SavedData {
 
     public void resetCharacter(UUID playerId) {
         characters.remove(playerId);
+        selectedSettlementByPlayer.remove(playerId);
         setDirty();
+    }
+
+    /** Removes all Settlements-owned references to a player. Recruits faction/team data is deliberately untouched. */
+    public int resetPlayerData(UUID playerId) {
+        if (playerId == null) return 0;
+        int changed = 0;
+        if (characters.remove(playerId) != null) changed++;
+        if (selectedSettlementByPlayer.remove(playerId) != null) changed++;
+        for (SettlementRecord settlement : settlements.values()) {
+            SettlementRole role = settlement.getRole(playerId);
+            if (role != SettlementRole.OUTSIDER) {
+                if (role == SettlementRole.OWNER) {
+                    settlement.members.remove(playerId);
+                    settlement.ownerId = null;
+                } else {
+                    settlement.members.remove(playerId);
+                }
+                changed++;
+            }
+        }
+        if (changed > 0) setDirty();
+        return changed;
+    }
+
+    public void clearSelection(UUID playerId) {
+        if (selectedSettlementByPlayer.remove(playerId) != null) setDirty();
+    }
+
+    public void resetTraits(UUID playerId) {
+        CharacterRecord character = characters.get(playerId);
+        if (character != null && !character.traits.isEmpty()) {
+            character.traits.clear();
+            setDirty();
+        }
+    }
+
+    public List<SettlementRecord> settlementsForFaction(String factionId) {
+        String id = factionId == null ? "" : factionId;
+        return settlements.values().stream().filter(value -> id.equals(value.factionTeam))
+                .sorted(Comparator.comparing(SettlementRecord::getName, String.CASE_INSENSITIVE_ORDER)).toList();
     }
 
     public int runAllCheckers() {
@@ -314,7 +355,8 @@ public final class PrototypeData extends SavedData {
     public enum SettlementRank {
         VILLAGE("Village", "Minor Settlement"),
         TOWN("Town", "Major Settlement"),
-        CAPITAL("Capital", "Faction Capital");
+        CAPITAL("Capital", "Faction Capital"),
+        CITY_STATE("City-State", "Independent Major Power");
 
         private final String displayName;
         private final String subtitle;
@@ -828,6 +870,30 @@ public final class PrototypeData extends SavedData {
             addChronicle("Raised a levy of " + units.size() + " men.");
             dirty();
             return id;
+        }
+
+        public void addLevymanToBatch(UUID batchId, UUID unit) {
+            if (batchId == null || unit == null) return;
+            LevyBatch batch = levyBatches.get(batchId);
+            if (batch == null) return;
+            batch.units.add(unit);
+            levyUnitToBatch.put(unit, batchId);
+            dirty();
+        }
+
+        public List<UUID> getLevyBatches() { return List.copyOf(levyBatches.keySet()); }
+        public Set<UUID> getLevyUnitsForBatch(UUID batchId) {
+            LevyBatch batch = levyBatches.get(batchId);
+            return batch == null ? Set.of() : Set.copyOf(batch.units);
+        }
+
+        public int clearLevyBatch(UUID batchId) {
+            LevyBatch batch = levyBatches.remove(batchId);
+            if (batch == null) return 0;
+            int units = batch.units.size();
+            batch.units.forEach(levyUnitToBatch::remove);
+            dirty();
+            return units;
         }
 
         public LevyDeathResult removeLevyman(UUID unit) {

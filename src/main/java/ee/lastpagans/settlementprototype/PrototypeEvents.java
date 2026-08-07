@@ -52,6 +52,7 @@ public final class PrototypeEvents {
 
         if (settlement == null) settlement = data.findSettlementTrackingUnit(entity.getUUID());
         if (settlement == null) return;
+        Campaign23Manager.onLevyDeath(level, entity);
         if (settlement.removeProfessional(entity.getUUID())) {
             settlement.addChronicle("A professional soldier died; one MP became vacant.");
             return;
@@ -167,6 +168,7 @@ public final class PrototypeEvents {
         data.getSettlements().forEach(settlement -> settlement.processDaily(day, campaign));
         data.runAllCheckers();
         PrototypeManager.processMilitarySystems(server, day);
+        Campaign23Manager.processCampaignSystems(server, day);
         CampaignManager.enforceAllDiplomacy(server.overworld());
         CampaignManager.broadcastMapMarkers(server);
     }

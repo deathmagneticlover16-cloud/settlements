@@ -54,9 +54,9 @@ public record DiplomacySnapshot(
 
         PrototypeData settlementsData = PrototypeData.get(player.serverLevel());
         List<SettlementTarget> settlements = settlementsData.getSettlements().stream()
-                .filter(value -> !value.getFactionTeam().isBlank())
                 .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
-                        CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName()))
+                        CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(),
+                        PrototypeManager.canManage(player, value)))
                 .sorted(Comparator.comparing(SettlementTarget::factionName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(SettlementTarget::settlementName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -64,17 +64,32 @@ public record DiplomacySnapshot(
         List<ProposalEntry> proposals = own.isBlank() ? List.of() : campaign.proposalsFor(own).stream()
                 .map(value -> new ProposalEntry(value.id(), value.type().name(), value.fromFaction(), CampaignManager.factionName(value.fromFaction()), value.linkedWar()))
                 .toList();
-        List<WarEntry> wars = own.isBlank() ? List.of() : campaign.activeWarsFor(own).stream().map(value -> {
+        java.util.Set<String> managedSettlementIds = settlements.stream().filter(SettlementTarget::manageable)
+                .map(SettlementTarget::settlementId).collect(java.util.stream.Collectors.toSet());
+        List<CampaignData.WarRecord> visibleWars = campaign.getWars().stream()
+                .filter(value -> value.status() == CampaignData.WarStatus.ACTIVE)
+                .filter(value -> (!own.isBlank() && value.involves(own))
+                        || managedSettlementIds.contains(value.attackerSettlement())
+                        || managedSettlementIds.contains(value.defenderSettlement()))
+                .toList();
+        List<WarEntry> wars = visibleWars.stream().map(value -> {
+            PrototypeData.SettlementRecord attackerSettlement = value.attackerSettlement().isBlank() ? null : settlementsData.getSettlement(value.attackerSettlement());
             PrototypeData.SettlementRecord target = value.targetSettlement().isBlank() ? null : settlementsData.getSettlement(value.targetSettlement());
-            return new WarEntry(value.id(), value.type().name(), value.type().displayName(), value.goal().name(), value.goal().displayName(),
+            boolean attackerParent = !own.isBlank() && own.equals(value.attackerFaction());
+            boolean defenderParent = !own.isBlank() && own.equals(value.defenderFaction());
+            return new WarEntry(value.id(), value.type().name(), value.escalationName(), value.goal().name(), value.casusBelliName(),
                     value.attackerFaction(), CampaignManager.factionName(value.attackerFaction()),
                     value.defenderFaction(), CampaignManager.factionName(value.defenderFaction()),
+                    value.attackerSettlement(), attackerSettlement == null ? "" : attackerSettlement.getName(),
                     value.targetSettlement(), target == null ? "" : target.getName(), value.startedDay(),
                     value.supportingAttackers().stream().map(CampaignManager::factionName).toList(),
-                    value.supportingDefenders().stream().map(CampaignManager::factionName).toList());
+                    value.supportingDefenders().stream().map(CampaignManager::factionName).toList(),
+                    value.attackerFactionJoined(), value.defenderFactionJoined(), attackerParent, defenderParent,
+                    Campaign23Data.get(player.serverLevel()).warScore(value.id()));
         }).toList();
 
-        boolean canDeclareWar = player.createCommandSourceStack().hasPermission(2) || leader;
+        boolean canDeclareWar = player.createCommandSourceStack().hasPermission(2) || leader
+                || settlements.stream().anyMatch(SettlementTarget::manageable);
         return new DiplomacySnapshot(own, ownName, rank, canManage, canDeclareWar, relations, settlements, proposals, wars,
                 message == null ? "" : message);
     }
@@ -128,15 +143,15 @@ public record DiplomacySnapshot(
         }
     }
 
-    public record SettlementTarget(String settlementId, String settlementName, String factionId, String factionName, String rank) {
+    public record SettlementTarget(String settlementId, String settlementName, String factionId, String factionName, String rank, boolean manageable) {
         private static void encode(SettlementTarget value, FriendlyByteBuf buffer) {
             buffer.writeUtf(value.settlementId, 64); buffer.writeUtf(value.settlementName, 64); buffer.writeUtf(value.factionId, 64);
-            buffer.writeUtf(value.factionName, 64); buffer.writeUtf(value.rank, 32);
+            buffer.writeUtf(value.factionName, 64); buffer.writeUtf(value.rank, 32); buffer.writeBoolean(value.manageable);
         }
         private static SettlementTarget decode(FriendlyByteBuf buffer) {
-            return new SettlementTarget(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32));
+            return new SettlementTarget(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32), buffer.readBoolean());
         }
-        public String display() { return settlementName + " — " + rank; }
+        public String display() { return settlementName + " — " + rank + (factionId.isBlank() ? " · Independent" : " · " + factionName); }
     }
 
     public record ProposalEntry(UUID id, String type, String fromFactionId, String fromFactionName, UUID linkedWar) {
@@ -153,20 +168,27 @@ public record DiplomacySnapshot(
     public record WarEntry(UUID id, String type, String typeName, String goal, String goalName,
                            String attackerFactionId, String attackerFactionName,
                            String defenderFactionId, String defenderFactionName,
+                           String attackerSettlementId, String attackerSettlementName,
                            String targetSettlementId, String targetSettlementName, long startedDay,
-                           List<String> supportingAttackers, List<String> supportingDefenders) {
+                           List<String> supportingAttackers, List<String> supportingDefenders,
+                           boolean attackerFactionJoined, boolean defenderFactionJoined,
+                           boolean viewerIsAttackerParent, boolean viewerIsDefenderParent, int warScore) {
         private static void encode(WarEntry value, FriendlyByteBuf buffer) {
             buffer.writeUUID(value.id); buffer.writeUtf(value.type, 32); buffer.writeUtf(value.typeName, 48);
-            buffer.writeUtf(value.goal, 48); buffer.writeUtf(value.goalName, 64);
+            buffer.writeUtf(value.goal, 48); buffer.writeUtf(value.goalName, 100);
             buffer.writeUtf(value.attackerFactionId, 64); buffer.writeUtf(value.attackerFactionName, 64);
             buffer.writeUtf(value.defenderFactionId, 64); buffer.writeUtf(value.defenderFactionName, 64);
+            buffer.writeUtf(value.attackerSettlementId, 64); buffer.writeUtf(value.attackerSettlementName, 64);
             buffer.writeUtf(value.targetSettlementId, 64); buffer.writeUtf(value.targetSettlementName, 64); buffer.writeLong(value.startedDay);
             writeStrings(buffer, value.supportingAttackers); writeStrings(buffer, value.supportingDefenders);
+            buffer.writeBoolean(value.attackerFactionJoined); buffer.writeBoolean(value.defenderFactionJoined);
+            buffer.writeBoolean(value.viewerIsAttackerParent); buffer.writeBoolean(value.viewerIsDefenderParent); buffer.writeInt(value.warScore);
         }
         private static WarEntry decode(FriendlyByteBuf buffer) {
-            return new WarEntry(buffer.readUUID(), buffer.readUtf(32), buffer.readUtf(48), buffer.readUtf(48), buffer.readUtf(64),
+            return new WarEntry(buffer.readUUID(), buffer.readUtf(32), buffer.readUtf(48), buffer.readUtf(48), buffer.readUtf(100),
                     buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64),
-                    buffer.readUtf(64), buffer.readUtf(64), buffer.readLong(), readStrings(buffer), readStrings(buffer));
+                    buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readLong(),
+                    readStrings(buffer), readStrings(buffer), buffer.readBoolean(), buffer.readBoolean(),
+                    buffer.readBoolean(), buffer.readBoolean(), buffer.readInt());
         }
-    }
-}
+    }}

@@ -354,10 +354,29 @@ public final class CampaignData extends SavedData {
                 day
         );
         wars.put(war.id, war);
-        DiplomacyRecord relation = relation(attackerFaction, defenderFaction);
-        relation.state = TreatyState.WAR;
-        relation.relationship = clamp(relation.relationship - 40, -100, 100);
-        relation.lastChangedDay = day;
+        if (type != WarType.SETTLEMENT_WAR && attackerFaction != null && defenderFaction != null
+                && !attackerFaction.isBlank() && !defenderFaction.isBlank() && !attackerFaction.equals(defenderFaction)) {
+            DiplomacyRecord relation = relation(attackerFaction, defenderFaction);
+            relation.state = TreatyState.WAR;
+            relation.relationship = clamp(relation.relationship - 40, -100, 100);
+            relation.lastChangedDay = day;
+        }
+        setDirty();
+        return war;
+    }
+
+    public WarRecord createSettlementWar(String attackerSettlement, String defenderSettlement,
+                                         String attackerFaction, String defenderFaction, WarGoal goal,
+                                         String customCasusBelli, UUID declaredBy, long day) {
+        WarRecord war = new WarRecord(UUID.randomUUID(), WarType.SETTLEMENT_WAR,
+                goal == null || goal.type() != WarType.SETTLEMENT_WAR ? WarGoal.CAPTURE_SETTLEMENT : goal,
+                attackerFaction == null ? "" : attackerFaction, defenderFaction == null ? "" : defenderFaction,
+                PrototypeData.normalizeId(defenderSettlement), declaredBy, day);
+        war.attackerSettlement = PrototypeData.normalizeId(attackerSettlement);
+        war.customCasusBelli = PrototypeData.cleanText(customCasusBelli, "", 100);
+        war.attackerFactionJoined = false;
+        war.defenderFactionJoined = false;
+        wars.put(war.id, war);
         setDirty();
         return war;
     }
@@ -365,6 +384,8 @@ public final class CampaignData extends SavedData {
     public WarRecord getWar(UUID id) {
         return wars.get(id);
     }
+
+    public Collection<WarRecord> getWars() { return List.copyOf(wars.values()); }
 
     public List<WarRecord> activeWarsFor(String factionId) {
         return wars.values().stream()
@@ -380,7 +401,8 @@ public final class CampaignData extends SavedData {
         war.status = WarStatus.ENDED;
         war.endedDay = day;
         war.peaceTerms = PrototypeData.cleanText(terms, "Peace agreed.", 180);
-        relation(war.attackerFaction, war.defenderFaction).state = TreatyState.NEUTRAL;
+        if (!war.attackerFaction.isBlank() && !war.defenderFaction.isBlank() && !war.attackerFaction.equals(war.defenderFaction))
+            relation(war.attackerFaction, war.defenderFaction).state = TreatyState.NEUTRAL;
         setDirty();
     }
 
@@ -445,6 +467,21 @@ public final class CampaignData extends SavedData {
         spouseCandidates.remove(playerId);
         spouseCandidateGeneratedDay.remove(playerId);
         setDirty();
+    }
+
+    public void resetPlayerData(UUID playerId) {
+        if (playerId == null) return;
+        clearFamilyData(playerId);
+        for (FactionProfile profile : factionProfiles.values()) profile.memberRanks.remove(playerId);
+        setDirty();
+    }
+
+    public void resetMarriage(UUID playerId) { clearFamilyData(playerId); }
+
+    public void resetFactionRank(UUID playerId) {
+        boolean changed = false;
+        for (FactionProfile profile : factionProfiles.values()) changed |= profile.memberRanks.remove(playerId) != null;
+        if (changed) setDirty();
     }
 
     public List<NpcSpouse> candidatesFor(UUID playerId, long day) {
@@ -703,6 +740,8 @@ public final class CampaignData extends SavedData {
         RECOVER_TERRITORY("Recover Lost Territory", WarType.FACTION_WAR),
         FORCE_VASSALAGE("Force Vassalage", WarType.FACTION_WAR),
         PUNITIVE_WAR("Punitive War", WarType.FACTION_WAR),
+        HOLY_WAR("Holy War", WarType.FACTION_WAR),
+        CUSTOM("Custom Casus Belli", WarType.FACTION_WAR),
         GAIN_INDEPENDENCE("Gain Independence", WarType.INDEPENDENCE_WAR),
         SUPPRESS_REBELLION("Suppress Rebellion", WarType.INDEPENDENCE_WAR);
 
@@ -1005,6 +1044,10 @@ public final class CampaignData extends SavedData {
         private final String attackerFaction;
         private final String defenderFaction;
         private final String targetSettlement;
+        private String attackerSettlement = "";
+        private String customCasusBelli = "";
+        private boolean attackerFactionJoined;
+        private boolean defenderFactionJoined;
         private final UUID declaredBy;
         private final long startedDay;
         private WarStatus status = WarStatus.ACTIVE;
@@ -1020,6 +1063,8 @@ public final class CampaignData extends SavedData {
             this.attackerFaction = attackerFaction;
             this.defenderFaction = defenderFaction;
             this.targetSettlement = targetSettlement;
+            this.attackerFactionJoined = type != WarType.SETTLEMENT_WAR;
+            this.defenderFactionJoined = type != WarType.SETTLEMENT_WAR;
             this.declaredBy = declaredBy;
             this.startedDay = startedDay;
         }
@@ -1042,6 +1087,10 @@ public final class CampaignData extends SavedData {
                     tag.hasUUID("DeclaredBy") ? tag.getUUID("DeclaredBy") : null,
                     tag.getLong("StartedDay")
             );
+            war.attackerSettlement = PrototypeData.normalizeId(tag.getString("AttackerSettlement"));
+            war.customCasusBelli = PrototypeData.cleanText(tag.getString("CustomCasusBelli"), "", 100);
+            war.attackerFactionJoined = tag.contains("AttackerFactionJoined", Tag.TAG_BYTE) ? tag.getBoolean("AttackerFactionJoined") : type != WarType.SETTLEMENT_WAR;
+            war.defenderFactionJoined = tag.contains("DefenderFactionJoined", Tag.TAG_BYTE) ? tag.getBoolean("DefenderFactionJoined") : type != WarType.SETTLEMENT_WAR;
             war.status = status;
             war.endedDay = tag.getLong("EndedDay");
             war.peaceTerms = tag.getString("PeaceTerms");
@@ -1058,6 +1107,10 @@ public final class CampaignData extends SavedData {
             tag.putString("Attacker", attackerFaction);
             tag.putString("Defender", defenderFaction);
             tag.putString("TargetSettlement", targetSettlement);
+            tag.putString("AttackerSettlement", attackerSettlement);
+            tag.putString("CustomCasusBelli", customCasusBelli);
+            tag.putBoolean("AttackerFactionJoined", attackerFactionJoined);
+            tag.putBoolean("DefenderFactionJoined", defenderFactionJoined);
             if (declaredBy != null) tag.putUUID("DeclaredBy", declaredBy);
             tag.putLong("StartedDay", startedDay);
             tag.putString("Status", status.name());
@@ -1074,6 +1127,20 @@ public final class CampaignData extends SavedData {
         public String attackerFaction() { return attackerFaction; }
         public String defenderFaction() { return defenderFaction; }
         public String targetSettlement() { return targetSettlement; }
+        public String attackerSettlement() { return attackerSettlement; }
+        public String defenderSettlement() { return targetSettlement; }
+        public String customCasusBelli() { return customCasusBelli; }
+        public String casusBelliName() { return customCasusBelli.isBlank() ? goal.displayName() : customCasusBelli; }
+        public boolean attackerFactionJoined() { return attackerFactionJoined; }
+        public boolean defenderFactionJoined() { return defenderFactionJoined; }
+        public String escalationName() {
+            if (type != WarType.SETTLEMENT_WAR) return type.displayName();
+            if (attackerFactionJoined && defenderFactionJoined) return "Faction vs Faction";
+            if (attackerFactionJoined) return "Faction vs Settlement";
+            if (defenderFactionJoined) return "Settlement vs Faction";
+            return "Settlement vs Settlement";
+        }
+        public void joinParentFaction(boolean attackerSide) { if (attackerSide) attackerFactionJoined = true; else defenderFactionJoined = true; }
         public UUID declaredBy() { return declaredBy; }
         public long startedDay() { return startedDay; }
         public WarStatus status() { return status; }
