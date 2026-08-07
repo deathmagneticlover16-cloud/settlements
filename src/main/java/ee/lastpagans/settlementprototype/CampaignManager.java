@@ -495,6 +495,7 @@ public final class CampaignManager {
         if (error != null) return "Peace treaty could not be applied: " + error;
         applyPeaceTerms(player.serverLevel(), offer, war, day);
         data.endWar(war.id(), day, targetCapitulated ? "Capitulation peace terms enforced." : "Negotiated peace terms accepted.");
+        extra.clearWarInterventionState(war.id());
         synchronizeWarPeace(player.serverLevel(), data, war, day);
         extra.removeWarAid(war.id()); extra.removePeaceOffer(offerId);
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "Peace treaty concluded",
@@ -658,6 +659,7 @@ public final class CampaignManager {
         if (proposal.type() == CampaignData.ProposalType.PEACE && proposal.linkedWar() != null) {
             CampaignData.WarRecord war = data.getWar(proposal.linkedWar());
             data.endWar(proposal.linkedWar(), day, "Peace accepted by both factions.");
+            Campaign23Data.get(player.serverLevel()).clearWarInterventionState(proposal.linkedWar());
             if (war != null) synchronizeWarPeace(player.serverLevel(), data, war, day);
             data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR,
                     "Peace concluded", factionName(proposal.fromFaction()) + " and " + factionName(proposal.toFaction()) + " have made peace.",
