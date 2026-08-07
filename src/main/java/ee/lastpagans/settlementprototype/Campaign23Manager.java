@@ -589,6 +589,33 @@ public final class Campaign23Manager {
         }
     }
 
+    /**
+     * Finalizes a levy deployment when its final tracked soldier dies. Without this cleanup a completely
+     * destroyed levy would remain "active" forever, continuing to consume deployment capacity and eventually
+     * accumulating service-unrest modifiers even though no levymen remained in the world.
+     */
+    public static void onLevyBatchDestroyed(ServerLevel level, PrototypeData.SettlementRecord settlement, UUID batchId) {
+        if (level == null || settlement == null || batchId == null) return;
+        Campaign23Data extra = Campaign23Data.get(level);
+        Campaign23Data.LevyDeployment deployment = extra.levyDeployment(batchId);
+        if (deployment == null) return;
+
+        long now = extra.nowMillis(settlement.getId());
+        long serviceAge = Math.max(0L, now - deployment.deployedAtMillis);
+        applyLevyCasualtyModifier(level, settlement, extra, 1.0D);
+        extra.removeLevyDeployment(batchId);
+        settleLevyServicePenaltyAfterReturn(level, settlement, extra, serviceAge);
+
+        long fullCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_FULL_COOLDOWN_HOURS);
+        long minimumCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_MIN_COOLDOWN_HOURS);
+        long cooldown = Math.max(minimumCooldown, Math.round(fullCooldown * Math.min(1.0D, deployment.initialUnits / 300.0D)));
+        if (deployment.ownerId != null) {
+            extra.setLevyCooldown(deployment.ownerId, Math.max(extra.levyCooldownUntil(deployment.ownerId), now + cooldown));
+        }
+        settlement.addChronicle("The levy was annihilated: 0/" + deployment.initialUnits
+                + " men returned. A full casualty crisis and levy cooldown were applied.");
+    }
+
     public static void applyEmergencyMobilization(ServerLevel level, String factionId) {
         if (factionId == null || factionId.isBlank()) return;
         Campaign23Data extra = Campaign23Data.get(level);

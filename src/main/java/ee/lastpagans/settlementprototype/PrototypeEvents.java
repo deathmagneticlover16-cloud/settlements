@@ -61,7 +61,12 @@ public final class PrototypeEvents {
             settlement.addChronicle("A professional soldier died; one MP became vacant.");
             return;
         }
-        settlement.removeLevyman(entity.getUUID());
+        UUID levyBatch = entity.getPersistentData().hasUUID(PrototypeManager.TAG_BATCH)
+                ? entity.getPersistentData().getUUID(PrototypeManager.TAG_BATCH) : null;
+        PrototypeData.LevyDeathResult levyDeath = settlement.removeLevyman(entity.getUUID());
+        if (levyDeath.batchEnded() && levyBatch != null) {
+            Campaign23Manager.onLevyBatchDestroyed(level, settlement, levyBatch);
+        }
     }
 
     public static void onEntityJoin(EntityJoinLevelEvent event) {
