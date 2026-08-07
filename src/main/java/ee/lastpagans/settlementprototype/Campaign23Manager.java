@@ -100,6 +100,9 @@ public final class Campaign23Manager {
         }
         processLevyMobilizations(server, extra, settlements);
         processLevyServicePenalties(server, extra, settlements);
+        processRecurringWarAid(server, extra, settlements, day);
+        processReparations(server, extra, day);
+        processForcedNapExpiry(server, extra, day);
     }
 
     private static void applyDailyModifierEffects(PrototypeData.SettlementRecord settlement, Campaign23Data extra, long day) {
@@ -338,6 +341,65 @@ public final class Campaign23Manager {
         }
     }
 
+
+
+    private static void processRecurringWarAid(MinecraftServer server, Campaign23Data extra, PrototypeData settlements, long day) {
+        CampaignData campaign = CampaignData.get(server.overworld());
+        for (CampaignData.WarRecord war : campaign.getWars()) {
+            List<Campaign23Data.AidRecord> current = extra.warAid(war.id());
+            if (current.isEmpty()) continue;
+            if (war.status() != CampaignData.WarStatus.ACTIVE) { extra.removeWarAid(war.id()); continue; }
+            List<Campaign23Data.AidRecord> next = new ArrayList<>();
+            for (Campaign23Data.AidRecord aid : current) {
+                if (!aid.recurring()) continue;
+                if (aid.nextDay() > day) { next.add(aid); continue; }
+                PrototypeData.SettlementRecord target = settlements.getSettlement(aid.targetSettlement());
+                if (target == null) continue;
+                String error = CampaignManager.transferFactionAid(server.overworld(), aid.fromFaction(), target, aid.manpower(), aid.wealth(), aid.food());
+                if (error == null) {
+                    next.add(new Campaign23Data.AidRecord(aid.id(), aid.fromFaction(), aid.targetSettlement(), aid.manpower(), aid.wealth(), aid.food(), true, day + 1));
+                    CampaignToastSender.faction(server, target.getFactionTeam(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
+                } else {
+                    CampaignToastSender.faction(server, aid.fromFaction(), "AID SUSPENDED", "Recurring aid to " + target.getName() + " stopped: " + error);
+                }
+            }
+            extra.replaceWarAid(war.id(), next);
+        }
+    }
+
+    private static void processReparations(MinecraftServer server, Campaign23Data extra, long day) {
+        List<Campaign23Data.ReparationRecord> next = new ArrayList<>();
+        for (Campaign23Data.ReparationRecord value : extra.reparations()) {
+            if (value.remainingDays() <= 0) continue;
+            if (value.nextDay() > day) { next.add(value); continue; }
+            int available = extra.factionWealth(value.payerFaction());
+            int paid = Math.min(available, value.wealthPerDay());
+            if (paid > 0) { extra.changeFactionWealth(value.payerFaction(), -paid); extra.changeFactionWealth(value.receiverFaction(), paid); }
+            int remaining = value.remainingDays() - 1;
+            if (paid < value.wealthPerDay()) {
+                CampaignData.get(server.overworld()).changeFactionReliability(value.payerFaction(), -2);
+                CampaignToastSender.faction(server, value.receiverFaction(), "REPARATIONS MISSED", CampaignManager.factionName(value.payerFaction()) + " could not pay the full daily reparations.");
+            }
+            if (remaining > 0) next.add(value.next(day + 1, remaining));
+        }
+        extra.replaceReparations(next);
+    }
+
+    private static void processForcedNapExpiry(MinecraftServer server, Campaign23Data extra, long day) {
+        CampaignData campaign = CampaignData.get(server.overworld());
+        if (com.talhanation.recruits.FactionEvents.recruitsFactionManager == null) return;
+        List<com.talhanation.recruits.world.RecruitsFaction> factions = new ArrayList<>(com.talhanation.recruits.FactionEvents.recruitsFactionManager.getFactions());
+        for (int i = 0; i < factions.size(); i++) for (int j = i + 1; j < factions.size(); j++) {
+            String a = factions.get(i).getStringID(), b = factions.get(j).getStringID();
+            long until = extra.forcedNapUntil(a, b);
+            if (until > 0 && until <= day && campaign.relation(a, b).state() == CampaignData.TreatyState.NON_AGGRESSION) {
+                campaign.relation(a, b).setState(CampaignData.TreatyState.NEUTRAL, day);
+                extra.setForcedNap(a, b, 0);
+                CampaignManager.syncRelation(server.overworld(), a, b, CampaignData.TreatyState.NEUTRAL);
+                CampaignToastSender.relationChanged(server, a, b, "Forced non-aggression pact expired");
+            }
+        }
+    }
 
     public static void onLevyDeath(ServerLevel level, Entity entity) {
         if (entity == null || !entity.getPersistentData().getBoolean(PrototypeManager.TAG_MANAGED)

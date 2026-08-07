@@ -42,6 +42,8 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, List<AidRecord>> aidByWar = new HashMap<>();
     private final Map<UUID, Integer> warScore = new HashMap<>();
     private final Map<UUID, CandidateHistory> candidateHistory = new HashMap<>();
+    private final Map<String, Long> forcedNapUntilDay = new HashMap<>();
+    private final List<ReparationRecord> reparations = new ArrayList<>();
 
     public static Campaign23Data get(ServerLevel level) {
         ServerLevel storage = level.getServer().overworld();
@@ -122,6 +124,11 @@ public final class Campaign23Data extends SavedData {
             CandidateHistory history = CandidateHistory.fromNBT((CompoundTag) raw);
             if (history.playerId != null) data.candidateHistory.put(history.playerId, history);
         }
+        readStringLongMap(tag, "ForcedNapUntil", data.forcedNapUntilDay);
+        for (Tag raw : tag.getList("Reparations", Tag.TAG_COMPOUND)) {
+            ReparationRecord value = ReparationRecord.fromNBT((CompoundTag) raw);
+            if (value.id() != null && !value.payerFaction().isBlank() && !value.receiverFaction().isBlank()) data.reparations.add(value);
+        }
         return data;
     }
 
@@ -159,6 +166,8 @@ public final class Campaign23Data extends SavedData {
         tag.put("WarAid", aid);
         writeUuidIntMap(tag, "WarScore", warScore);
         ListTag histories = new ListTag(); candidateHistory.values().forEach(value -> histories.add(value.toNBT())); tag.put("CandidateHistory", histories);
+        writeStringLongMap(tag, "ForcedNapUntil", forcedNapUntilDay);
+        ListTag reparationsTag = new ListTag(); reparations.forEach(value -> reparationsTag.add(value.toNBT())); tag.put("Reparations", reparationsTag);
         return tag;
     }
 
@@ -220,16 +229,29 @@ public final class Campaign23Data extends SavedData {
     public void clearLevyCooldown(UUID player) { if (levyCooldownUntil.remove(player) != null) setDirty(); }
 
     public PeaceOfferRecord peaceOffer(UUID proposal) { return peaceOffers.get(proposal); }
+    public Collection<PeaceOfferRecord> peaceOffers() { return List.copyOf(peaceOffers.values()); }
     public void putPeaceOffer(PeaceOfferRecord value) { if (value != null && value.proposalId != null) { peaceOffers.put(value.proposalId, value); setDirty(); } }
     public void removePeaceOffer(UUID proposal) { if (peaceOffers.remove(proposal) != null) setDirty(); }
     public List<AidRecord> warAid(UUID war) { return List.copyOf(aidByWar.getOrDefault(war, List.of())); }
     public void addWarAid(UUID war, AidRecord value) { if (war == null || value == null) return; aidByWar.computeIfAbsent(war, key -> new ArrayList<>()).add(value); setDirty(); }
+    public void replaceWarAid(UUID war, List<AidRecord> values) { if (war == null) return; if (values == null || values.isEmpty()) aidByWar.remove(war); else aidByWar.put(war, new ArrayList<>(values)); setDirty(); }
     public void removeWarAid(UUID war) { if (aidByWar.remove(war) != null) setDirty(); }
     public int warScore(UUID war) { return clamp(warScore.getOrDefault(war, 0), -100, 100); }
     public void setWarScore(UUID war, int score) { if (war == null) return; warScore.put(war, clamp(score, -100, 100)); setDirty(); }
     public void changeWarScore(UUID war, int delta) { setWarScore(war, warScore(war) + delta); }
 
     public CandidateHistory candidateHistory(UUID player) { return candidateHistory.computeIfAbsent(player, CandidateHistory::new); }
+
+    public long forcedNapUntil(String firstFaction, String secondFaction) { return forcedNapUntilDay.getOrDefault(pairKey(firstFaction, secondFaction), 0L); }
+    public void setForcedNap(String firstFaction, String secondFaction, long untilDay) {
+        String key = pairKey(firstFaction, secondFaction); if (key.isBlank()) return;
+        if (untilDay <= 0) forcedNapUntilDay.remove(key); else forcedNapUntilDay.put(key, untilDay); setDirty();
+    }
+    public boolean forcedNapActive(String firstFaction, String secondFaction, long day) { return forcedNapUntil(firstFaction, secondFaction) > day; }
+    public List<ReparationRecord> reparations() { return List.copyOf(reparations); }
+    public void addReparation(ReparationRecord value) { if (value != null) { reparations.add(value); setDirty(); } }
+    public void replaceReparations(List<ReparationRecord> values) { reparations.clear(); if (values != null) reparations.addAll(values); setDirty(); }
+    public void removeReparation(UUID id) { if (id != null && reparations.removeIf(value -> id.equals(value.id()))) setDirty(); }
 
     public void resetPlayerData(UUID player) {
         if (player == null) return;
@@ -309,9 +331,11 @@ public final class Campaign23Data extends SavedData {
         private static LevyDeployment fromNBT(CompoundTag tag) { return new LevyDeployment(tag.hasUUID("Batch") ? tag.getUUID("Batch") : UUID.randomUUID(), tag.hasUUID("Owner") ? tag.getUUID("Owner") : null, tag.getString("Settlement"), tag.getString("Faction"), tag.getInt("Initial"), tag.getInt("Manpower"), tag.getInt("Returned"), tag.getLong("Deployed")); }
     }
 
-    public record PeaceOfferRecord(UUID proposalId, UUID warId, String proposerFaction, String targetFaction, List<PeaceTerm> terms, long createdAtMillis) {
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Proposal", proposalId); if (warId != null) tag.putUUID("War", warId); tag.putString("Proposer", proposerFaction == null ? "" : proposerFaction); tag.putString("Target", targetFaction == null ? "" : targetFaction); tag.putLong("Created", createdAtMillis); ListTag list = new ListTag(); terms.forEach(term -> list.add(term.toNBT())); tag.put("Terms", list); return tag; }
-        private static PeaceOfferRecord fromNBT(CompoundTag tag) { List<PeaceTerm> terms = new ArrayList<>(); for (Tag raw : tag.getList("Terms", Tag.TAG_COMPOUND)) terms.add(PeaceTerm.fromNBT((CompoundTag) raw)); return new PeaceOfferRecord(tag.hasUUID("Proposal") ? tag.getUUID("Proposal") : null, tag.hasUUID("War") ? tag.getUUID("War") : null, tag.getString("Proposer"), tag.getString("Target"), List.copyOf(terms), tag.getLong("Created")); }
+    public record PeaceOfferRecord(UUID proposalId, UUID warId, String proposerFaction, String targetFaction,
+                                   String proposerSettlement, String targetSettlement, List<PeaceTerm> terms, long createdAtMillis) {
+        public PeaceOfferRecord { proposerFaction = proposerFaction == null ? "" : proposerFaction; targetFaction = targetFaction == null ? "" : targetFaction; proposerSettlement = PrototypeData.normalizeId(proposerSettlement); targetSettlement = PrototypeData.normalizeId(targetSettlement); terms = terms == null ? List.of() : List.copyOf(terms); }
+        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Proposal", proposalId); if (warId != null) tag.putUUID("War", warId); tag.putString("Proposer", proposerFaction); tag.putString("Target", targetFaction); tag.putString("ProposerSettlement", proposerSettlement); tag.putString("TargetSettlement", targetSettlement); tag.putLong("Created", createdAtMillis); ListTag list = new ListTag(); terms.forEach(term -> list.add(term.toNBT())); tag.put("Terms", list); return tag; }
+        private static PeaceOfferRecord fromNBT(CompoundTag tag) { List<PeaceTerm> terms = new ArrayList<>(); for (Tag raw : tag.getList("Terms", Tag.TAG_COMPOUND)) terms.add(PeaceTerm.fromNBT((CompoundTag) raw)); return new PeaceOfferRecord(tag.hasUUID("Proposal") ? tag.getUUID("Proposal") : null, tag.hasUUID("War") ? tag.getUUID("War") : null, tag.getString("Proposer"), tag.getString("Target"), tag.getString("ProposerSettlement"), tag.getString("TargetSettlement"), List.copyOf(terms), tag.getLong("Created")); }
     }
 
     public record PeaceTerm(String type, String targetId, int amount, int durationDays, String text) {
@@ -323,6 +347,14 @@ public final class Campaign23Data extends SavedData {
     public record AidRecord(UUID id, String fromFaction, String targetSettlement, int manpower, int wealth, int food, boolean recurring, long nextDay) {
         private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("From", fromFaction == null ? "" : fromFaction); tag.putString("Target", PrototypeData.normalizeId(targetSettlement)); tag.putInt("Manpower", Math.max(0, manpower)); tag.putInt("Wealth", Math.max(0, wealth)); tag.putInt("Food", Math.max(0, food)); tag.putBoolean("Recurring", recurring); tag.putLong("NextDay", nextDay); return tag; }
         private static AidRecord fromNBT(CompoundTag tag) { return new AidRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("From"), tag.getString("Target"), tag.getInt("Manpower"), tag.getInt("Wealth"), tag.getInt("Food"), tag.getBoolean("Recurring"), tag.getLong("NextDay")); }
+    }
+
+
+    public record ReparationRecord(UUID id, String payerFaction, String receiverFaction, int wealthPerDay, int remainingDays, long nextDay) {
+        public ReparationRecord { if (id == null) id = UUID.randomUUID(); payerFaction = payerFaction == null ? "" : payerFaction; receiverFaction = receiverFaction == null ? "" : receiverFaction; wealthPerDay = Math.max(0, wealthPerDay); remainingDays = Math.max(0, remainingDays); }
+        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("Payer", payerFaction); tag.putString("Receiver", receiverFaction); tag.putInt("Wealth", wealthPerDay); tag.putInt("Remaining", remainingDays); tag.putLong("NextDay", nextDay); return tag; }
+        private static ReparationRecord fromNBT(CompoundTag tag) { return new ReparationRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("Payer"), tag.getString("Receiver"), tag.getInt("Wealth"), tag.getInt("Remaining"), tag.getLong("NextDay")); }
+        public ReparationRecord next(long day, int remaining) { return new ReparationRecord(id, payerFaction, receiverFaction, wealthPerDay, remaining, day); }
     }
 
     public static final class CandidateHistory {
@@ -341,6 +373,7 @@ public final class Campaign23Data extends SavedData {
         private static CandidateHistory fromNBT(CompoundTag tag) { CandidateHistory history = new CandidateHistory(tag.hasUUID("Player") ? tag.getUUID("Player") : null); history.preferredGender = tag.getString("Gender").isBlank() ? "ANY" : tag.getString("Gender"); for (Tag raw : tag.getList("Rejected", Tag.TAG_STRING)) history.rejectedIds.add(raw.getAsString()); for (Tag raw : tag.getList("Seen", Tag.TAG_STRING)) history.seenIds.add(raw.getAsString()); return history; }
     }
 
+    private static String pairKey(String a, String b) { if (a == null || b == null || a.isBlank() || b.isBlank()) return ""; return a.compareToIgnoreCase(b) <= 0 ? a + "|" + b : b + "|" + a; }
     private static int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
     private static void readStringIntMap(CompoundTag tag, String key, Map<String, Integer> output) { for (Tag raw : tag.getList(key, Tag.TAG_COMPOUND)) { CompoundTag e = (CompoundTag) raw; String id = e.getString("Id"); if (!id.isBlank()) output.put(id, e.getInt("Value")); } }
     private static void writeStringIntMap(CompoundTag tag, String key, Map<String, Integer> values) { ListTag list = new ListTag(); values.forEach((id, value) -> { CompoundTag e = new CompoundTag(); e.putString("Id", id); e.putInt("Value", value); list.add(e); }); tag.put(key, list); }

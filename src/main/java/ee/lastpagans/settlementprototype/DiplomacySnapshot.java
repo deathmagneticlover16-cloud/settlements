@@ -56,14 +56,32 @@ public record DiplomacySnapshot(
         List<SettlementTarget> settlements = settlementsData.getSettlements().stream()
                 .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
                         CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(),
-                        PrototypeManager.canManage(player, value)))
+                        PrototypeManager.canManage(player, value), value.getClaimLinks().stream()
+                        .map(claim -> new ClaimTarget(claim.id(), claim.name())).toList()))
                 .sorted(Comparator.comparing(SettlementTarget::factionName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(SettlementTarget::settlementName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
-        List<ProposalEntry> proposals = own.isBlank() ? List.of() : campaign.proposalsFor(own).stream()
-                .map(value -> new ProposalEntry(value.id(), value.type().name(), value.fromFaction(), CampaignManager.factionName(value.fromFaction()), value.linkedWar()))
-                .toList();
+        List<ProposalEntry> proposals = new ArrayList<>();
+        if (!own.isBlank()) proposals.addAll(campaign.proposalsFor(own).stream()
+                .map(value -> new ProposalEntry(value.id(), value.type().name(), value.fromFaction(), CampaignManager.factionName(value.fromFaction()), value.linkedWar(), "", true, false))
+                .toList());
+        Campaign23Data campaign23 = Campaign23Data.get(player.serverLevel());
+        for (Campaign23Data.PeaceOfferRecord offer : campaign23.peaceOffers()) {
+            CampaignData.WarRecord war = offer.warId() == null ? null : campaign.getWar(offer.warId());
+            if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) continue;
+            boolean targetFaction = !own.isBlank() && own.equals(offer.targetFaction());
+            boolean targetSettlement = !offer.targetSettlement().isBlank() && settlementsData.getSettlement(offer.targetSettlement()) != null
+                    && PrototypeManager.canManage(player, settlementsData.getSettlement(offer.targetSettlement()));
+            if (!targetFaction && !targetSettlement) continue;
+            String fromName = !offer.proposerFaction().isBlank() ? CampaignManager.factionName(offer.proposerFaction())
+                    : (settlementsData.getSettlement(offer.proposerSettlement()) == null ? "Independent settlement" : settlementsData.getSettlement(offer.proposerSettlement()).getName());
+            int score = campaign23.warScore(war.id());
+            boolean proposerAttacker = offer.proposerSettlement().equals(war.attackerSettlement()) || (!offer.proposerFaction().isBlank() && offer.proposerFaction().equals(war.attackerFaction()));
+            boolean targetCapitulated = proposerAttacker ? score >= 90 : score <= -90;
+            String summary = offer.terms().isEmpty() ? "White peace" : offer.terms().stream().map(term -> prettyTerm(term)).reduce((a,b) -> a + "; " + b).orElse("White peace");
+            proposals.add(new ProposalEntry(offer.proposalId(), "PEACE_TERMS", offer.proposerFaction(), fromName, offer.warId(), summary, !targetCapitulated, true));
+        }
         java.util.Set<String> managedSettlementIds = settlements.stream().filter(SettlementTarget::manageable)
                 .map(SettlementTarget::settlementId).collect(java.util.stream.Collectors.toSet());
         List<CampaignData.WarRecord> visibleWars = campaign.getWars().stream()
@@ -98,6 +116,20 @@ public record DiplomacySnapshot(
         if (faction == null || faction.getTeamLeaderUUID() == null) return "";
         PrototypeData.CharacterRecord character = PrototypeData.get(viewer.serverLevel()).getCharacter(faction.getTeamLeaderUUID());
         return character == null ? "" : character.getFaith();
+    }
+
+    private static String prettyTerm(Campaign23Data.PeaceTerm term) {
+        return switch (term.type()) {
+            case "WEALTH" -> term.amount() + " wealth";
+            case "MANPOWER" -> term.amount() + " manpower";
+            case "REPARATIONS" -> term.amount() + " wealth/day for " + term.durationDays() + " days";
+            case "NAP" -> "NAP for " + term.durationDays() + " days";
+            case "CONVERT_FAITH" -> "convert to " + term.text();
+            case "TRANSFER_SETTLEMENT" -> "transfer settlement " + term.targetId();
+            case "TRANSFER_CLAIM" -> "transfer claim " + term.text();
+            case "RECOGNIZE_INDEPENDENCE" -> "recognize independence";
+            default -> term.type().replace('_', ' ').toLowerCase(java.util.Locale.ROOT);
+        };
     }
 
     public void encode(FriendlyByteBuf buffer) {
@@ -143,25 +175,37 @@ public record DiplomacySnapshot(
         }
     }
 
-    public record SettlementTarget(String settlementId, String settlementName, String factionId, String factionName, String rank, boolean manageable) {
+    public record SettlementTarget(String settlementId, String settlementName, String factionId, String factionName, String rank, boolean manageable,
+                                   List<ClaimTarget> claims) {
         private static void encode(SettlementTarget value, FriendlyByteBuf buffer) {
             buffer.writeUtf(value.settlementId, 64); buffer.writeUtf(value.settlementName, 64); buffer.writeUtf(value.factionId, 64);
             buffer.writeUtf(value.factionName, 64); buffer.writeUtf(value.rank, 32); buffer.writeBoolean(value.manageable);
+            buffer.writeVarInt(value.claims.size());
+            for (ClaimTarget claim : value.claims) { buffer.writeUUID(claim.id()); buffer.writeUtf(claim.name(), 64); }
         }
         private static SettlementTarget decode(FriendlyByteBuf buffer) {
-            return new SettlementTarget(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32), buffer.readBoolean());
+            String id = buffer.readUtf(64), name = buffer.readUtf(64), faction = buffer.readUtf(64), factionName = buffer.readUtf(64), rank = buffer.readUtf(32);
+            boolean manageable = buffer.readBoolean(); int count = Math.min(256, buffer.readVarInt()); List<ClaimTarget> claims = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) claims.add(new ClaimTarget(buffer.readUUID(), buffer.readUtf(64)));
+            return new SettlementTarget(id, name, faction, factionName, rank, manageable, List.copyOf(claims));
         }
         public String display() { return settlementName + " — " + rank + (factionId.isBlank() ? " · Independent" : " · " + factionName); }
     }
+    public record ClaimTarget(UUID id, String name) {
+        public String display() { return name == null || name.isBlank() ? id.toString() : name; }
+    }
 
-    public record ProposalEntry(UUID id, String type, String fromFactionId, String fromFactionName, UUID linkedWar) {
+    public record ProposalEntry(UUID id, String type, String fromFactionId, String fromFactionName, UUID linkedWar,
+                                String summary, boolean canReject, boolean structuredPeace) {
         private static void encode(ProposalEntry value, FriendlyByteBuf buffer) {
-            buffer.writeUUID(value.id); buffer.writeUtf(value.type, 32); buffer.writeUtf(value.fromFactionId, 64); buffer.writeUtf(value.fromFactionName, 64);
+            buffer.writeUUID(value.id); buffer.writeUtf(value.type, 32); buffer.writeUtf(value.fromFactionId, 64); buffer.writeUtf(value.fromFactionName, 80);
             buffer.writeBoolean(value.linkedWar != null); if (value.linkedWar != null) buffer.writeUUID(value.linkedWar);
+            buffer.writeUtf(value.summary, 512); buffer.writeBoolean(value.canReject); buffer.writeBoolean(value.structuredPeace);
         }
         private static ProposalEntry decode(FriendlyByteBuf buffer) {
-            UUID id = buffer.readUUID(); String type = buffer.readUtf(32); String fromId = buffer.readUtf(64); String fromName = buffer.readUtf(64);
-            return new ProposalEntry(id, type, fromId, fromName, buffer.readBoolean() ? buffer.readUUID() : null);
+            UUID id = buffer.readUUID(); String type = buffer.readUtf(32); String fromId = buffer.readUtf(64); String fromName = buffer.readUtf(80);
+            UUID linked = buffer.readBoolean() ? buffer.readUUID() : null;
+            return new ProposalEntry(id, type, fromId, fromName, linked, buffer.readUtf(512), buffer.readBoolean(), buffer.readBoolean());
         }
     }
 

@@ -1157,6 +1157,8 @@ public final class PrototypeData extends SavedData {
         }
 
         public void setPrimarySeat(String value) { primarySeat = normalizeId(value); }
+        public void setFaith(String value) { this.faith = normalizeLegacyFaith(cleanText(value, "Finnic Paganism", 32)); }
+        public void setTraits(List<String> values) { traits.clear(); if (values != null) values.stream().map(CampaignDefinitions::normalize).filter(id -> CampaignDefinitions.trait(id) != null).distinct().limit(3).forEach(traits::add); }
 
         private static String normalizeLegacyFaith(String value) {
             if (value == null || value.isBlank()) return "Finnic Paganism";

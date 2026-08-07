@@ -1,6 +1,8 @@
 package ee.lastpagans.settlementprototype;
 
 import com.talhanation.recruits.FactionEvents;
+import com.talhanation.recruits.ClaimEvents;
+import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.recruits.world.RecruitsDiplomacyManager;
 import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsFactionManager;
@@ -133,6 +135,14 @@ public final class CampaignManager {
         long day = player.serverLevel().getDayTime() / 24000L;
         if ("DECLARE_WAR".equals(action) && extra != null && extra.toUpperCase(Locale.ROOT).startsWith("SETTLEMENT_WAR|")) {
             openDiplomacy(player, declareSettlementWar(player, data, extra, day));
+            return;
+        }
+        if ("OFFER_PEACE_TERMS".equals(action)) {
+            openDiplomacy(player, offerPeaceTerms(player, data, warId, extra, day));
+            return;
+        }
+        if ("ACCEPT_PEACE_TERMS".equals(action) || "REJECT_PEACE_TERMS".equals(action)) {
+            openDiplomacy(player, resolvePeaceTerms(player, data, proposalId, "ACCEPT_PEACE_TERMS".equals(action), day));
             return;
         }
         if (own.isBlank()) {
@@ -316,10 +326,11 @@ public final class CampaignManager {
         try { return Math.max(0, Integer.parseInt(split[index])); } catch (NumberFormatException ignored) { return 0; }
     }
 
-    private static String transferFactionAid(ServerLevel level, String faction, PrototypeData.SettlementRecord target, int manpower, int wealth, int food) {
+    static String transferFactionAid(ServerLevel level, String faction, PrototypeData.SettlementRecord target, int manpower, int wealth, int food) {
         Campaign23Data extra = Campaign23Data.get(level);
         if (extra.factionWealth(faction) < wealth) return "Your faction treasury does not have enough wealth.";
-        List<PrototypeData.SettlementRecord> sources = PrototypeData.get(level).settlementsForFaction(faction);
+        List<PrototypeData.SettlementRecord> sources = PrototypeData.get(level).settlementsForFaction(faction).stream()
+                .filter(source -> !source.getId().equals(target.getId())).toList();
         int availableMp = sources.stream().mapToInt(PrototypeData.SettlementRecord::getAvailableManpower).sum();
         int availableFood = sources.stream().mapToInt(PrototypeData.SettlementRecord::getFood).sum();
         if (availableMp < manpower) return "Your faction settlements do not have enough available manpower.";
@@ -327,7 +338,6 @@ public final class CampaignManager {
         extra.spendFactionWealth(faction, wealth);
         int mpLeft = manpower, foodLeft = food;
         for (PrototypeData.SettlementRecord source : sources) {
-            if (source.getId().equals(target.getId())) continue;
             int mpTake = Math.min(mpLeft, source.getAvailableManpower());
             if (mpTake > 0) { source.spendAvailableManpower(mpTake); mpLeft -= mpTake; }
             int foodTake = Math.min(foodLeft, source.getFood());
@@ -353,6 +363,178 @@ public final class CampaignManager {
             return CampaignData.WarGoal.defaultFor(type);
         }
     }
+
+
+    private static String offerPeaceTerms(ServerPlayer player, CampaignData data, UUID warId, String encoded, long day) {
+        CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "That war is not active.";
+        PrototypeData settlements = PrototypeData.get(player.serverLevel());
+        String ownFaction = factionId(player);
+        boolean attacker = (!ownFaction.isBlank() && (ownFaction.equals(war.attackerFaction()) || war.supportingAttackers().contains(ownFaction)))
+                || (!war.attackerSettlement().isBlank() && settlements.getSettlement(war.attackerSettlement()) != null && PrototypeManager.canManage(player, settlements.getSettlement(war.attackerSettlement())));
+        boolean defender = (!ownFaction.isBlank() && (ownFaction.equals(war.defenderFaction()) || war.supportingDefenders().contains(ownFaction)))
+                || (!war.defenderSettlement().isBlank() && settlements.getSettlement(war.defenderSettlement()) != null && PrototypeManager.canManage(player, settlements.getSettlement(war.defenderSettlement())));
+        if (!attacker && !defender && !player.createCommandSourceStack().hasPermission(2)) return "You are not authorized to negotiate this war.";
+        if (!ownFaction.isBlank() && !canManageDiplomacy(player, ownFaction, 3) && !player.createCommandSourceStack().hasPermission(2))
+            return "Your faction rank cannot negotiate peace.";
+        String proposerFaction = ownFaction;
+        String targetFaction = attacker ? war.defenderFaction() : war.attackerFaction();
+        String proposerSettlement = attacker ? war.attackerSettlement() : war.defenderSettlement();
+        String targetSettlement = attacker ? war.defenderSettlement() : war.attackerSettlement();
+        List<Campaign23Data.PeaceTerm> terms = parsePeaceTerms(encoded);
+        UUID proposal = UUID.randomUUID();
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        extra.putPeaceOffer(new Campaign23Data.PeaceOfferRecord(proposal, war.id(), proposerFaction, targetFaction,
+                proposerSettlement, targetSettlement, terms, System.currentTimeMillis()));
+        String targetLabel = !targetFaction.isBlank() ? factionName(targetFaction) : settlementName(player.serverLevel(), targetSettlement);
+        CampaignToastSender.faction(player.getServer(), targetFaction, "PEACE OFFER RECEIVED", (proposerFaction.isBlank() ? settlementName(player.serverLevel(), proposerSettlement) : factionName(proposerFaction)) + " proposed peace with " + terms.size() + " term(s).");
+        if (targetFaction.isBlank()) toastSettlementManagers(player.getServer(), targetSettlement, "PEACE OFFER RECEIVED", settlementName(player.serverLevel(), proposerSettlement) + " proposed peace with " + terms.size() + " term(s).");
+        data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL, "Peace offer sent",
+                (proposerFaction.isBlank() ? settlementName(player.serverLevel(), proposerSettlement) : factionName(proposerFaction)) + " sent peace terms to " + targetLabel + ".",
+                day, targetFaction, targetSettlement, CampaignData.NewsVisibility.FACTION);
+        return "Peace treaty sent to " + targetLabel + " with " + terms.size() + " term(s).";
+    }
+
+    private static List<Campaign23Data.PeaceTerm> parsePeaceTerms(String encoded) {
+        List<Campaign23Data.PeaceTerm> terms = new ArrayList<>();
+        if (encoded == null || encoded.isBlank()) return terms;
+        for (String raw : encoded.split(";")) {
+            String[] p = raw.split("~", -1); if (p.length < 5) continue;
+            int amount = parseInt(p[2], 0, 1_000_000); int duration = parseInt(p[3], 0, 3650);
+            String type = p[0].toUpperCase(Locale.ROOT); String target = PrototypeData.cleanText(p[1], "", 80); String text = PrototypeData.cleanText(p[4], "", 120);
+            if (List.of("WEALTH","MANPOWER","REPARATIONS","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
+                terms.add(new Campaign23Data.PeaceTerm(type, target, amount, duration, text));
+        }
+        return List.copyOf(terms);
+    }
+
+    private static String resolvePeaceTerms(ServerPlayer player, CampaignData data, UUID offerId, boolean accept, long day) {
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        Campaign23Data.PeaceOfferRecord offer = offerId == null ? null : extra.peaceOffer(offerId);
+        if (offer == null) return "That peace offer is no longer available.";
+        CampaignData.WarRecord war = offer.warId() == null ? null : data.getWar(offer.warId());
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) { extra.removePeaceOffer(offerId); return "That war has already ended."; }
+        String own = factionId(player);
+        PrototypeData.SettlementRecord targetSettlement = PrototypeData.get(player.serverLevel()).getSettlement(offer.targetSettlement());
+        boolean authorized = (!offer.targetFaction().isBlank() && offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3))
+                || (targetSettlement != null && PrototypeManager.canManage(player, targetSettlement)) || player.createCommandSourceStack().hasPermission(2);
+        if (!authorized) return "You are not authorized to answer those peace terms.";
+        int score = extra.warScore(war.id());
+        boolean proposerAttacker = offer.proposerSettlement().equals(war.attackerSettlement()) || (!offer.proposerFaction().isBlank() && offer.proposerFaction().equals(war.attackerFaction()));
+        boolean targetCapitulated = proposerAttacker ? score >= 90 : score <= -90;
+        if (!accept && targetCapitulated) return "Your side has capitulated and cannot reject these peace terms.";
+        if (!accept) {
+            extra.removePeaceOffer(offerId);
+            if (!offer.proposerFaction().isBlank()) CampaignToastSender.faction(player.getServer(), offer.proposerFaction(), "PEACE REJECTED", "Your peace terms were rejected.");
+            else toastSettlementManagers(player.getServer(), offer.proposerSettlement(), "PEACE REJECTED", "Your peace terms were rejected.");
+            return "Peace terms rejected.";
+        }
+        String error = validatePeaceTerms(player.serverLevel(), offer, war);
+        if (error != null) return "Peace treaty could not be applied: " + error;
+        applyPeaceTerms(player.serverLevel(), offer, war, day);
+        data.endWar(war.id(), day, targetCapitulated ? "Capitulation peace terms enforced." : "Negotiated peace terms accepted.");
+        synchronizeWarPeace(player.serverLevel(), data, war, day);
+        extra.removeWarAid(war.id()); extra.removePeaceOffer(offerId);
+        data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "Peace treaty concluded",
+                "The war ended under negotiated peace terms.", day, "", offer.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);
+        if (!offer.proposerFaction().isBlank()) CampaignToastSender.faction(player.getServer(), offer.proposerFaction(), "PEACE ACCEPTED", "The opposing side accepted your peace treaty.");
+        if (!offer.targetFaction().isBlank()) CampaignToastSender.faction(player.getServer(), offer.targetFaction(), "PEACE CONCLUDED", "The peace treaty is now in force.");
+        return "Peace treaty accepted and applied.";
+    }
+
+    private static String validatePeaceTerms(ServerLevel level, Campaign23Data.PeaceOfferRecord offer, CampaignData.WarRecord war) {
+        Campaign23Data extra = Campaign23Data.get(level); PrototypeData settlements = PrototypeData.get(level);
+        String loserFaction = offer.targetFaction(); PrototypeData.SettlementRecord loserSettlement = settlements.getSettlement(offer.targetSettlement());
+        int wealthNeed = 0, manpowerNeed = 0;
+        for (Campaign23Data.PeaceTerm term : offer.terms()) {
+            if (term.type().equals("WEALTH")) wealthNeed += term.amount();
+            if (term.type().equals("MANPOWER")) manpowerNeed += term.amount();
+            if (term.type().equals("TRANSFER_SETTLEMENT") && settlements.getSettlement(term.targetId()) == null) return "a transferred settlement no longer exists";
+            if (term.type().equals("TRANSFER_CLAIM")) { try { UUID.fromString(term.targetId()); } catch (IllegalArgumentException e) { return "an invalid claim was requested"; } }
+        }
+        int availableWealth = !loserFaction.isBlank() ? extra.factionWealth(loserFaction) : loserSettlement == null ? 0 : loserSettlement.getWealth();
+        int availableMp = !loserFaction.isBlank() ? settlements.settlementsForFaction(loserFaction).stream().mapToInt(PrototypeData.SettlementRecord::getAvailableManpower).sum()
+                : loserSettlement == null ? 0 : loserSettlement.getAvailableManpower();
+        if (wealthNeed > availableWealth) return "the losing side no longer has the demanded wealth";
+        if (manpowerNeed > availableMp) return "the losing side no longer has the demanded manpower";
+        return null;
+    }
+
+    private static void applyPeaceTerms(ServerLevel level, Campaign23Data.PeaceOfferRecord offer, CampaignData.WarRecord war, long day) {
+        Campaign23Data extra = Campaign23Data.get(level); PrototypeData settlements = PrototypeData.get(level);
+        String winnerFaction = offer.proposerFaction(), loserFaction = offer.targetFaction();
+        PrototypeData.SettlementRecord winnerSettlement = settlements.getSettlement(offer.proposerSettlement());
+        if (winnerSettlement == null && !winnerFaction.isBlank()) winnerSettlement = settlements.settlementsForFaction(winnerFaction).stream().findFirst().orElse(null);
+        PrototypeData.SettlementRecord loserSettlement = settlements.getSettlement(offer.targetSettlement());
+        for (Campaign23Data.PeaceTerm term : offer.terms()) {
+            switch (term.type()) {
+                case "WEALTH" -> {
+                    takeWealth(extra, loserFaction, loserSettlement, term.amount());
+                    giveWealth(extra, winnerFaction, winnerSettlement, term.amount());
+                }
+                case "MANPOWER" -> {
+                    int moved = takeManpower(settlements, loserFaction, loserSettlement, term.amount());
+                    if (winnerSettlement != null && moved > 0) {
+                        winnerSettlement.changeMaximumManpower(moved); winnerSettlement.changeAvailableManpower(moved);
+                        extra.addModifier(winnerSettlement.getId(), Campaign23Manager.standardModifier(level, winnerSettlement.getId(), "foreign_soldiers", 3L * 24L * 60L * 60L * 1000L));
+                    }
+                }
+                case "REPARATIONS" -> { if (!loserFaction.isBlank() && !winnerFaction.isBlank() && term.amount() > 0 && term.durationDays() > 0) extra.addReparation(new Campaign23Data.ReparationRecord(UUID.randomUUID(), loserFaction, winnerFaction, term.amount(), term.durationDays(), day + 1)); }
+                case "NAP" -> { if (!winnerFaction.isBlank() && !loserFaction.isBlank() && term.durationDays() > 0) { dataRelationNap(level, winnerFaction, loserFaction, day); extra.setForcedNap(winnerFaction, loserFaction, day + term.durationDays()); } }
+                case "CONVERT_FAITH" -> convertSideFaith(level, loserFaction, loserSettlement, term.text());
+                case "TRANSFER_SETTLEMENT" -> transferSettlementByTreaty(level, term.targetId(), winnerFaction);
+                case "TRANSFER_CLAIM" -> transferClaimByTreaty(level, term.targetId(), term.text());
+                case "RECOGNIZE_INDEPENDENCE" -> { PrototypeData.SettlementRecord s = settlements.getSettlement(term.targetId()); if (s != null) s.setFactionTeam(""); }
+            }
+        }
+    }
+
+    private static void takeWealth(Campaign23Data extra, String faction, PrototypeData.SettlementRecord settlement, int amount) {
+        if (amount <= 0) return; if (!faction.isBlank()) extra.changeFactionWealth(faction, -amount); else if (settlement != null) settlement.changeWealth(-amount);
+    }
+    private static void giveWealth(Campaign23Data extra, String faction, PrototypeData.SettlementRecord settlement, int amount) {
+        if (amount <= 0) return; if (!faction.isBlank()) extra.changeFactionWealth(faction, amount); else if (settlement != null) settlement.changeWealth(amount);
+    }
+    private static int takeManpower(PrototypeData settlements, String faction, PrototypeData.SettlementRecord settlement, int amount) {
+        int left = Math.max(0, amount); if (!faction.isBlank()) {
+            for (PrototypeData.SettlementRecord s : settlements.settlementsForFaction(faction)) { int take = Math.min(left, s.getAvailableManpower()); if (take > 0) { s.spendAvailableManpower(take); left -= take; } if (left <= 0) break; }
+        } else if (settlement != null) { int take = Math.min(left, settlement.getAvailableManpower()); settlement.spendAvailableManpower(take); left -= take; }
+        return amount - left;
+    }
+    private static void dataRelationNap(ServerLevel level, String a, String b, long day) { CampaignData.get(level).relation(a,b).setState(CampaignData.TreatyState.NON_AGGRESSION, day); syncRelation(level,a,b,CampaignData.TreatyState.NON_AGGRESSION); }
+    private static void convertSideFaith(ServerLevel level, String faction, PrototypeData.SettlementRecord settlement, String faith) {
+        if (!CampaignDefinitions.isValidReligion(faith)) return; UUID ruler = null;
+        if (!faction.isBlank() && FactionEvents.recruitsFactionManager != null) { RecruitsFaction f = FactionEvents.recruitsFactionManager.getFactionByStringID(faction); if (f != null) ruler = f.getTeamLeaderUUID(); }
+        if (ruler == null && settlement != null) ruler = settlement.getOwnerId();
+        PrototypeData.CharacterRecord character = ruler == null ? null : PrototypeData.get(level).getCharacter(ruler); if (character != null) character.setFaith(faith);
+    }
+    private static void transferSettlementByTreaty(ServerLevel level, String settlementId, String winnerFaction) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(level).getSettlement(settlementId); if (settlement == null) return;
+        settlement.setFactionTeam(winnerFaction);
+        if (!winnerFaction.isBlank() && FactionEvents.recruitsFactionManager != null && ClaimEvents.recruitsClaimManager != null) {
+            RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(winnerFaction);
+            if (faction != null) for (PrototypeData.ClaimLink link : settlement.getClaimLinks()) { RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(link.id()); if (claim != null) { claim.setOwnerFaction(faction); ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, claim); } }
+            ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(level);
+        }
+        settlement.addChronicle("Settlement transferred by peace treaty to " + (winnerFaction.isBlank() ? "independence" : factionName(winnerFaction)) + ".");
+    }
+    private static void transferClaimByTreaty(ServerLevel level, String claimIdRaw, String destinationSettlementId) {
+        UUID claimId; try { claimId = UUID.fromString(claimIdRaw); } catch (IllegalArgumentException e) { return; }
+        PrototypeData data = PrototypeData.get(level); PrototypeData.SettlementRecord destination = data.getSettlement(destinationSettlementId); if (destination == null) return;
+        PrototypeData.SettlementRecord source = data.getSettlements().stream().filter(s -> s.getClaimLinks().stream().anyMatch(c -> c.id().equals(claimId))).findFirst().orElse(null);
+        if (source == null) return; PrototypeData.ClaimLink link = source.getClaimLinks().stream().filter(c -> c.id().equals(claimId)).findFirst().orElse(null); if (link == null) return;
+        source.unlinkClaim(link.dimension(), claimId); destination.linkClaim(link.dimension(), claimId, link.name());
+        if (ClaimEvents.recruitsClaimManager != null && FactionEvents.recruitsFactionManager != null && !destination.getFactionTeam().isBlank()) {
+            RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(claimId); RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(destination.getFactionTeam());
+            if (claim != null && faction != null) { claim.setOwnerFaction(faction); ClaimEvents.recruitsClaimManager.addOrUpdateClaim(level, claim); ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(level); }
+        }
+    }
+    private static void toastSettlementManagers(MinecraftServer server, String settlementId, String title, String body) {
+        PrototypeData.SettlementRecord settlement = PrototypeData.get(server.overworld()).getSettlement(settlementId); if (settlement == null) return;
+        for (ServerPlayer online : server.getPlayerList().getPlayers()) if (PrototypeManager.canManage(online, settlement)) CampaignToastSender.send(online, title, body);
+    }
+    private static String settlementName(ServerLevel level, String id) { PrototypeData.SettlementRecord s = PrototypeData.get(level).getSettlement(id); return s == null ? id : s.getName(); }
+    private static int parseInt(String raw, int min, int max) { try { return Math.max(min, Math.min(max, Integer.parseInt(raw))); } catch (Exception ignored) { return min; } }
 
     private static String offerPeace(ServerPlayer player, CampaignData data, String own, UUID warId, long day) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot offer peace.";
