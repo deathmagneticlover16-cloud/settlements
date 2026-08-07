@@ -27,6 +27,7 @@ C. SETTLEMENTS / CLAIMS / HOUSING
 [ ] Define Muster pos1/pos2; military screen reports capacity.
 [ ] Define Prayer Site pos1/pos2.
 [ ] Independent owner cannot create/receive a third settlement.
+[ ] Normal GUI and /settlements transfer ownership cannot move a settlement across polity/faction boundaries; cross-polity control changes require diplomacy (operators may use the command only as a repair override).
 
 D. CHARACTER / TRAITS / FAMILY
 [ ] New character uses full 3D model.
@@ -51,6 +52,7 @@ E. SETTLEMENT WAR / ESCALATION
 [ ] Aid / Ledger shows active daily commitments to both the donating parent faction and the aided settlement.
 [ ] Donating parent can cancel its own recurring commitment; the aided side cannot cancel somebody else's aid.
 [ ] Attempting manpower aid above the recipient's remaining MP capacity is rejected without deducting donor manpower.
+[ ] End a purely local Settlement War while both parent factions have an alliance/NAP; their parent-faction treaty must remain unchanged.
 [ ] First parent joining changes escalation text to Faction-v-Settlement or Settlement-v-Faction.
 [ ] Second parent joining produces Faction-v-Faction and Recruits ENEMY relation both ways.
 
@@ -69,10 +71,15 @@ Test each separately on disposable claims/settlements:
 [ ] Faith conversion.
 [ ] Whole settlement transfer.
 [ ] Individual claim transfer into chosen receiving settlement.
-[ ] Recognize independence.
+[ ] Select and transfer several linked claims in one treaty, including claims originating from different enemy settlements during a faction conflict.
+[ ] Recognize independence; with several enemy settlements present, verify the explicitly selected settlement is released.
 [ ] Open Peace Terms as attacker settlement manager, defender settlement manager, and each joined parent faction; side resolution is correct and the client does not recurse/crash.
 [ ] Reject ordinary terms.
-[ ] /settlements admin debug war_score <war> 90 then confirm capitulated defender cannot reject attacker terms.
+[ ] In a pure Faction War, both principal faction leaders/diplomats can open/send/answer structured Peace Terms without side-identification errors.
+[ ] A supporting allied faction can fight but cannot send/accept a treaty on behalf of a principal belligerent.
+[ ] Parent faction joined: local settlement manager without faction diplomacy authority cannot accept faction-wide reparations/NAP terms.
+[ ] /settlements admin debug war_score <war> 90, offer terms costing <=90, then confirm capitulated defender cannot reject.
+[ ] At +90 war score, offer terms costing >90 and confirm they remain rejectable rather than compulsory.
 
 H. LEVIES
 [ ] Define Muster Ground large enough for requested levy.

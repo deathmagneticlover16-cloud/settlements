@@ -15,7 +15,7 @@ IMPORTANT 2.3 BEHAVIOUR
 - Settlement Manager is private. Foreign-faction settlements are not sent as manageable selections, and management packets are revalidated server-side.
 - Settlement Wars are settlement-vs-settlement. Parent factions can Ignore (defender), Send Aid, or Join. Joining escalates the war.
 - Faction Wars verify Villager Recruits ENEMY relation in both directions before the declaration is accepted.
-- Peace is a negotiated terms system rather than a single peace button.
+- Peace is a negotiated terms system rather than a single peace button. At 90+ war score, capitulation only makes terms compulsory when their total treaty cost fits the dominant side's current war-score budget.
 - Faction creation requires a held patterned banner and exposes Recruits team + unit colors.
 - Professionals spawn unhired. Levies spawn already owned by the raising player.
 - Default levy caps: 300/player, 500/faction. Values are configurable.

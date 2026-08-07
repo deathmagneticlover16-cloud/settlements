@@ -2,10 +2,10 @@ SETTLEMENTS 2.3 — SOURCE VALIDATION NOTES
 
 Validated in the supplied source package:
 - Version metadata = 2.3.0.
-- Network protocol = 24.
+- Network protocol = 25.
 - Minecraft 1.20.1 / Forge 47.2.0 / Recruits >=1.15.2 metadata present.
 - JSON resources parsed as valid JSON.
-- Final hardening source audit covered recurring-aid persistence/cancellation, peace-screen side resolution, settlement-war button layout, manpower-aid capacity safety, and independent diplomacy snapshot side effects.
+- Final hardening source audit covered recurring-aid persistence/cancellation, peace-screen side resolution, multi-claim/independence treaty selection, war-score-bounded capitulation, principal-belligerent treaty authority, settlement ownership transfer, observer diplomacy preservation, command transfer boundaries, settlement-war button layout, manpower-aid capacity safety, packet sizing, and independent diplomacy snapshot side effects.
 - Java sources parse through javac far enough to reach expected missing Minecraft/Forge classpath errors; a command-tree parenthesis error found during validation was repaired.
 - git diff whitespace validation clean at packaging time.
 - Villager Recruits 1.15.2 JAR was inspected for the APIs used by faction creation, diplomacy, groups, claims and recruit ownership/morale.

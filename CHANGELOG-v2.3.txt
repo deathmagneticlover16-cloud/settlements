@@ -65,7 +65,7 @@ PEACE TREATIES
 - Whole settlement transfer.
 - Individual linked-claim transfer into a receiving settlement.
 - Recognition of independence.
-- Capitulated side cannot reject terms from the dominant side.
+- Capitulated side cannot reject valid terms from the dominant side when their total treaty cost fits the dominant side's current war-score budget; over-budget demands remain voluntary/rejectable.
 
 RELIGION
 - Catholic Christianity, Orthodox Christianity, Finnic/Baltic/Norse/Slavic Paganism, Islam, Judaism and Other.
@@ -125,4 +125,14 @@ FINAL HARDENING
 - Peace Terms no longer recursively resolves attacker/defender ownership when opened by local settlement managers.
 - Manpower aid validates the recipient's remaining manpower capacity before deducting donor manpower, preventing silent resource loss.
 - Independent rulers no longer create meaningless blank-faction diplomacy records merely by opening the Diplomacy screen.
-- Network protocol advanced to 24 for the expanded diplomacy snapshot.
+- Network protocol initially advanced to 24 for the expanded diplomacy snapshot; final release hardening advances it again to 25 for widened faction/settlement GUI payloads.
+
+- Negotiated peace now supports selecting multiple linked claims across enemy settlements in one treaty and explicitly selecting the receiving settlement.
+- Recognition-of-independence terms now select the intended settlement instead of silently defaulting to the first enemy settlement.
+- Structured peace now works for pure faction wars without ambiguous blank settlement IDs; supporting allies may fight but cannot bind principal belligerents to a treaty.
+- Peace offers are validated before storage and again on acceptance; duplicate/contradictory territory terms are rejected.
+- Whole-settlement peace transfers now transfer actual ownership/control as well as faction alignment, including safe rank downgrades and Recruits claim ownership updates.
+- Faction-wide treaty acceptance is restricted to proper faction diplomacy authority once a parent faction has joined the war.
+- Local Settlement Wars no longer reset observer-parent diplomacy in the SavedData end-war path; the protection now exists at both the data and synchronization layers.
+- Legacy /settlements transfer can no longer bypass polity boundaries for ordinary players; operator use remains an explicit repair override.
+- Faction/settlement GUI action payload capacity was widened for valid 32-character settlement IDs plus 64-character names; network protocol advanced to 25.
