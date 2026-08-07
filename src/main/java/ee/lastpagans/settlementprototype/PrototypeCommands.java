@@ -233,7 +233,8 @@ public final class PrototypeCommands {
                                                         .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), true)))))))
                         .then(Commands.literal("reset")
                                 .then(Commands.literal("character").then(Commands.argument("player", EntityArgument.player())
-                                        .executes(context -> adminResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))))
+                                        .executes(context -> warnResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))
+                                        .then(Commands.literal("confirm").executes(context -> adminResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player"))))))
                                 .then(Commands.literal("player").then(Commands.argument("player", EntityArgument.player())
                                         .then(Commands.literal("confirm").executes(context -> adminResetPlayer(context.getSource(), EntityArgument.getPlayer(context, "player"))))))
                                 .then(Commands.literal("traits").then(Commands.argument("player", EntityArgument.player())
@@ -360,7 +361,8 @@ public final class PrototypeCommands {
                                 .executes(context -> proposeMarriage(context.getSource(), EntityArgument.getPlayer(context, "player")))))
                 .then(Commands.literal("reset").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player())
-                                .executes(context -> resetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))))
+                                .executes(context -> warnResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))
+                                .then(Commands.literal("confirm").executes(context -> resetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player"))))))
         );
 
 
@@ -812,13 +814,22 @@ public final class PrototypeCommands {
         source.sendSuccess(() -> Component.literal("Marriage proposal sent."), false); return 1;
     }
 
+    private static int warnResetCharacter(CommandSourceStack source, ServerPlayer target) {
+        source.sendFailure(Component.literal("WARNING: This will reset " + target.getGameProfile().getName()
+                + "'s character identity, traits, faith, marriage, devotion, divorce history, candidate history and character-specific levy cooldown. "
+                + "Their settlements and faction membership will remain. Add 'confirm' to proceed."));
+        return 0;
+    }
+
     private static int resetCharacter(CommandSourceStack source, ServerPlayer target) {
         PrototypeData data = PrototypeData.get(target.serverLevel());
         data.resetCharacter(target.getUUID());
         CampaignData.get(target.serverLevel()).clearFamilyData(target.getUUID());
+        Campaign23Data.get(target.serverLevel()).resetCharacterData(target.getUUID());
         PrototypeManager.broadcastProfiles(target.getServer());
         PrototypeManager.promptCharacterCreation(target);
-        source.sendSuccess(() -> Component.literal("Character reset for " + target.getGameProfile().getName() + "."), true);
+        source.sendSuccess(() -> Component.literal("Character reset for " + target.getGameProfile().getName()
+                + ". Settlements and faction membership were preserved."), true);
         return 1;
     }
 
@@ -987,10 +998,11 @@ public final class PrototypeCommands {
 
     private static int createFaction(CommandSourceStack source, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
-        String result = CampaignManager.createFaction(player, name);
-        if (player.getTeam() == null) source.sendFailure(Component.literal(result));
-        else source.sendSuccess(() -> Component.literal(result), true);
-        return player.getTeam() == null ? 0 : 1;
+        // The legacy command cannot express Recruits Team Color + Unit Color and previously
+        // created white/default factions. Route players to the authoritative creator instead.
+        CampaignManager.openFaction(player, "Faction creation uses the GUI so Team Color, Unit Color and the required patterned banner cannot be bypassed.");
+        source.sendSuccess(() -> Component.literal("Open the Faction screen and create the faction there. The typed name was not submitted."), false);
+        return 1;
     }
 
     private static int adminCreateFaction(CommandSourceStack source, ServerPlayer target, String name) {

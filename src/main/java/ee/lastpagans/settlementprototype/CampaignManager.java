@@ -1469,7 +1469,10 @@ public final class CampaignManager {
                     }
                     if (!firstFaction.isBlank() && !secondFaction.isBlank() && !firstFaction.equals(secondFaction)) {
                         Campaign23Data.get(player.serverLevel()).removeMarriageAlliance(firstFaction, secondFaction);
-                        CampaignToastSender.faction(player.getServer(), firstFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(secondFaction) + " has ended.");
+                        // The faction whose ruler initiates a political divorce takes the reputation hit.
+                        // The other spouse's faction did not choose to break the marriage alliance.
+                        data.changeFactionReliability(firstFaction, -8);
+                        CampaignToastSender.faction(player.getServer(), firstFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(secondFaction) + " has ended. Reliability -8.");
                         CampaignToastSender.faction(player.getServer(), secondFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(firstFaction) + " has ended.");
                     }
                     result = "Marriage ended.";

@@ -220,7 +220,8 @@ public final class Campaign23Manager {
                     settlement.getName() + " is now a Town. Civic Pride is temporarily boosting the settlement.");
         }
         if (settlement.getRank() == PrototypeData.SettlementRank.TOWN && settlement.getFactionTeam().isBlank()
-                && settlement.getCivilianPopulation() >= 250 && prosperity >= 60 && settlement.getStability() >= 60) {
+                && settlement.getCivilianPopulation() >= 250 && prosperity >= 60 && settlement.getStability() >= 60
+                && settlement.getHousingCapacity() >= settlement.getVillagerCount()) {
             settlement.setRank(PrototypeData.SettlementRank.CITY_STATE);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 3L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The independent settlement emerged as a City-State.");

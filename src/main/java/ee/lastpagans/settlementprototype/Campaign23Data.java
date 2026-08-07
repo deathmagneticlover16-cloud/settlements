@@ -485,6 +485,17 @@ public final class Campaign23Data extends SavedData {
         setDirty();
     }
 
+    public void resetCharacterData(UUID player) {
+        if (player == null) return;
+        devotion.remove(player);
+        divorceCount.remove(player);
+        lastHolyVisitDay.remove(player);
+        lastPrayerDay.remove(player);
+        levyCooldownUntil.remove(player);
+        candidateHistory.remove(player);
+        setDirty();
+    }
+
     public void resetReligion(UUID player) { if (player != null && devotion.remove(player) != null) setDirty(); }
     public void resetLevy(UUID player) {
         if (player == null) return;

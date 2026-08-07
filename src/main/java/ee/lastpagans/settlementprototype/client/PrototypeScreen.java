@@ -28,6 +28,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     private BannerRenderer factionBanner, settlementBanner;
     private boolean confirmClearClaims;
     private ManagePage managePage = ManagePage.LOCATIONS;
+    private int effectScroll;
     private EditBox renameBox, transferBox;
 
     public PrototypeScreen(PrototypeSnapshot snapshot) {
@@ -224,6 +225,15 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
         }
     }
 
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        if (tab == Tab.EFFECTS && snapshot.effects().size() > 7) {
+            int maximumScroll = snapshot.effects().size() - 7;
+            effectScroll = Math.max(0, Math.min(maximumScroll, effectScroll + (delta < 0 ? 1 : -1)));
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
+    }
+
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX);
@@ -297,9 +307,11 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
 
     private void renderEffects(GuiGraphics graphics, int mouseX, int mouseY) {
         graphics.drawString(font, "ACTIVE BONUSES AND PENALTIES", left + 22, top + 108, 0xFFE7D8B0, false);
-        int shown = Math.min(7, snapshot.effects().size());
+        int maximumScroll = Math.max(0, snapshot.effects().size() - 7);
+        effectScroll = Math.max(0, Math.min(effectScroll, maximumScroll));
+        int shown = Math.min(7, snapshot.effects().size() - effectScroll);
         for (int i = 0; i < shown; i++) {
-            PrototypeSnapshot.EffectEntry effect = snapshot.effects().get(i);
+            PrototypeSnapshot.EffectEntry effect = snapshot.effects().get(effectScroll + i);
             int y = top + 130 + i * 21;
             int tone = switch (effect.tone()) {
                 case "POSITIVE" -> 0xFFA9D18E;
@@ -318,7 +330,10 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
             }
         }
         if (snapshot.effects().isEmpty()) graphics.drawString(font, "No active settlement modifiers.", left + 22, top + 134, 0xFFAAAAAA, false);
-        graphics.drawString(font, "Hover an entry for the exact mechanical effect.", left + 22, top + 252, 0xFFAA9D7F, false);
+        String effectFooter = snapshot.effects().size() > 7
+                ? "Scroll to view all effects · " + (effectScroll + 1) + "-" + (effectScroll + shown) + " / " + snapshot.effects().size()
+                : "Hover an entry for the exact mechanical effect.";
+        graphics.drawString(font, effectFooter, left + 22, top + 252, 0xFFAA9D7F, false);
     }
 
     private void renderManagement(GuiGraphics graphics) {
