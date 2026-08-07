@@ -109,6 +109,23 @@ public final class Campaign23Manager {
         processDevotionSites(server, extra, settlements, day);
     }
 
+    /**
+     * Advances only settlement-local campaign simulation for admin testing. Global diplomacy
+     * clocks (reparations, forced NAPs, spouse refreshes, etc.) are deliberately excluded so
+     * testing a five-day levy modifier in one town cannot age the entire server campaign.
+     */
+    public static void processDebugSettlement(MinecraftServer server, PrototypeData.SettlementRecord settlement, long simulatedDay) {
+        if (server == null || settlement == null) return;
+        PrototypeData settlements = PrototypeData.get(server.overworld());
+        Campaign23Data extra = Campaign23Data.get(server.overworld());
+        extra.expireModifiers(settlement.getId());
+        updateReligiousUnrest(server, settlement, extra, settlements);
+        int prosperity = recalculateProsperity(settlement, extra, simulatedDay);
+        applyDailyModifierEffects(settlement, extra, simulatedDay);
+        updateSettlementTier(server.overworld(), settlement, prosperity, extra);
+        updateLevyServicePenaltyForSettlement(server, extra, settlement);
+    }
+
     private static void updateReligiousUnrest(MinecraftServer server, PrototypeData.SettlementRecord settlement, Campaign23Data extra, PrototypeData settlements) {
         String factionId = settlement.getFactionTeam();
         boolean unrest = false;
@@ -502,14 +519,19 @@ public final class Campaign23Manager {
     }
 
     private static void processLevyServicePenalties(MinecraftServer server, Campaign23Data extra, PrototypeData settlements) {
-        Map<String, String> worstStageBySettlement = new HashMap<>();
+        for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
+            updateLevyServicePenaltyForSettlement(server, extra, settlement);
+        }
+    }
+
+    private static void updateLevyServicePenaltyForSettlement(MinecraftServer server, Campaign23Data extra,
+                                                                PrototypeData.SettlementRecord settlement) {
+        String desired = "";
         for (Campaign23Data.LevyDeployment deployment : extra.levyDeployments()) {
-            PrototypeData.SettlementRecord settlement = settlements.getSettlement(deployment.settlementId);
-            if (settlement == null) continue;
+            if (!settlement.getId().equals(deployment.settlementId)) continue;
             long age = extra.nowMillis(settlement.getId()) - deployment.deployedAtMillis;
             String stage = levyServiceModifier(age);
-            String previous = worstStageBySettlement.getOrDefault(settlement.getId(), "");
-            if (levyServiceStage(stage) > levyServiceStage(previous)) worstStageBySettlement.put(settlement.getId(), stage);
+            if (levyServiceStage(stage) > levyServiceStage(desired)) desired = stage;
 
             // Enforce the low level cap while preserving XP earned in real combat below that cap.
             for (UUID unitId : settlement.getLevyUnitsForBatch(deployment.batchId)) {
@@ -521,18 +543,15 @@ public final class Campaign23Manager {
             }
         }
 
-        for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
-            String desired = worstStageBySettlement.getOrDefault(settlement.getId(), "");
-            String current = LEVY_SERVICE_MODIFIER_IDS.stream()
-                    .filter(id -> extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals(id)))
-                    .max(Comparator.comparingInt(Campaign23Manager::levyServiceStage)).orElse("");
-            clearLevyServiceModifiers(extra, settlement.getId(), desired);
-            if (desired.isBlank()) continue;
-            if (!desired.equals(current) || extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(desired))) {
-                extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), desired, 0));
-                if (levyServiceStage(desired) > levyServiceStage(current)) {
-                    settlement.addChronicle("Levy service penalty began: " + pretty(desired) + ".");
-                }
+        String current = LEVY_SERVICE_MODIFIER_IDS.stream()
+                .filter(id -> extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals(id)))
+                .max(Comparator.comparingInt(Campaign23Manager::levyServiceStage)).orElse("");
+        clearLevyServiceModifiers(extra, settlement.getId(), desired);
+        if (desired.isBlank()) return;
+        if (!desired.equals(current) || extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(desired))) {
+            extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), desired, 0));
+            if (levyServiceStage(desired) > levyServiceStage(current)) {
+                settlement.addChronicle("Levy service penalty began: " + pretty(desired) + ".");
             }
         }
     }

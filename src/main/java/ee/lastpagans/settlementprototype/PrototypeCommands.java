@@ -1104,8 +1104,8 @@ public final class PrototypeCommands {
     private static int adminDebugAdvance(CommandSourceStack source, String id, int days) {
         PrototypeData.SettlementRecord s = PrototypeData.get(source.getLevel()).getSettlement(id); if (s == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
         Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.advanceDebugTime(s.getId(), days * 24L * 60L * 60L * 1000L);
-        Campaign23Manager.processCampaignSystems(source.getServer(), source.getLevel().getDayTime() / 24000L + days);
-        source.sendSuccess(() -> Component.literal("Advanced Settlements campaign timers for " + s.getName() + " by " + days + " day(s). Minecraft world time was not changed."), true); return 1;
+        Campaign23Manager.processDebugSettlement(source.getServer(), s, source.getLevel().getDayTime() / 24000L + days);
+        source.sendSuccess(() -> Component.literal("Advanced settlement-local campaign timers for " + s.getName() + " by " + days + " day(s). Global diplomacy timers and Minecraft world time were not changed."), true); return 1;
     }
     private static int adminDebugClearTime(CommandSourceStack source, String id) {
         PrototypeData.SettlementRecord settlement = PrototypeData.get(source.getLevel()).getSettlement(id);
