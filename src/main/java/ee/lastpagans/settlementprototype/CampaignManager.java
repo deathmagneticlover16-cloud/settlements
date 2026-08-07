@@ -53,6 +53,11 @@ public final class CampaignManager {
             openMain(player);
             return;
         }
+        if (!PrototypeManager.canContribute(player, settlement)) {
+            player.sendSystemMessage(Component.literal("Military information is private to settlement members."));
+            PrototypeManager.open(player, settlement.getId());
+            return;
+        }
         PrototypeNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new MilitarySnapshotPacket(PrototypeSnapshot.from(settlement, player, message)));
     }
@@ -846,7 +851,7 @@ public final class CampaignManager {
             String[] p = raw.split("~", -1); if (p.length < 5) continue;
             int amount = parseInt(p[2], 0, 1_000_000); int duration = parseInt(p[3], 0, 3650);
             String type = p[0].toUpperCase(Locale.ROOT); String target = PrototypeData.cleanText(p[1], "", 80); String text = PrototypeData.cleanText(p[4], "", 120);
-            if (List.of("WEALTH","MANPOWER","REPARATIONS","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
+            if (List.of("WEALTH","MANPOWER","REPARATIONS","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RENOUNCE_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
                 terms.add(new Campaign23Data.PeaceTerm(type, target, amount, duration, text));
         }
         return List.copyOf(terms);
@@ -916,6 +921,7 @@ public final class CampaignManager {
             case "NAP" -> Math.min(20, ceilDiv(term.durationDays(), 7));
             case "CONVERT_FAITH" -> 25;
             case "TRANSFER_CLAIM" -> 8;
+            case "RENOUNCE_CLAIM" -> 6;
             case "TRANSFER_SETTLEMENT" -> settlementPeaceCost(level, term.targetId(), false);
             case "RECOGNIZE_INDEPENDENCE" -> settlementPeaceCost(level, term.targetId(), true);
             default -> 0;
@@ -959,6 +965,7 @@ public final class CampaignManager {
         Set<String> transferredSettlements = new HashSet<>();
         Set<String> releasedSettlements = new HashSet<>();
         Set<String> transferredClaims = new HashSet<>();
+        Set<String> renouncedClaims = new HashSet<>();
         for (Campaign23Data.PeaceTerm term : offer.terms()) {
             if ("TRANSFER_SETTLEMENT".equals(term.type()) && !transferredSettlements.add(term.targetId()))
                 return "the same settlement is listed for transfer more than once";
@@ -966,9 +973,13 @@ public final class CampaignManager {
                 return "the same settlement is listed for independence more than once";
             if ("TRANSFER_CLAIM".equals(term.type()) && !transferredClaims.add(term.targetId()))
                 return "the same linked claim is listed for transfer more than once";
+            if ("RENOUNCE_CLAIM".equals(term.type()) && !renouncedClaims.add(term.targetId()))
+                return "the same linked claim is listed for renunciation more than once";
         }
         for (String settlementId : transferredSettlements) if (releasedSettlements.contains(settlementId))
             return "a settlement cannot be transferred to the victor and released as independent in the same treaty";
+        for (String claimId : transferredClaims) if (renouncedClaims.contains(claimId))
+            return "a claim cannot be both transferred and renounced in the same treaty";
 
         for (Campaign23Data.PeaceTerm term : offer.terms()) {
             switch (term.type()) {
@@ -1017,6 +1028,15 @@ public final class CampaignManager {
                         return "the claim destination is not controlled by the side proposing these terms";
                     }
                     if (source.getId().equals(destination.getId())) return "a claim cannot be transferred back into the same settlement";
+                }
+                case "RENOUNCE_CLAIM" -> {
+                    UUID claimId;
+                    try { claimId = UUID.fromString(term.targetId()); }
+                    catch (IllegalArgumentException e) { return "an invalid claim was requested for renunciation"; }
+                    PrototypeData.SettlementRecord source = settlementContainingClaim(settlements, claimId);
+                    if (source == null) return "the claim requested for renunciation is no longer linked to a settlement";
+                    if (!settlementBelongsToLosingSide(source, loserFaction, loserSettlement))
+                        return "the claim requested for renunciation is not controlled by the side receiving these demands";
                 }
                 case "RECOGNIZE_INDEPENDENCE" -> {
                     PrototypeData.SettlementRecord released = settlements.getSettlement(term.targetId());
@@ -1091,6 +1111,7 @@ public final class CampaignManager {
                 case "CONVERT_FAITH" -> convertSideFaith(level, loserFaction, loserSettlement, term.text());
                 case "TRANSFER_SETTLEMENT" -> transferSettlementByTreaty(level, term.targetId(), winnerFaction, recipientOwner);
                 case "TRANSFER_CLAIM" -> transferClaimByTreaty(level, term.targetId(), term.text());
+                case "RENOUNCE_CLAIM" -> renounceClaimByTreaty(level, term.targetId());
                 case "RECOGNIZE_INDEPENDENCE" -> releaseSettlementByTreaty(settlements.getSettlement(term.targetId()));
             }
         }
@@ -1175,6 +1196,21 @@ public final class CampaignManager {
             }
         }
     }
+    private static void renounceClaimByTreaty(ServerLevel level, String claimIdRaw) {
+        UUID claimId; try { claimId = UUID.fromString(claimIdRaw); } catch (IllegalArgumentException e) { return; }
+        PrototypeData data = PrototypeData.get(level);
+        PrototypeData.SettlementRecord source = settlementContainingClaim(data, claimId);
+        if (source == null) return;
+        PrototypeData.ClaimLink link = source.getClaimLinks().stream().filter(value -> claimId.equals(value.id())).findFirst().orElse(null);
+        if (link == null) return;
+        source.unlinkClaim(link.dimension(), claimId);
+        source.addChronicle("Territorial claim " + (link.name().isBlank() ? claimId : link.name()) + " was renounced by peace treaty.");
+        if (ClaimEvents.recruitsClaimManager != null) {
+            ClaimEvents.recruitsClaimManager.removeClaim(level, claimId);
+            ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(level);
+        }
+    }
+
     private static void toastSettlementManagers(MinecraftServer server, String settlementId, String title, String body) {
         PrototypeData.SettlementRecord settlement = PrototypeData.get(server.overworld()).getSettlement(settlementId); if (settlement == null) return;
         for (ServerPlayer online : server.getPlayerList().getPlayers()) if (PrototypeManager.canManage(online, settlement)) CampaignToastSender.send(online, title, body);
@@ -1366,6 +1402,20 @@ public final class CampaignManager {
         String action = actionRaw == null ? "" : actionRaw.toUpperCase(Locale.ROOT);
         String result;
         switch (action) {
+            case "DONATE_FAITH" -> {
+                PrototypeData.CharacterRecord character = PrototypeData.get(player.serverLevel()).getCharacter(player.getUUID());
+                Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+                ItemStack held = player.getMainHandItem();
+                if (character == null || !character.isCreated()) result = "Create a character before making a religious donation.";
+                else if (extra.devotion(player.getUUID()) >= 100) result = "Your Devotion is already at its maximum.";
+                else if (held.isEmpty() || !held.is(PrototypeManager.SILVER_CURRENCY)) result = "Hold one item from #settlementprototype:silver_currency to donate it to your faith.";
+                else {
+                    held.shrink(1);
+                    int gain = SettlementConfig.SILVER_DONATION_DEVOTION_GAIN.get();
+                    extra.changeDevotion(player.getUUID(), gain);
+                    result = "Religious donation made: +" + gain + " Devotion (" + extra.devotion(player.getUUID()) + "/100).";
+                }
+            }
             case "MARRY_NPC" -> {
                 CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
                 if (spouse == null) result = "That generated candidate is no longer available.";
@@ -1481,7 +1531,10 @@ public final class CampaignManager {
             }
             default -> result = "Unknown family action.";
         }
-        openFamily(player, result);
+        if ("DONATE_FAITH".equals(action)) {
+            player.sendSystemMessage(Component.literal(result));
+            PrototypeManager.openCharacterSheet(player, true);
+        } else openFamily(player, result);
     }
 
 

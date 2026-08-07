@@ -1,6 +1,7 @@
 package ee.lastpagans.settlementprototype.client;
 
 import ee.lastpagans.settlementprototype.CharacterSnapshot;
+import ee.lastpagans.settlementprototype.network.FamilyActionPacket;
 import ee.lastpagans.settlementprototype.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlementprototype.network.PrototypeNetwork;
 import net.minecraft.client.gui.GuiGraphics;
@@ -36,6 +37,9 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         setupCampaignScale(W, H);
         left = campaignLeft(W);
         top = campaignTop(H);
+        addRenderableWidget(Button.builder(Component.literal("Donate Silver to Faith"), button ->
+                PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket("DONATE_FAITH", "", null)))
+                .bounds(left + 18, top + 346, 150, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Edit Dynasty / House"), button ->
                 minecraft.setScreen(new CharacterIdentityEditScreen(snapshot, returnToMain)))
                 .bounds(left + 176, top + 346, 150, 20).build());

@@ -201,6 +201,9 @@ public final class PrototypeManager {
             case CLEAR_CLAIMS -> requireManager(player, settlement, () -> clearClaims(settlement));
             case RENAME_SETTLEMENT -> requireManager(player, settlement, () -> renameSettlement(player, settlement, argument));
             case TRANSFER_SETTLEMENT -> requireOwner(player, settlement, () -> transferSettlement(player, settlement, argument));
+            case ADD_MEMBER_CITIZEN -> requireManager(player, settlement, () -> setSettlementMember(player, settlement, argument, PrototypeData.SettlementRole.CITIZEN));
+            case ADD_MEMBER_COOWNER -> requireManager(player, settlement, () -> setSettlementMember(player, settlement, argument, PrototypeData.SettlementRole.CO_OWNER));
+            case REMOVE_MEMBER -> requireManager(player, settlement, () -> removeSettlementMember(player, settlement, argument));
             case SET_TOWN_SQUARE -> requireManager(player, settlement, () -> setTownSquareHere(player, settlement));
             case SET_BARRACKS -> requireManager(player, settlement, () -> setBarracksHere(player, settlement));
             case HOUSING_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Housing"));
@@ -1034,6 +1037,42 @@ public final class PrototypeManager {
         return "Settlement renamed to " + settlement.getName() + ".";
     }
 
+    private static String setSettlementMember(ServerPlayer actor, PrototypeData.SettlementRecord settlement, String rawPlayerId, PrototypeData.SettlementRole role) {
+        UUID targetId;
+        try { targetId = UUID.fromString(rawPlayerId == null ? "" : rawPlayerId.trim()); }
+        catch (IllegalArgumentException exception) { return "Select an online player first."; }
+        if (targetId.equals(settlement.getOwnerId())) return "The settlement owner already has full authority.";
+        if (role != PrototypeData.SettlementRole.CITIZEN && role != PrototypeData.SettlementRole.CO_OWNER) return "Invalid settlement role.";
+        ServerPlayer target = actor.getServer() == null ? null : actor.getServer().getPlayerList().getPlayer(targetId);
+        if (target == null) return "That player must be online to receive a settlement role.";
+        boolean admin = actor.createCommandSourceStack().hasPermission(2);
+        if (!admin) {
+            String faction = settlement.getFactionTeam();
+            if (faction.isBlank()) {
+                if (target.getTeam() != null) return "Independent settlements may only add independent players.";
+            } else if (target.getTeam() == null || !faction.equals(target.getTeam().getName())) {
+                return "Faction settlements may only add members of their own faction.";
+            }
+        }
+        settlement.setRole(targetId, role);
+        settlement.addChronicle(target.getGameProfile().getName() + " became " + (role == PrototypeData.SettlementRole.CO_OWNER ? "a co-owner" : "a citizen") + ".");
+        return target.getGameProfile().getName() + " is now " + (role == PrototypeData.SettlementRole.CO_OWNER ? "a co-owner" : "a citizen") + ".";
+    }
+
+    private static String removeSettlementMember(ServerPlayer actor, PrototypeData.SettlementRecord settlement, String rawPlayerId) {
+        UUID targetId;
+        try { targetId = UUID.fromString(rawPlayerId == null ? "" : rawPlayerId.trim()); }
+        catch (IllegalArgumentException exception) { return "Select a settlement member first."; }
+        if (targetId.equals(settlement.getOwnerId())) return "The owner cannot be removed. Transfer ownership first.";
+        PrototypeData.SettlementRole existing = settlement.getRole(targetId);
+        if (existing == PrototypeData.SettlementRole.OUTSIDER) return "That player is not a settlement member.";
+        settlement.setRole(targetId, PrototypeData.SettlementRole.OUTSIDER);
+        ServerPlayer online = actor.getServer() == null ? null : actor.getServer().getPlayerList().getPlayer(targetId);
+        String name = online == null ? targetId.toString().substring(0, 8) : online.getGameProfile().getName();
+        settlement.addChronicle(name + " was removed from the settlement membership.");
+        return name + " was removed from the settlement.";
+    }
+
     private static String transferSettlement(ServerPlayer player, PrototypeData.SettlementRecord settlement, String accountName) {
         if (player.getServer() == null) return "Server unavailable.";
         ServerPlayer target = player.getServer().getPlayerList().getPlayerByName(accountName == null ? "" : accountName.trim());
@@ -1072,7 +1111,8 @@ public final class PrototypeManager {
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_SILVER,
         WITHDRAW_SILVER_ONE, WITHDRAW_SILVER_TEN, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
-        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, SET_TOWN_SQUARE, SET_BARRACKS, HOUSING_POS1, HOUSING_POS2, MUSTER_POS1, MUSTER_POS2,
+        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
+        SET_TOWN_SQUARE, SET_BARRACKS, HOUSING_POS1, HOUSING_POS2, MUSTER_POS1, MUSTER_POS2,
         PRAYER_POS1, PRAYER_POS2, RECALCULATE_HOUSING, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
 

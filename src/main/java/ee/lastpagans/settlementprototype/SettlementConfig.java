@@ -29,6 +29,8 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue SECOND_SPOUSE_EFFECT_PERCENT;
     public static final ForgeConfigSpec.IntValue THIRD_SPOUSE_EFFECT_PERCENT;
     public static final ForgeConfigSpec.IntValue LATER_SPOUSE_EFFECT_PERCENT;
+    public static final ForgeConfigSpec.IntValue PRAYER_DEVOTION_GAIN;
+    public static final ForgeConfigSpec.IntValue SILVER_DONATION_DEVOTION_GAIN;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -88,6 +90,13 @@ public final class SettlementConfig {
                 .defineInRange("thirdSpouseEffectPercent", 25, 0, 100);
         LATER_SPOUSE_EFFECT_PERCENT = builder.comment("Settlement-effect strength of the fourth and later spouses.")
                 .defineInRange("laterSpouseEffectPercent", 10, 0, 100);
+        builder.pop();
+
+        builder.push("religion");
+        PRAYER_DEVOTION_GAIN = builder.comment("Devotion gained once per Minecraft day by visiting an eligible settlement Prayer Site.")
+                .defineInRange("prayerDevotionGain", 3, 0, 100);
+        SILVER_DONATION_DEVOTION_GAIN = builder.comment("Devotion gained when donating one tagged silver currency item to the character's faith.")
+                .defineInRange("silverDonationDevotionGain", 2, 0, 100);
         builder.pop();
         SPEC = builder.build();
     }

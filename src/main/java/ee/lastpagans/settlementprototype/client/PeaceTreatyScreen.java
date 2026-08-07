@@ -29,7 +29,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private DropdownWidget faith, settlement, claimSettlement, claim, destination, independenceSettlement;
     private int faithIndex, settlementIndex, claimSettlementIndex, claimIndex, destinationIndex, independenceSettlementIndex;
     private final Set<UUID> selectedClaimIds = new LinkedHashSet<>();
-    private boolean convertFaith, transferSettlement, transferClaim, recognizeIndependence;
+    private boolean convertFaith, transferSettlement, transferClaim, renounceClaim, recognizeIndependence;
 
     public PeaceTreatyScreen(Screen parent, DiplomacySnapshot snapshot, DiplomacySnapshot.WarEntry war) {
         super(Component.literal("Peace Treaty")); this.parent = parent; this.snapshot = snapshot; this.war = war;
@@ -55,11 +55,13 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
                 enemyNames.isEmpty() ? List.of("No enemy settlement") : enemyNames, settlementIndex,
                 v -> { preserveValues(); settlementIndex = Math.max(0, enemyNames.indexOf(v)); rebuildWidgets(); }));
 
-        addRenderableWidget(Button.builder(Component.literal(transferClaim
-                        ? "☑ Transfer linked claims (" + selectedClaimIds.size() + " selected)"
-                        : "☐ Transfer linked claims"), b -> { preserveValues(); transferClaim = !transferClaim; rebuildWidgets(); })
-                .bounds(left + 272, top + 172, 220, 20).build());
-        if (transferClaim) {
+        addRenderableWidget(Button.builder(Component.literal(transferClaim ? "☑ Transfer claims" : "☐ Transfer claims"), b -> {
+                    preserveValues(); transferClaim = !transferClaim; if (transferClaim) renounceClaim = false; rebuildWidgets();
+                }).bounds(left + 272, top + 172, 106, 20).build());
+        addRenderableWidget(Button.builder(Component.literal(renounceClaim ? "☑ Renounce claims" : "☐ Renounce claims"), b -> {
+                    preserveValues(); renounceClaim = !renounceClaim; if (renounceClaim) transferClaim = false; rebuildWidgets();
+                }).bounds(left + 382, top + 172, 110, 20).build());
+        if (transferClaim || renounceClaim) {
             List<String> claimSettlementNames = enemySettlements.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
             claimSettlementIndex = clamp(claimSettlementIndex, claimSettlementNames.size());
             claimSettlement = addRenderableWidget(new DropdownWidget(left + 272, top + 196, 220, 20,
@@ -75,11 +77,13 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
             Button toggleClaim = addRenderableWidget(Button.builder(Component.literal(currentClaim != null && selectedClaimIds.contains(currentClaim.id()) ? "Remove" : "Add"), b -> toggleSelectedClaim())
                     .bounds(left + 428, top + 220, 64, 20).build());
             toggleClaim.active = currentClaim != null && (selectedClaimIds.contains(currentClaim.id()) || selectedClaimIds.size() < MAX_SELECTED_CLAIMS);
-            List<DiplomacySnapshot.SettlementTarget> own = ownSettlements();
-            List<String> ownNames = own.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
-            destinationIndex = clamp(destinationIndex, ownNames.size());
-            destination = addRenderableWidget(new DropdownWidget(left + 272, top + 244, 220, 20,
-                    ownNames.isEmpty() ? List.of("No receiving settlement") : ownNames, destinationIndex, v -> destinationIndex = Math.max(0, ownNames.indexOf(v))));
+            if (transferClaim) {
+                List<DiplomacySnapshot.SettlementTarget> own = ownSettlements();
+                List<String> ownNames = own.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
+                destinationIndex = clamp(destinationIndex, ownNames.size());
+                destination = addRenderableWidget(new DropdownWidget(left + 272, top + 244, 220, 20,
+                        ownNames.isEmpty() ? List.of("No receiving settlement") : ownNames, destinationIndex, v -> destinationIndex = Math.max(0, ownNames.indexOf(v))));
+            }
         }
 
         addRenderableWidget(Button.builder(Component.literal(recognizeIndependence ? "☑ Recognize independence" : "☐ Recognize independence"), b -> { preserveValues(); recognizeIndependence = !recognizeIndependence; rebuildWidgets(); })
@@ -165,12 +169,15 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         DiplomacySnapshot.SettlementTarget enemy = selectedEnemySettlement();
         if (transferSettlement && enemy != null) terms.add("TRANSFER_SETTLEMENT~" + clean(enemy.settlementId()) + "~0~0~");
         DiplomacySnapshot.SettlementTarget destinationTarget = selectedDestination();
+        Set<UUID> validEnemyClaims = new LinkedHashSet<>();
+        for (DiplomacySnapshot.SettlementTarget source : enemySettlements())
+            for (DiplomacySnapshot.ClaimTarget claimTarget : source.claims()) validEnemyClaims.add(claimTarget.id());
         if (transferClaim && destinationTarget != null) {
-            Set<UUID> validEnemyClaims = new LinkedHashSet<>();
-            for (DiplomacySnapshot.SettlementTarget source : enemySettlements())
-                for (DiplomacySnapshot.ClaimTarget claimTarget : source.claims()) validEnemyClaims.add(claimTarget.id());
             for (UUID claimId : selectedClaimIds) if (validEnemyClaims.contains(claimId))
                 terms.add("TRANSFER_CLAIM~" + claimId + "~0~0~" + clean(destinationTarget.settlementId()));
+        } else if (renounceClaim) {
+            for (UUID claimId : selectedClaimIds) if (validEnemyClaims.contains(claimId))
+                terms.add("RENOUNCE_CLAIM~" + claimId + "~0~0~");
         }
         DiplomacySnapshot.SettlementTarget independenceTarget = selectedIndependenceSettlement();
         if (recognizeIndependence && independenceTarget != null) terms.add("RECOGNIZE_INDEPENDENCE~" + clean(independenceTarget.settlementId()) + "~0~0~");
@@ -186,6 +193,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         DiplomacySnapshot.SettlementTarget whole = selectedEnemySettlement();
         if (transferSettlement && whole != null) cost += settlementTermCost(whole.rank(), false);
         if (transferClaim) cost += selectedClaimIds.size() * 8;
+        if (renounceClaim) cost += selectedClaimIds.size() * 6;
         DiplomacySnapshot.SettlementTarget released = selectedIndependenceSettlement();
         if (recognizeIndependence && released != null) cost += settlementTermCost(released.rank(), true);
         return Math.min(999, cost);
@@ -224,7 +232,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         g.drawString(font, "Lump wealth", left + 25, top + 74, 0xFFFFFFFF, false); g.drawString(font, "Manpower", left + 25, top + 102, 0xFFFFFFFF, false);
         g.drawString(font, "Reparations/day", left + 25, top + 130, 0xFFFFFFFF, false); g.drawString(font, "Reparation days", left + 25, top + 158, 0xFFFFFFFF, false); g.drawString(font, "Forced NAP days", left + 25, top + 186, 0xFFFFFFFF, false);
         g.drawWordWrap(font, Component.literal("Terms are demands on the opposing side. At 90+ war score, a capitulated side cannot reject valid terms within the dominant side's current war-score budget."), left + 25, top + 224, 220, 0xFFFFD27A);
-        if (transferClaim) g.drawString(font, "Selected territorial claims: " + selectedClaimIds.size() + "/" + MAX_SELECTED_CLAIMS, left + 272, top + 330, 0xFFAAAAAA, false);
+        if (transferClaim || renounceClaim) g.drawString(font, (renounceClaim ? "Claims to renounce: " : "Claims to transfer: ") + selectedClaimIds.size() + "/" + MAX_SELECTED_CLAIMS, left + 272, top + 330, 0xFFAAAAAA, false);
         int treatyCost = estimatedTreatyCost();
         int budget = enforcementBudget();
         boolean compulsory = budget >= 90 && treatyCost <= budget;

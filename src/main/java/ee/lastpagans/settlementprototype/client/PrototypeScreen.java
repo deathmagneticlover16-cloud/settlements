@@ -18,7 +18,10 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public final class PrototypeScreen extends ScaledCampaignScreen {
     private static final int W = 540, H = 330;
@@ -30,6 +33,9 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     private ManagePage managePage = ManagePage.LOCATIONS;
     private int effectScroll;
     private EditBox renameBox, transferBox;
+    private DropdownWidget memberDropdown, memberCandidateDropdown;
+    private final Map<String, String> memberIdsByLabel = new LinkedHashMap<>();
+    private final Map<String, String> candidateIdsByLabel = new LinkedHashMap<>();
 
     public PrototypeScreen(PrototypeSnapshot snapshot) {
         super(Component.literal("Settlement"));
@@ -69,8 +75,10 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
                 .bounds(left + 14, top + 301, 92, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Next ▶"), button -> switchSettlement(true))
                 .bounds(left + 112, top + 301, 78, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Military"), button -> open(OpenCampaignRequestPacket.ScreenTarget.MILITARY))
-                .bounds(left + 322, top + 301, 92, 18).build());
+        if (!isLimitedView()) {
+            addRenderableWidget(Button.builder(Component.literal("Military"), button -> open(OpenCampaignRequestPacket.ScreenTarget.MILITARY))
+                    .bounds(left + 322, top + 301, 92, 18).build());
+        }
         addRenderableWidget(Button.builder(Component.literal("Return to Main"), button -> open(OpenCampaignRequestPacket.ScreenTarget.MAIN))
                 .bounds(left + 420, top + 301, 106, 18).build());
     }
@@ -118,11 +126,14 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
                 .bounds(left + 138, top + 102, 112, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Claims"), b -> { managePage = ManagePage.CLAIMS; buildWidgets(); })
                 .bounds(left + 256, top + 102, 112, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Members"), b -> { managePage = ManagePage.MEMBERS; buildWidgets(); })
+                .bounds(left + 374, top + 102, 112, 18).build());
 
         switch (managePage) {
             case LOCATIONS -> locationManagementButtons();
             case IDENTITY -> identityManagementButtons();
             case CLAIMS -> claimManagementButtons();
+            case MEMBERS -> memberManagementButtons();
         }
     }
 
@@ -186,6 +197,41 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
         PrototypeNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target));
+    }
+
+    private void memberManagementButtons() {
+        memberIdsByLabel.clear();
+        candidateIdsByLabel.clear();
+
+        for (PrototypeSnapshot.MemberEntry member : snapshot.members()) {
+            if ("OWNER".equals(member.role())) continue;
+            String label = member.characterName() + " — " + pretty(member.role()) + (member.online() ? "" : " (offline)");
+            memberIdsByLabel.put(label, member.playerId().toString());
+        }
+        List<String> memberLabels = memberIdsByLabel.keySet().stream().toList();
+        memberDropdown = addRenderableWidget(new DropdownWidget(left + 30, top + 150, 300, 20, memberLabels, 0, ignored -> {}));
+        if (memberLabels.isEmpty()) memberDropdown.active = false;
+        addRenderableWidget(Button.builder(Component.literal("Remove Member"), b -> {
+            String id = memberIdsByLabel.get(memberDropdown == null ? "" : memberDropdown.value());
+            if (id != null) send(PrototypeManager.SettlementAction.REMOVE_MEMBER, id);
+        }).bounds(left + 340, top + 150, 142, 20).build());
+
+        for (PrototypeSnapshot.PlayerChoice candidate : snapshot.memberCandidates()) {
+            String label = candidate.characterName().equals(candidate.accountName())
+                    ? candidate.accountName() : candidate.characterName() + " (" + candidate.accountName() + ")";
+            candidateIdsByLabel.put(label, candidate.playerId().toString());
+        }
+        List<String> candidateLabels = candidateIdsByLabel.keySet().stream().toList();
+        memberCandidateDropdown = addRenderableWidget(new DropdownWidget(left + 30, top + 220, 300, 20, candidateLabels, 0, ignored -> {}));
+        if (candidateLabels.isEmpty()) memberCandidateDropdown.active = false;
+        addRenderableWidget(Button.builder(Component.literal("Add Citizen"), b -> {
+            String id = candidateIdsByLabel.get(memberCandidateDropdown == null ? "" : memberCandidateDropdown.value());
+            if (id != null) send(PrototypeManager.SettlementAction.ADD_MEMBER_CITIZEN, id);
+        }).bounds(left + 340, top + 212, 142, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Add Co-owner"), b -> {
+            String id = candidateIdsByLabel.get(memberCandidateDropdown == null ? "" : memberCandidateDropdown.value());
+            if (id != null) send(PrototypeManager.SettlementAction.ADD_MEMBER_COOWNER, id);
+        }).bounds(left + 340, top + 234, 142, 18).build());
     }
 
     private void send(PrototypeManager.SettlementAction action) { send(action, ""); }
@@ -267,6 +313,17 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     }
 
     private void renderOverview(GuiGraphics graphics) {
+        if (isLimitedView()) {
+            graphics.drawString(font, "LIMITED FACTION SUMMARY", left + 22, top + 108, 0xFFE7D8B0, false);
+            stat(graphics, "Population", snapshot.totalPopulation(), 22, 134);
+            stat(graphics, "Rank", snapshot.rank(), 22, 156);
+            stat(graphics, "Faction", snapshot.factionName(), 22, 178);
+            graphics.drawWordWrap(font, Component.literal(snapshot.notice().isBlank() ? "No public settlement notice." : snapshot.notice()),
+                    left + 292, top + 134, 220, 0xFFAAAAAA);
+            graphics.drawWordWrap(font, Component.literal("Detailed residents, treasury, effects, claims, military information, and management data are private unless you hold a settlement role."),
+                    left + 22, top + 216, 490, 0xFFFFC080);
+            return;
+        }
         stat(graphics, "Population", snapshot.totalPopulation(), 22, 108);
         stat(graphics, "Registered villagers", snapshot.villagerCount(), 22, 128);
         stat(graphics, "Stability", snapshot.stability() + "%", 22, 148);
@@ -284,6 +341,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     }
 
     private void renderResidents(GuiGraphics graphics) {
+        if (isLimitedView()) { renderPrivateTabNotice(graphics, "Resident registry"); return; }
         stat(graphics, "Registered villagers", snapshot.villagerCount(), 22, 110);
         stat(graphics, "Population multiplier", String.format(Locale.ROOT, "×%.2f", snapshot.populationMultiplier()), 22, 132);
         stat(graphics, "Civilian population", snapshot.civilianPopulation(), 22, 154);
@@ -296,6 +354,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     }
 
     private void renderTreasury(GuiGraphics graphics) {
+        if (isLimitedView()) { renderPrivateTabNotice(graphics, "Treasury"); return; }
         stat(graphics, "Food stockpile", snapshot.food(), 22, 110);
         stat(graphics, "Settlement wealth", snapshot.wealth(), 22, 132);
         stat(graphics, "Mercenary wage cycle", snapshot.mercenaryWages(), 22, 154);
@@ -306,6 +365,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     }
 
     private void renderEffects(GuiGraphics graphics, int mouseX, int mouseY) {
+        if (isLimitedView()) { renderPrivateTabNotice(graphics, "Settlement effects"); return; }
         graphics.drawString(font, "ACTIVE BONUSES AND PENALTIES", left + 22, top + 108, 0xFFE7D8B0, false);
         int maximumScroll = Math.max(0, snapshot.effects().size() - 7);
         effectScroll = Math.max(0, Math.min(effectScroll, maximumScroll));
@@ -346,6 +406,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
             case LOCATIONS -> renderLocationManagement(graphics);
             case IDENTITY -> renderIdentityManagement(graphics);
             case CLAIMS -> renderClaimManagement(graphics);
+            case MEMBERS -> renderMemberManagement(graphics);
         }
     }
 
@@ -393,6 +454,27 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
                 left + 198, top + 246, 306, confirmClearClaims ? 0xFFFF8080 : 0xFFAAAAAA);
     }
 
+    private void renderMemberManagement(GuiGraphics graphics) {
+        graphics.drawString(font, "SETTLEMENT MEMBERS", left + 30, top + 128, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Current members", left + 30, top + 140, 0xFFAAAAAA, false);
+        graphics.drawWordWrap(font, Component.literal("Citizens may view and contribute. Co-owners have settlement management permissions but cannot take ownership away from the owner."),
+                left + 30, top + 178, 452, 0xFFAAAAAA);
+        graphics.drawString(font, "Add an online player from this settlement's polity", left + 30, top + 206, 0xFFE7D8B0, false);
+        if (snapshot.memberCandidates().isEmpty()) {
+            graphics.drawString(font, "No eligible online players are currently available.", left + 30, top + 252, 0xFF888888, false);
+        }
+    }
+
+    private boolean isLimitedView() {
+        return "OUTSIDER".equals(snapshot.role()) && !snapshot.canManage() && !snapshot.canContribute();
+    }
+
+    private void renderPrivateTabNotice(GuiGraphics graphics, String section) {
+        graphics.drawString(font, section.toUpperCase(Locale.ROOT), left + 22, top + 112, 0xFFE7D8B0, false);
+        graphics.drawWordWrap(font, Component.literal("This information is private to settlement members. You can view the public faction summary, but you do not hold a role in this settlement."),
+                left + 22, top + 142, W - 44, 0xFFFFC080);
+    }
+
     private void stat(GuiGraphics graphics, String label, Object value, int x, int y) {
         graphics.drawString(font, label + ": " + value, left + x, top + y, 0xFFFFFFFF, false);
     }
@@ -413,5 +495,5 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
 
     @Override public boolean isPauseScreen() { return false; }
     private enum Tab { OVERVIEW, RESIDENTS, TREASURY, EFFECTS, MANAGEMENT }
-    private enum ManagePage { LOCATIONS, IDENTITY, CLAIMS }
+    private enum ManagePage { LOCATIONS, IDENTITY, CLAIMS, MEMBERS }
 }

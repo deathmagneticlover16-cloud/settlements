@@ -97,6 +97,7 @@ public final class Campaign23Manager {
         for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
             extra.expireModifiers(settlement.getId());
             updateReligiousUnrest(server, settlement, extra, settlements);
+            updateRulerDevotionBenefit(settlement, extra, settlements);
             int prosperity = recalculateProsperity(settlement, extra, day);
             applyDailyModifierEffects(settlement, extra, day);
             updateSettlementTier(server.overworld(), settlement, prosperity, extra);
@@ -121,10 +122,27 @@ public final class Campaign23Manager {
         Campaign23Data extra = Campaign23Data.get(server.overworld());
         extra.expireModifiers(settlement.getId());
         updateReligiousUnrest(server, settlement, extra, settlements);
+        updateRulerDevotionBenefit(settlement, extra, settlements);
         int prosperity = recalculateProsperity(settlement, extra, simulatedDay);
         applyDailyModifierEffects(settlement, extra, simulatedDay);
         updateSettlementTier(server.overworld(), settlement, prosperity, extra);
         updateLevyServicePenaltyForSettlement(server, extra, settlement);
+    }
+
+    private static void updateRulerDevotionBenefit(PrototypeData.SettlementRecord settlement, Campaign23Data extra, PrototypeData settlements) {
+        UUID owner = settlement.getOwnerId();
+        int devotion = owner == null ? 0 : extra.devotion(owner);
+        String id = "devotion_guidance";
+        if (devotion < 20) { extra.removeModifier(settlement.getId(), id); return; }
+        int stability = devotion >= 70 ? 1 : 0;
+        int prosperity = devotion >= 90 ? 5 : devotion >= 70 ? 3 : devotion >= 45 ? 2 : 1;
+        int morale = devotion >= 90 ? 5 : devotion >= 70 ? 3 : devotion >= 45 ? 2 : 1;
+        String tier = devotion >= 90 ? "Exalted" : devotion >= 70 ? "Devout" : devotion >= 45 ? "Faithful" : "Observant";
+        String detail = "The ruler's " + tier + " standing with their faith gives the settlement "
+                + (stability == 0 ? "" : "+" + stability + " daily stability, ")
+                + "+" + prosperity + " prosperity and +" + morale + " recruit morale.";
+        extra.addModifier(settlement.getId(), new Campaign23Data.ModifierRecord(id, tier + " Ruler", "minecraft:golden_apple", "POSITIVE",
+                "Ruler devotion", detail, stability, prosperity, morale, 0L));
     }
 
     private static void updateReligiousUnrest(MinecraftServer server, PrototypeData.SettlementRecord settlement, Campaign23Data extra, PrototypeData settlements) {
@@ -189,9 +207,10 @@ public final class Campaign23Manager {
                     boolean allowed = settlement.getFactionTeam().isBlank() ? settlement.getRole(player.getUUID()) != PrototypeData.SettlementRole.OUTSIDER
                             : player.getTeam() != null && settlement.getFactionTeam().equals(player.getTeam().getName());
                     if (!allowed) continue;
-                    extra.changeDevotion(player.getUUID(), 3);
+                    int gain = SettlementConfig.PRAYER_DEVOTION_GAIN.get();
+                    extra.changeDevotion(player.getUUID(), gain);
                     extra.markPrayer(player.getUUID(), day);
-                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Prayer at " + settlement.getName() + ": +3 Devotion (" + extra.devotion(player.getUUID()) + "/100)."));
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Prayer at " + settlement.getName() + ": +" + gain + " Devotion (" + extra.devotion(player.getUUID()) + "/100)."));
                     break;
                 }
             }

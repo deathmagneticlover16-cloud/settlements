@@ -28,7 +28,8 @@ public record PrototypeSnapshot(
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet,
         int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, long mercenaryNextPaymentDay, String mercenaryStatus, LevyStatusEntry levyStatus,
         String factionTeam, boolean claimLinked, int claimCount, String claimName,
-        String notice, List<EffectEntry> effects, List<String> chronicle, List<String> contributions, String message
+        String notice, List<EffectEntry> effects, List<String> chronicle, List<String> contributions,
+        List<MemberEntry> members, List<PlayerChoice> memberCandidates, String message
 ) {
     public static PrototypeSnapshot from(PrototypeData.SettlementRecord settlement, ServerPlayer player, String message) {
         String factionId = settlement.getFactionTeam();
@@ -52,24 +53,63 @@ public record PrototypeSnapshot(
                 .<UnitTemplateEntry>map(type -> UnitTemplateEntry.from(type, campaign.resolveUnitTemplate(settlement, type)))
                 .toList();
 
-        MilitarySummary military = militarySummary(player, settlement);
-        LevyStatusEntry levyStatus = levyStatus(player, settlement);
-        List<EffectEntry> effects = buildEffects(player, settlement, campaign, military.averageMorale());
+        boolean limitedView = !player.createCommandSourceStack().hasPermission(2)
+                && settlement.getRole(player.getUUID()) == PrototypeData.SettlementRole.OUTSIDER;
+        MilitarySummary military = limitedView ? new MilitarySummary(0, 0, 0, -1L, "Hidden") : militarySummary(player, settlement);
+        LevyStatusEntry levyStatus = limitedView ? new LevyStatusEntry(0, 0, 0, 0, 0, 0, 0L, 0L, "Hidden") : levyStatus(player, settlement);
+        List<EffectEntry> effects = limitedView ? List.of() : buildEffects(player, settlement, campaign, military.averageMorale());
+        List<MemberEntry> members = PrototypeManager.canManage(player, settlement) ? memberEntries(player, settlement) : List.of();
+        List<PlayerChoice> memberCandidates = PrototypeManager.canManage(player, settlement) ? memberCandidates(player, settlement) : List.of();
 
         return new PrototypeSnapshot(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(), settlement.getRank().subtitle(), settlement.getRole(player.getUUID()).name(),
                 PrototypeManager.canManage(player, settlement), PrototypeManager.canContribute(player, settlement),
                 factionId, factionName, factionBanner, visual.getBannerMode().name(), settlementBanner,
-                campaign.assignedRosterName(settlement), templates,
-                settlement.getVillagerCount(), settlement.getPopulationMultiplier(), settlement.getCivilianPopulation(), settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
-                settlement.getHousingCapacity(), settlement.getFreeHousing(), settlement.getStability(), settlement.getFood(), settlement.getWealth(),
-                settlement.getMaximumManpower(), settlement.getAvailableManpower(), Campaign23Data.get(player.serverLevel()).foreignManpower(settlement.getId()), settlement.getUsedManpower(), settlement.getLevyReservedManpower(), settlement.getSupportedManpower(),
-                settlement.getProfessionalCount(), settlement.getLivingLevymen(), settlement.getPendingContracts(),
-                settlement.hasTownSquare(), settlement.hasMusterGround(), settlement.hasBarracks(), settlement.getBarracksChest() != null,
-                settlement.getBarracksRadius(), settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
-                settlement.getFactionTeam(), settlement.hasClaim(), settlement.getClaimCount(), settlement.getClaimSummary(), settlement.getNotice(), effects,
-                settlement.getChronicle().stream().limit(8).toList(), settlement.getContributions().stream().limit(8).toList(), message == null ? "" : message
+                limitedView ? "Hidden" : campaign.assignedRosterName(settlement), limitedView ? List.of() : templates,
+                limitedView ? 0 : settlement.getVillagerCount(), limitedView ? 0.0D : settlement.getPopulationMultiplier(), limitedView ? 0 : settlement.getCivilianPopulation(), limitedView ? 0 : settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
+                limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : settlement.getWealth(),
+                limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : Campaign23Data.get(player.serverLevel()).foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
+                limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(),
+                !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null,
+                limitedView ? 0 : settlement.getBarracksRadius(), limitedView ? 0 : settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
+                settlement.getFactionTeam(), !limitedView && settlement.hasClaim(), limitedView ? 0 : settlement.getClaimCount(), limitedView ? "" : settlement.getClaimSummary(), settlement.getNotice(), effects,
+                limitedView ? List.of() : settlement.getChronicle().stream().limit(8).toList(), limitedView ? List.of() : settlement.getContributions().stream().limit(8).toList(),
+                members, memberCandidates, message == null ? "" : message
         );
+    }
+
+    private static List<MemberEntry> memberEntries(ServerPlayer viewer, PrototypeData.SettlementRecord settlement) {
+        PrototypeData data = PrototypeData.get(viewer.serverLevel());
+        List<MemberEntry> values = new ArrayList<>();
+        settlement.getMembers().forEach((uuid, role) -> {
+            ServerPlayer online = viewer.getServer() == null ? null : viewer.getServer().getPlayerList().getPlayer(uuid);
+            PrototypeData.CharacterRecord character = data.getCharacter(uuid);
+            String account = online != null ? online.getGameProfile().getName() : uuid.toString().substring(0, 8);
+            String characterName = character != null && character.isCreated() ? character.getDisplayName() : account;
+            values.add(new MemberEntry(uuid, account, characterName, role.name(), online != null));
+        });
+        values.sort(java.util.Comparator.comparingInt((MemberEntry value) -> switch (value.role()) {
+            case "OWNER" -> 0; case "CO_OWNER" -> 1; case "CITIZEN" -> 2; default -> 3;
+        }).thenComparing(MemberEntry::characterName, String.CASE_INSENSITIVE_ORDER));
+        return List.copyOf(values);
+    }
+
+    private static List<PlayerChoice> memberCandidates(ServerPlayer viewer, PrototypeData.SettlementRecord settlement) {
+        if (viewer.getServer() == null) return List.of();
+        PrototypeData data = PrototypeData.get(viewer.serverLevel());
+        String faction = settlement.getFactionTeam();
+        return viewer.getServer().getPlayerList().getPlayers().stream()
+                .filter(candidate -> settlement.getRole(candidate.getUUID()) == PrototypeData.SettlementRole.OUTSIDER)
+                .filter(candidate -> faction.isBlank() ? candidate.getTeam() == null
+                        : candidate.getTeam() != null && faction.equals(candidate.getTeam().getName()))
+                .map(candidate -> {
+                    PrototypeData.CharacterRecord character = data.getCharacter(candidate.getUUID());
+                    String account = candidate.getGameProfile().getName();
+                    String characterName = character != null && character.isCreated() ? character.getDisplayName() : account;
+                    return new PlayerChoice(candidate.getUUID(), account, characterName);
+                })
+                .sorted(java.util.Comparator.comparing(PlayerChoice::characterName, String.CASE_INSENSITIVE_ORDER))
+                .toList();
     }
 
     private static MilitarySummary militarySummary(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
@@ -270,7 +310,8 @@ public record PrototypeSnapshot(
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet);
         buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
-        writeList(buffer, effects, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions); buffer.writeUtf(message, 256);
+        writeList(buffer, effects, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions);
+        writeList(buffer, members, MemberEntry::encode); writeList(buffer, memberCandidates, PlayerChoice::encode); buffer.writeUtf(message, 256);
     }
 
     public static PrototypeSnapshot decode(FriendlyByteBuf buffer) {
@@ -284,7 +325,8 @@ public record PrototypeSnapshot(
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),
                 buffer.readUtf(64), buffer.readBoolean(), buffer.readVarInt(), buffer.readUtf(180), buffer.readUtf(160),
-                readList(buffer, EffectEntry::decode, 32), readStrings(buffer), readStrings(buffer), buffer.readUtf(256)
+                readList(buffer, EffectEntry::decode, 32), readStrings(buffer), readStrings(buffer),
+                readList(buffer, MemberEntry::decode, 64), readList(buffer, PlayerChoice::decode, 64), buffer.readUtf(256)
         );
     }
 
@@ -343,6 +385,20 @@ public record PrototypeSnapshot(
         private static EffectEntry decode(FriendlyByteBuf buffer) {
             return new EffectEntry(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(80), buffer.readUtf(16), buffer.readUtf(220), buffer.readUtf(64));
         }
+    }
+
+    public record MemberEntry(UUID playerId, String accountName, String characterName, String role, boolean online) {
+        private void encode(FriendlyByteBuf buffer) {
+            buffer.writeUUID(playerId); buffer.writeUtf(accountName, 40); buffer.writeUtf(characterName, 80); buffer.writeUtf(role, 16); buffer.writeBoolean(online);
+        }
+        private static MemberEntry decode(FriendlyByteBuf buffer) {
+            return new MemberEntry(buffer.readUUID(), buffer.readUtf(40), buffer.readUtf(80), buffer.readUtf(16), buffer.readBoolean());
+        }
+    }
+
+    public record PlayerChoice(UUID playerId, String accountName, String characterName) {
+        private void encode(FriendlyByteBuf buffer) { buffer.writeUUID(playerId); buffer.writeUtf(accountName, 40); buffer.writeUtf(characterName, 80); }
+        private static PlayerChoice decode(FriendlyByteBuf buffer) { return new PlayerChoice(buffer.readUUID(), buffer.readUtf(40), buffer.readUtf(80)); }
     }
 
     public record LevyStatusEntry(int playerDeployed, int playerCap, int factionDeployed, int factionCap,
