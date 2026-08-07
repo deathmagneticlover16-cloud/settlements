@@ -96,7 +96,9 @@ public final class CampaignManager {
             String[] parts = value == null ? new String[0] : value.split("\\|", 2);
             String id = parts.length > 0 ? PrototypeData.normalizeId(parts[0]) : "";
             String name = parts.length > 1 ? PrototypeData.cleanText(parts[1], id, 64) : id;
-            openMain(player, createSettlementFromGui(player, id, name));
+            String result = createSettlementFromGui(player, id, name);
+            player.sendSystemMessage(Component.literal(result));
+            openMain(player);
             return;
         }
         String factionId = factionId(player);
