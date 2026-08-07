@@ -194,12 +194,24 @@ public final class Campaign23Manager {
             settlement.setRank(PrototypeData.SettlementRank.TOWN);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 2L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The settlement grew into a Town. Civic Pride spread through the population.");
+            long day = level.getDayTime() / 24000L;
+            CampaignData.get(level).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.NORMAL,
+                    "Settlement advanced", settlement.getName() + " has grown from a Village into a Town.",
+                    day, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
+            CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "SETTLEMENT ADVANCED",
+                    settlement.getName() + " is now a Town. Civic Pride is temporarily boosting the settlement.");
         }
         if (settlement.getRank() == PrototypeData.SettlementRank.TOWN && settlement.getFactionTeam().isBlank()
                 && settlement.getCivilianPopulation() >= 250 && prosperity >= 60 && settlement.getStability() >= 60) {
             settlement.setRank(PrototypeData.SettlementRank.CITY_STATE);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 3L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The independent settlement emerged as a City-State.");
+            long day = level.getDayTime() / 24000L;
+            CampaignData.get(level).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MAJOR,
+                    "City-State emerged", settlement.getName() + " has become an independent City-State.",
+                    day, "", settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
+            CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "CITY-STATE",
+                    settlement.getName() + " has grown powerful enough to become a City-State.");
         }
     }
 
