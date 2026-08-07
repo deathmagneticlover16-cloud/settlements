@@ -944,9 +944,10 @@ public final class PrototypeCommands {
             case "available_manpower", "manpower", "manpower_available" -> { if (add) settlement.changeAvailableManpower(value); else settlement.setAvailableManpower(value); }
             case "contracts", "pending_contracts" -> { if (add) settlement.changePendingContracts(value); else settlement.setPendingContracts(value); }
             case "prosperity" -> { Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.setProsperity(settlement.getId(), add ? extra.prosperity(settlement.getId()) + value : value); }
+            case "levy_tradition", "tradition" -> { Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.setLevyTradition(settlement.getId(), add ? extra.levyTradition(settlement.getId()) + value : value); }
             case "foreign_manpower", "foreign_mp" -> { Campaign23Data extra = Campaign23Data.get(source.getLevel()); extra.setForeignManpower(settlement.getId(), add ? extra.foreignManpower(settlement.getId()) + value : value); if (extra.foreignManpower(settlement.getId()) > 0) extra.addModifier(settlement.getId(), Campaign23Manager.standardModifier(source.getLevel(), settlement.getId(), "foreign_soldiers", 0)); else extra.removeModifier(settlement.getId(), "foreign_soldiers"); }
             default -> {
-                source.sendFailure(Component.literal("Unknown stat. Use stability, food, wealth, prosperity, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
+                source.sendFailure(Component.literal("Unknown stat. Use stability, food, wealth, prosperity, levy_tradition, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
                 return 0;
             }
         }
@@ -955,6 +956,7 @@ public final class PrototypeCommands {
                 + ", wealth=" + settlement.getWealth() + ", housing=" + settlement.getHousingCapacity()
                 + ", manpower=" + settlement.getAvailableManpower() + "/" + settlement.getMaximumManpower()
                 + ", foreignMP=" + Campaign23Data.get(source.getLevel()).foreignManpower(settlement.getId())
+                + ", levyTradition=" + Campaign23Data.get(source.getLevel()).levyTradition(settlement.getId())
                 + ", contracts=" + settlement.getPendingContracts() + "."), true);
         return 1;
     }

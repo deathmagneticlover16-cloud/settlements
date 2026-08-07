@@ -92,3 +92,8 @@ DEBUG / TIME-SKIP TESTING
 /settlements admin debug inspect <settlement>
 
 WARNING: debug advance can deliberately trigger several timers/modifiers together. Use it on a test world.
+
+ADMIN STAT TESTING
+- /settlements admin stats set <settlement> levy_tradition <0-50>
+- /settlements admin stats add <settlement> levy_tradition <amount>
+  Sets or adjusts the persistent Levy Tradition starting-XP bonus for testing.
