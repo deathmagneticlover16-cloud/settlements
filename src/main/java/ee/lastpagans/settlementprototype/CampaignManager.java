@@ -960,6 +960,10 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot call allies to war.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || !war.involves(own)) return "Select an active war.";
+        if (war.type() == CampaignData.WarType.SETTLEMENT_WAR
+                && !(war.attackerFactionJoined() && war.defenderFactionJoined())) {
+            return "Calls to war become available only after a Settlement War escalates to Faction vs Faction. Until then, parent factions may send aid or join directly.";
+        }
         if (!validOtherFaction(own, target)) return "Select an allied faction.";
         if (war.involves(target)) return factionName(target) + " is already participating in this war.";
         CampaignData.TreatyState alliance = data.relation(own, target).state();
@@ -980,14 +984,20 @@ public final class CampaignManager {
         if (proposal.type() == CampaignData.ProposalType.CALL_TO_WAR && proposal.linkedWar() != null) {
             CampaignData.WarRecord war = data.getWar(proposal.linkedWar());
             if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "The linked war has already ended.";
-            data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
+            if (war.type() == CampaignData.WarType.SETTLEMENT_WAR
+                    && !(war.attackerFactionJoined() && war.defenderFactionJoined())) {
+                return "That Settlement War has not yet escalated to Faction vs Faction, so allied factions cannot formally join it.";
+            }
             boolean attackerSide = war.attackerFaction().equals(proposal.fromFaction()) || war.supportingAttackers().contains(proposal.fromFaction());
-            war.addSupporter(own, attackerSide);
             String enemy = attackerSide ? war.defenderFaction() : war.attackerFaction();
+            if (enemy == null || enemy.isBlank() || !syncRelation(player.serverLevel(), own, enemy, CampaignData.TreatyState.WAR)) {
+                return "Call-to-war acceptance aborted because Recruits did not confirm ENEMY relations with the opposing faction.";
+            }
+            data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
+            war.addSupporter(own, attackerSide);
             CampaignData.DiplomacyRecord relation = data.relation(own, enemy);
             relation.setState(CampaignData.TreatyState.WAR, day);
             relation.changeRelationship(-30);
-            syncRelation(player.serverLevel(), own, enemy, CampaignData.TreatyState.WAR);
             data.relation(proposal.fromFaction(), own).changeRelationship(15);
             // Reliability is earned from actual diplomatic conduct. Answering an ally's
             // legitimate call to war is one of the clearest positive signals.
