@@ -29,14 +29,10 @@ import java.util.UUID;
 
 /** Server-authoritative systems introduced by the 2.3 campaign overhaul. */
 public final class Campaign23Manager {
+    /** Documented defaults; live balance values come from SettlementConfig. */
     public static final int PLAYER_LEVY_CAP = 300;
     public static final int FACTION_LEVY_CAP = 500;
     public static final int LEVY_LEVEL_CAP = 3;
-    public static final long FULL_LEVY_COOLDOWN_MS = 3L * 24L * 60L * 60L * 1000L;
-    public static final long LEVY_NORMAL_SERVICE_MS = 3L * 24L * 60L * 60L * 1000L;
-    public static final long LEVY_WEARY_MS = 5L * 24L * 60L * 60L * 1000L;
-    public static final long LEVY_EXHAUSTED_MS = 7L * 24L * 60L * 60L * 1000L;
-    public static final long LEVY_OUTRAGE_MS = 10L * 24L * 60L * 60L * 1000L;
 
     private static final Map<UUID, BlockPos> REGION_POS1 = new HashMap<>();
     private static final Map<UUID, String> REGION_DIM = new HashMap<>();
@@ -263,9 +259,13 @@ public final class Campaign23Manager {
     }
 
     private static long levyMusterDurationMs(int units, PrototypeData.CharacterRecord character) {
-        double secondsPerUnit = 4.0D;
-        if (character != null && (character.getTraits().contains("rousing_orator") || character.getTraits().contains("ferocious_leader"))) secondsPerUnit *= 0.80D;
-        return Math.max(30_000L, Math.min(15L * 60L * 1000L, Math.round(units * secondsPerUnit * 1000.0D)));
+        double secondsPerUnit = SettlementConfig.LEVY_SECONDS_PER_SOLDIER.get();
+        int traitPercent = character == null ? 0 : CampaignDefinitions.totalEffect(character.getTraits(), CampaignDefinitions.EffectKind.LEVY_MUSTER);
+        // LEVY_MUSTER effects are stored as percentages; negative values reduce mobilisation time.
+        secondsPerUnit *= Math.max(0.10D, 1.0D + traitPercent / 100.0D);
+        long minimum = SettlementConfig.LEVY_MIN_MUSTER_SECONDS.get().longValue() * 1000L;
+        long maximum = SettlementConfig.LEVY_MAX_MUSTER_MINUTES.get().longValue() * 60L * 1000L;
+        return Math.max(minimum, Math.min(maximum, Math.round(units * secondsPerUnit * 1000.0D)));
     }
 
     private static int deployedForPlayer(Campaign23Data extra, UUID player) {
@@ -308,7 +308,8 @@ public final class Campaign23Manager {
                 int traitHealth = 0;
                 PrototypeData.CharacterRecord commander = settlements.getCharacter(owner.getUUID());
                 if (commander != null) traitHealth = CampaignDefinitions.totalEffect(commander.getTraits(), CampaignDefinitions.EffectKind.LEVY_HEALTH);
-                int maxHealth = (mobilization.totalUnits < 100 ? SettlementConfig.SMALL_LEVY_HEALTH.get() : SettlementConfig.LARGE_LEVY_HEALTH.get()) + traitHealth;
+                int maxHealth = (mobilization.totalUnits < SettlementConfig.SMALL_LEVY_SIZE_THRESHOLD.get()
+                        ? SettlementConfig.SMALL_LEVY_HEALTH.get() : SettlementConfig.LARGE_LEVY_HEALTH.get()) + traitHealth;
                 AttributeInstance health = recruit.getAttribute(Attributes.MAX_HEALTH);
                 if (health != null) health.setBaseValue(maxHealth);
                 recruit.setHealth(maxHealth);
@@ -373,7 +374,9 @@ public final class Campaign23Manager {
         double lossRate = totalInitial <= 0 ? 0 : (double) losses / totalInitial;
         applyLevyCasualtyModifier(player.serverLevel(), settlement, extra, lossRate);
         long now = extra.nowMillis(settlement.getId());
-        long cooldown = Math.max(12L * 60L * 60L * 1000L, Math.round(FULL_LEVY_COOLDOWN_MS * Math.min(1.0D, totalInitial / 300.0D)));
+        long fullCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_FULL_COOLDOWN_HOURS);
+        long minimumCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_MIN_COOLDOWN_HOURS);
+        long cooldown = Math.max(minimumCooldown, Math.round(fullCooldown * Math.min(1.0D, totalInitial / 300.0D)));
         extra.setLevyCooldown(player.getUUID(), now + cooldown);
         // Returned/dead levy MP becomes vacant and recovers through the normal manpower checker, preserving the existing design.
         settlement.addChronicle("The levy returned: " + totalSurvivors + "/" + totalInitial + " men came home (" + losses + " lost). Cooldown: " + formatDuration(cooldown) + ".");
@@ -397,8 +400,12 @@ public final class Campaign23Manager {
             PrototypeData.SettlementRecord settlement = settlements.getSettlement(deployment.settlementId);
             if (settlement == null) continue;
             long age = extra.nowMillis(settlement.getId()) - deployment.deployedAtMillis;
-            String id = age >= LEVY_OUTRAGE_MS ? "popular_outrage" : age >= LEVY_EXHAUSTED_MS ? "levy_exhaustion"
-                    : age >= LEVY_WEARY_MS ? "weary_levies" : age >= LEVY_NORMAL_SERVICE_MS ? "extended_service" : "";
+            long extendedAt = SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXTENDED_SERVICE_HOURS);
+            long wearyAt = Math.max(extendedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_WEARY_SERVICE_HOURS));
+            long exhaustedAt = Math.max(wearyAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXHAUSTION_HOURS));
+            long outrageAt = Math.max(exhaustedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_OUTRAGE_HOURS));
+            String id = age >= outrageAt ? "popular_outrage" : age >= exhaustedAt ? "levy_exhaustion"
+                    : age >= wearyAt ? "weary_levies" : age >= extendedAt ? "extended_service" : "";
             if (!id.isBlank() && extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(id))) {
                 extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), id, 0));
                 settlement.addChronicle("Levy service penalty began: " + pretty(id) + ".");
@@ -514,17 +521,18 @@ public final class Campaign23Manager {
         Campaign23Data extra = Campaign23Data.get(level);
         PrototypeData settlements = PrototypeData.get(level);
         long now = System.currentTimeMillis();
+        double remainingMultiplier = 1.0D - SettlementConfig.LEVY_EMERGENCY_RELIEF_PERCENT.get() / 100.0D;
         for (PrototypeData.SettlementRecord settlement : settlements.settlementsForFaction(factionId)) {
             for (UUID member : settlement.getMembers().keySet()) {
                 long until = extra.levyCooldownUntil(member);
-                if (until > now) extra.setLevyCooldown(member, now + Math.round((until - now) * 0.60D));
+                if (until > now) extra.setLevyCooldown(member, now + Math.round((until - now) * remainingMultiplier));
             }
         }
         for (Campaign23Data.LevyMobilization mobilization : extra.levyMobilizations()) {
             if (!factionId.equals(mobilization.factionId)) continue;
             long remaining = Math.max(0L, mobilization.finishesAtMillis - now);
             // fields are final, so debug/emergency speed is handled by advancing the settlement's campaign clock.
-            extra.advanceDebugTime(mobilization.settlementId, Math.round(remaining * 0.40D));
+            extra.advanceDebugTime(mobilization.settlementId, Math.round(remaining * (1.0D - remainingMultiplier)));
         }
     }
 
