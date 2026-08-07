@@ -91,6 +91,13 @@ public final class CampaignManager {
             openFaction(player, createFaction(player, name, teamColor, (byte)Math.max(0, Math.min(15, tier))));
             return;
         }
+        if ("CREATE_SETTLEMENT".equals(action)) {
+            String[] parts = value == null ? new String[0] : value.split("\\|", 2);
+            String id = parts.length > 0 ? PrototypeData.normalizeId(parts[0]) : "";
+            String name = parts.length > 1 ? PrototypeData.cleanText(parts[1], id, 64) : id;
+            openMain(player, createSettlementFromGui(player, id, name));
+            return;
+        }
         String factionId = factionId(player);
         if (factionId.isBlank()) {
             openFaction(player, "You are not a member of a faction. Create one below or ask to join an existing faction.");
@@ -790,6 +797,28 @@ public final class CampaignManager {
 
     public static String createFaction(ServerPlayer player, String rawName) {
         return createFaction(player, rawName, ChatFormatting.WHITE, (byte)0);
+    }
+
+    private static String createSettlementFromGui(ServerPlayer player, String id, String name) {
+        PrototypeData data = PrototypeData.get(player.serverLevel());
+        if (id.isBlank()) return "Settlement creation failed: enter a short settlement ID.";
+        if (player.getTeam() == null && data.getSettlements().stream()
+                .filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
+            return "Independent rulers may own at most two settlements. Create a faction before founding another.";
+        }
+        PrototypeData.SettlementRecord settlement = data.createSettlement(id, name, player.getUUID());
+        if (settlement == null) return "Settlement creation failed: that ID is invalid or already used.";
+        settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
+        Team team = player.getTeam();
+        if (team != null) settlement.setFactionTeam(team.getName());
+        PrototypeCommands.linkClaimAtPlayer(player, settlement, false);
+        data.selectSettlement(player.getUUID(), settlement.getId());
+        settlement.addChronicle("Settlement founded by " + characterOrAccountName(player) + ".");
+        CampaignData.get(player.serverLevel()).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.NORMAL,
+                "Settlement founded", settlement.getName() + " was founded as a Village.",
+                player.serverLevel().getDayTime() / 24000L, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
+        broadcastMapMarkers(player.getServer());
+        return "Founded " + settlement.getName() + " as a Village. Its Town Square was set to your current position.";
     }
 
     public static String createFaction(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor) {

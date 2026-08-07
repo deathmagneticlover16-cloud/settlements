@@ -35,7 +35,9 @@ public final class CampaignMainScreen extends Screen {
         addButton("DIPLOMACY", 18, 134, OpenCampaignRequestPacket.ScreenTarget.DIPLOMACY);
         addButton("FAMILY", 132, 134, OpenCampaignRequestPacket.ScreenTarget.FAMILY);
         addRenderableWidget(Button.builder(Component.literal("WORLD NEWS"), button -> open(OpenCampaignRequestPacket.ScreenTarget.WORLD_NEWS))
-                .bounds(left + 246, top + 134, 222, 34).build());
+                .bounds(left + 246, top + 134, 108, 34).build());
+        addRenderableWidget(Button.builder(Component.literal("NEW SETTLEMENT"), button -> minecraft.setScreen(new SettlementCreationScreen()))
+                .bounds(left + 360, top + 134, 108, 34).build());
         addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose()).bounds(left + 404, top + 282, 60, 18).build());
     }
 

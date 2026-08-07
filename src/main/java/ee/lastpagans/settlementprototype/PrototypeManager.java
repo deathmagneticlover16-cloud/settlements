@@ -197,6 +197,8 @@ public final class PrototypeManager {
             case LINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> linkCurrentClaim(player, settlement));
             case UNLINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> unlinkCurrentClaim(player, settlement));
             case CLEAR_CLAIMS -> requireManager(player, settlement, () -> clearClaims(settlement));
+            case RENAME_SETTLEMENT -> requireManager(player, settlement, () -> renameSettlement(player, settlement, argument));
+            case TRANSFER_SETTLEMENT -> requireOwner(player, settlement, () -> transferSettlement(player, settlement, argument));
             case OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT -> "Screen opened.";
             case REFRESH -> "Stats refreshed.";
         };
@@ -229,6 +231,11 @@ public final class PrototypeManager {
 
     private static String requireContributor(ServerPlayer player, PrototypeData.SettlementRecord settlement, ActionSupplier action) {
         return canContribute(player, settlement) ? action.get() : "Only settlement members may do that.";
+    }
+
+    private static String requireOwner(ServerPlayer player, PrototypeData.SettlementRecord settlement, ActionSupplier action) {
+        return player.createCommandSourceStack().hasPermission(2) || player.getUUID().equals(settlement.getOwnerId())
+                ? action.get() : "Only the settlement owner or an administrator may do that.";
     }
 
     public static String recruitProfessionals(ServerPlayer player, PrototypeData.SettlementRecord settlement, int amount) {
@@ -954,6 +961,29 @@ public final class PrototypeManager {
         else if (current > target + 1) recruit.setMoral(Math.max(target, current - 1.0F));
     }
 
+    private static String renameSettlement(ServerPlayer player, PrototypeData.SettlementRecord settlement, String value) {
+        String clean = PrototypeData.cleanText(value, settlement.getName(), 64);
+        if (clean.isBlank()) return "Settlement name cannot be blank.";
+        settlement.rename(clean);
+        CampaignManager.broadcastMapMarkers(player.getServer());
+        return "Settlement renamed to " + settlement.getName() + ".";
+    }
+
+    private static String transferSettlement(ServerPlayer player, PrototypeData.SettlementRecord settlement, String accountName) {
+        if (player.getServer() == null) return "Server unavailable.";
+        ServerPlayer target = player.getServer().getPlayerList().getPlayerByName(accountName == null ? "" : accountName.trim());
+        if (target == null) return "That player must be online to receive settlement ownership.";
+        PrototypeData data = PrototypeData.get(player.serverLevel());
+        if (target.getTeam() == null && data.getSettlements().stream()
+                .filter(value -> target.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank() && value != settlement).count() >= 2) {
+            return target.getGameProfile().getName() + " already owns the maximum two independent settlements.";
+        }
+        settlement.setOwner(target.getUUID());
+        data.selectSettlement(target.getUUID(), settlement.getId());
+        settlement.addChronicle("Ownership transferred to " + target.getGameProfile().getName() + ".");
+        return "Ownership transferred to " + target.getGameProfile().getName() + ".";
+    }
+
     private static String formattedCharacterName(MinecraftServer server, PrototypeData.CharacterRecord character) {
         if (server == null || character == null) return character == null ? "" : character.getDisplayName();
         ServerPlayer online = server.getPlayerList().getPlayer(character.getPlayerId());
@@ -972,7 +1002,7 @@ public final class PrototypeManager {
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_SILVER,
         WITHDRAW_SILVER_ONE, WITHDRAW_SILVER_TEN, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
-        OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
+        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
 
     public record ContractUseResult(boolean success, String message) {

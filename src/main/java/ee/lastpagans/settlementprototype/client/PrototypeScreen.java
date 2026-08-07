@@ -9,6 +9,7 @@ import ee.lastpagans.settlementprototype.network.PrototypeNetwork;
 import ee.lastpagans.settlementprototype.network.SettlementActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -26,6 +27,7 @@ public final class PrototypeScreen extends Screen {
     private Tab tab = Tab.OVERVIEW;
     private BannerRenderer factionBanner, settlementBanner;
     private boolean confirmClearClaims;
+    private EditBox renameBox, transferBox;
 
     public PrototypeScreen(PrototypeSnapshot snapshot) {
         super(Component.literal("Settlement"));
@@ -119,14 +121,23 @@ public final class PrototypeScreen extends Screen {
                     if (confirmClearClaims) { send(PrototypeManager.SettlementAction.CLEAR_CLAIMS); confirmClearClaims = false; }
                     else { confirmClearClaims = true; buildWidgets(); }
                 }).bounds(left + 306, top + 266, 154, 18).build());
+        renameBox = new EditBox(font, left + 20, top + 214, 160, 20, Component.literal("New settlement name")); renameBox.setMaxLength(64); addRenderableWidget(renameBox);
+        addRenderableWidget(Button.builder(Component.literal("Rename"), b -> send(PrototypeManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
+                .bounds(left + 186, top + 214, 70, 20).build());
+        if ("OWNER".equals(snapshot.role())) {
+            transferBox = new EditBox(font, left + 276, top + 214, 138, 20, Component.literal("Online player")); transferBox.setMaxLength(32); addRenderableWidget(transferBox);
+            addRenderableWidget(Button.builder(Component.literal("Transfer"), b -> send(PrototypeManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
+                    .bounds(left + 420, top + 214, 84, 20).build());
+        }
     }
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
         PrototypeNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target));
     }
 
-    private void send(PrototypeManager.SettlementAction action) {
-        PrototypeNetwork.CHANNEL.sendToServer(new SettlementActionPacket(snapshot.settlementId(), action));
+    private void send(PrototypeManager.SettlementAction action) { send(action, ""); }
+    private void send(PrototypeManager.SettlementAction action, String argument) {
+        PrototypeNetwork.CHANNEL.sendToServer(new SettlementActionPacket(snapshot.settlementId(), action, argument == null ? "" : argument, 0));
     }
 
     private void switchSettlement(boolean next) {

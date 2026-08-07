@@ -514,7 +514,7 @@ public final class PrototypeCommands {
         return linkClaimAtPlayer(player, settlement, true) ? 1 : 0;
     }
 
-    private static boolean linkClaimAtPlayer(ServerPlayer player, PrototypeData.SettlementRecord settlement, boolean notify) {
+    static boolean linkClaimAtPlayer(ServerPlayer player, PrototypeData.SettlementRecord settlement, boolean notify) {
         if (ClaimEvents.recruitsClaimManager == null) {
             if (notify) player.sendSystemMessage(Component.literal("Recruits claim manager is not ready."));
             return false;
