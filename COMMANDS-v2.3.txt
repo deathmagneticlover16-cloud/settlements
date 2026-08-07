@@ -53,11 +53,12 @@ ADMIN RECOVERY / RESET
 /settlements admin reset character <player>
   Wipes character identity/traits and forces character creation again; settlement ownership is retained.
 /settlements admin reset player <player> confirm
-  Nuclear Settlements-mod reset for that player. Use deliberately.
+  Nuclear Settlements-mod reset for that player. Active/partially mustered levy entities are retired as part of the cleanup. Use deliberately.
 /settlements admin reset traits <player>
 /settlements admin reset marriage <player>
 /settlements admin reset religion <player>
 /settlements admin reset levy <player>
+  Retires loaded/unloaded levy soldiers, clears mobilisation/deployment tracking and cooldowns, and removes phantom levy reservations.
 /settlements admin reset cooldowns <player>
 
 ADMIN DIAGNOSTICS

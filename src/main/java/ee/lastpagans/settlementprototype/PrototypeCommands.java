@@ -1005,12 +1005,13 @@ public final class PrototypeCommands {
 
     private static int adminResetPlayer(CommandSourceStack source, ServerPlayer target) {
         PrototypeData settlements = PrototypeData.get(target.serverLevel());
+        int retiredLevies = Campaign23Manager.forceRetirePlayerLevies(target.serverLevel(), target.getUUID());
         int affectedSettlements = settlements.resetPlayerData(target.getUUID());
         CampaignData.get(target.serverLevel()).resetPlayerData(target.getUUID());
         Campaign23Data.get(target.serverLevel()).resetPlayerData(target.getUUID());
         PrototypeManager.broadcastProfiles(target.getServer());
         PrototypeManager.promptCharacterCreation(target);
-        source.sendSuccess(() -> Component.literal("FULL Settlements data reset for " + target.getGameProfile().getName() + ". Affected settlement memberships/ownership references: " + affectedSettlements + "."), true);
+        source.sendSuccess(() -> Component.literal("FULL Settlements data reset for " + target.getGameProfile().getName() + ". Affected settlement memberships/ownership references: " + affectedSettlements + ". Retired levy entities: " + retiredLevies + "."), true);
         return 1;
     }
 
@@ -1026,7 +1027,8 @@ public final class PrototypeCommands {
         Campaign23Data.get(target.serverLevel()).resetReligion(target.getUUID()); source.sendSuccess(() -> Component.literal("Devotion/religion progression reset for " + target.getGameProfile().getName() + ". Character faith itself was preserved."), true); return 1;
     }
     private static int adminResetLevy(CommandSourceStack source, ServerPlayer target) {
-        Campaign23Data.get(target.serverLevel()).resetLevy(target.getUUID()); source.sendSuccess(() -> Component.literal("Levy timers and tracked deployment data reset for " + target.getGameProfile().getName() + ". Existing entities are not force-deleted."), true); return 1;
+        int retired = Campaign23Manager.forceRetirePlayerLevies(target.serverLevel(), target.getUUID());
+        source.sendSuccess(() -> Component.literal("Levy state reset for " + target.getGameProfile().getName() + ". Retired/removed levy entities: " + retired + "."), true); return 1;
     }
     private static int adminResetCooldowns(CommandSourceStack source, ServerPlayer target) {
         Campaign23Data.get(target.serverLevel()).clearLevyCooldown(target.getUUID()); source.sendSuccess(() -> Component.literal("Levy cooldown cleared for " + target.getGameProfile().getName() + "."), true); return 1;

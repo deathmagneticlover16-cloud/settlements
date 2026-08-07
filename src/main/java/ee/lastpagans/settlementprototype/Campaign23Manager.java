@@ -461,6 +461,59 @@ public final class Campaign23Manager {
         return "Returned " + totalSurvivors + " surviving levymen. Losses: " + losses + ". Levy cooldown: " + formatDuration(cooldown) + "." + traditionText;
     }
 
+    /** Administrative hard reset for a player's levy state. Loaded levy entities are removed,
+     * unloaded ones are retired so they cannot reappear later, partial mobilisations are refunded,
+     * and settlement batch reservations are cleared before the persistent levy records are reset. */
+    public static int forceRetirePlayerLevies(ServerLevel level, UUID ownerId) {
+        if (level == null || ownerId == null) return 0;
+        Campaign23Data extra = Campaign23Data.get(level);
+        PrototypeData settlements = PrototypeData.get(level);
+        MinecraftServer server = level.getServer();
+        int retired = 0;
+        Set<String> touchedSettlements = new HashSet<>();
+
+        for (Campaign23Data.LevyMobilization mobilization : new ArrayList<>(extra.levyMobilizations())) {
+            if (!ownerId.equals(mobilization.ownerId)) continue;
+            PrototypeData.SettlementRecord settlement = settlements.getSettlement(mobilization.settlementId);
+            if (settlement != null) {
+                touchedSettlements.add(settlement.getId());
+                for (UUID unitId : settlement.getLevyUnitsForBatch(mobilization.batchId)) {
+                    Entity entity = findEntity(server, unitId);
+                    if (entity != null) entity.discard(); else extra.markRetiredLevy(unitId);
+                    retired++;
+                }
+                settlement.clearLevyBatch(mobilization.batchId);
+                // A mobilisation that never finished service is an administrative cancellation,
+                // so return the reserved manpower immediately instead of leaving a phantom vacancy.
+                settlement.changeAvailableManpower(mobilization.manpowerSpent);
+            }
+            extra.removeLevyMobilization(mobilization.id);
+        }
+
+        for (Campaign23Data.LevyDeployment deployment : new ArrayList<>(extra.levyDeployments())) {
+            if (!ownerId.equals(deployment.ownerId)) continue;
+            PrototypeData.SettlementRecord settlement = settlements.getSettlement(deployment.settlementId);
+            if (settlement != null) {
+                touchedSettlements.add(settlement.getId());
+                for (UUID unitId : settlement.getLevyUnitsForBatch(deployment.batchId)) {
+                    Entity entity = findEntity(server, unitId);
+                    if (entity != null) entity.discard(); else extra.markRetiredLevy(unitId);
+                    retired++;
+                }
+                settlement.clearLevyBatch(deployment.batchId);
+            }
+            extra.removeLevyDeployment(deployment.batchId);
+        }
+
+        extra.resetLevy(ownerId);
+        for (String settlementId : touchedSettlements) {
+            boolean stillMobilised = extra.levyDeployments().stream().anyMatch(value -> settlementId.equals(value.settlementId))
+                    || extra.levyMobilizations().stream().anyMatch(value -> settlementId.equals(value.settlementId));
+            if (!stillMobilised) clearLevyServiceModifiers(extra, settlementId, "");
+        }
+        return retired;
+    }
+
     private static int levyTraditionGain(int initial, int survivors, long serviceAge) {
         // A levy must actually remain in service before a settlement learns anything from it.
         // The multi-day cooldown already makes this difficult to farm; the service/survivor
