@@ -107,29 +107,54 @@ public final class PrototypeScreen extends Screen {
 
     private void managementButtons() {
         if (!snapshot.canManage()) return;
+
+        addRenderableWidget(Button.builder(Component.literal("Town Square: here"), b -> send(PrototypeManager.SettlementAction.SET_TOWN_SQUARE))
+                .bounds(left + 20, top + 104, 150, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Barracks: here"), b -> send(PrototypeManager.SettlementAction.SET_BARRACKS))
+                .bounds(left + 176, top + 104, 150, 18).build());
+
+        addRenderableWidget(Button.builder(Component.literal("Housing pos1"), b -> send(PrototypeManager.SettlementAction.HOUSING_POS1))
+                .bounds(left + 20, top + 128, 98, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Housing pos2"), b -> send(PrototypeManager.SettlementAction.HOUSING_POS2))
+                .bounds(left + 124, top + 128, 98, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Recalc housing"), b -> send(PrototypeManager.SettlementAction.RECALCULATE_HOUSING))
+                .bounds(left + 228, top + 128, 104, 18).build());
+
+        addRenderableWidget(Button.builder(Component.literal("Muster pos1"), b -> send(PrototypeManager.SettlementAction.MUSTER_POS1))
+                .bounds(left + 20, top + 150, 98, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Muster pos2"), b -> send(PrototypeManager.SettlementAction.MUSTER_POS2))
+                .bounds(left + 124, top + 150, 98, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Prayer pos1"), b -> send(PrototypeManager.SettlementAction.PRAYER_POS1))
+                .bounds(left + 228, top + 150, 98, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Prayer pos2"), b -> send(PrototypeManager.SettlementAction.PRAYER_POS2))
+                .bounds(left + 332, top + 150, 98, 18).build());
+
+        renameBox = new EditBox(font, left + 20, top + 176, 160, 20, Component.literal("New settlement name")); renameBox.setMaxLength(64); addRenderableWidget(renameBox);
+        addRenderableWidget(Button.builder(Component.literal("Rename"), b -> send(PrototypeManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
+                .bounds(left + 186, top + 176, 70, 20).build());
+        if ("OWNER".equals(snapshot.role())) {
+            transferBox = new EditBox(font, left + 276, top + 176, 138, 20, Component.literal("Online player")); transferBox.setMaxLength(32); addRenderableWidget(transferBox);
+            addRenderableWidget(Button.builder(Component.literal("Transfer"), b -> send(PrototypeManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
+                    .bounds(left + 420, top + 176, 84, 20).build());
+        }
+
         addRenderableWidget(Button.builder(Component.literal("Set held banner"), button -> send(PrototypeManager.SettlementAction.SET_CUSTOM_BANNER))
-                .bounds(left + 20, top + 244, 132, 20).build());
+                .bounds(left + 20, top + 204, 132, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Use faction banner"), button -> send(PrototypeManager.SettlementAction.USE_FACTION_BANNER))
-                .bounds(left + 158, top + 244, 142, 20).build());
+                .bounds(left + 158, top + 204, 142, 18).build());
         addRenderableWidget(Button.builder(Component.literal("No banner"), button -> send(PrototypeManager.SettlementAction.CLEAR_BANNER))
-                .bounds(left + 306, top + 244, 110, 20).build());
+                .bounds(left + 306, top + 204, 110, 18).build());
+
         addRenderableWidget(Button.builder(Component.literal("Link Claim Here"), button -> send(PrototypeManager.SettlementAction.LINK_CURRENT_CLAIM))
-                .bounds(left + 20, top + 266, 132, 18).build());
+                .bounds(left + 20, top + 230, 132, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Unlink Current"), button -> send(PrototypeManager.SettlementAction.UNLINK_CURRENT_CLAIM))
-                .bounds(left + 158, top + 266, 142, 18).build());
+                .bounds(left + 158, top + 230, 142, 18).build());
         addRenderableWidget(Button.builder(Component.literal(confirmClearClaims ? "CONFIRM UNLINK ALL" : "Unlink All Claims"), button -> {
                     if (confirmClearClaims) { send(PrototypeManager.SettlementAction.CLEAR_CLAIMS); confirmClearClaims = false; }
                     else { confirmClearClaims = true; buildWidgets(); }
-                }).bounds(left + 306, top + 266, 154, 18).build());
-        renameBox = new EditBox(font, left + 20, top + 214, 160, 20, Component.literal("New settlement name")); renameBox.setMaxLength(64); addRenderableWidget(renameBox);
-        addRenderableWidget(Button.builder(Component.literal("Rename"), b -> send(PrototypeManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
-                .bounds(left + 186, top + 214, 70, 20).build());
-        if ("OWNER".equals(snapshot.role())) {
-            transferBox = new EditBox(font, left + 276, top + 214, 138, 20, Component.literal("Online player")); transferBox.setMaxLength(32); addRenderableWidget(transferBox);
-            addRenderableWidget(Button.builder(Component.literal("Transfer"), b -> send(PrototypeManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
-                    .bounds(left + 420, top + 214, 84, 20).build());
-        }
+                }).bounds(left + 306, top + 230, 154, 18).build());
     }
+
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
         PrototypeNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target));

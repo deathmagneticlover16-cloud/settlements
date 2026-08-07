@@ -199,6 +199,15 @@ public final class PrototypeManager {
             case CLEAR_CLAIMS -> requireManager(player, settlement, () -> clearClaims(settlement));
             case RENAME_SETTLEMENT -> requireManager(player, settlement, () -> renameSettlement(player, settlement, argument));
             case TRANSFER_SETTLEMENT -> requireOwner(player, settlement, () -> transferSettlement(player, settlement, argument));
+            case SET_TOWN_SQUARE -> requireManager(player, settlement, () -> setTownSquareHere(player, settlement));
+            case SET_BARRACKS -> requireManager(player, settlement, () -> setBarracksHere(player, settlement));
+            case HOUSING_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Housing"));
+            case HOUSING_POS2 -> requireManager(player, settlement, () -> regionPos2(player, settlement, "housing"));
+            case MUSTER_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Muster Ground"));
+            case MUSTER_POS2 -> requireManager(player, settlement, () -> regionPos2(player, settlement, "muster"));
+            case PRAYER_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Prayer Site"));
+            case PRAYER_POS2 -> requireManager(player, settlement, () -> regionPos2(player, settlement, "prayer"));
+            case RECALCULATE_HOUSING -> requireManager(player, settlement, () -> "Housing recalculated: " + Campaign23Manager.recalculateHousing(player.serverLevel(), settlement) + " bed(s).");
             case OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT -> "Screen opened.";
             case REFRESH -> "Stats refreshed.";
         };
@@ -961,6 +970,33 @@ public final class PrototypeManager {
         else if (current > target + 1) recruit.setMoral(Math.max(target, current - 1.0F));
     }
 
+    private static String setTownSquareHere(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
+        settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
+        return "Town Square moved to your current position.";
+    }
+
+    private static String setBarracksHere(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
+        settlement.setBarracks(player.serverLevel().dimension().location().toString(), player.blockPosition());
+        return "Barracks centre moved to your current position.";
+    }
+
+    private static String regionPos1(ServerPlayer player, PrototypeData.SettlementRecord settlement, String label) {
+        Campaign23Manager.setRegionPos1(player);
+        return label + " pos1 set. Stand at the opposite corner and press pos2.";
+    }
+
+    private static String regionPos2(ServerPlayer player, PrototypeData.SettlementRecord settlement, String type) {
+        Campaign23Data.RegionRecord region = Campaign23Manager.completeRegion(player);
+        if (region == null || !region.valid()) return "Set pos1 first, in the same dimension.";
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        return switch (type) {
+            case "housing" -> { extra.addHousingArea(settlement.getId(), region); int beds = Campaign23Manager.recalculateHousing(player.serverLevel(), settlement); yield "Dwelling registered: " + beds + " total housing bed(s)."; }
+            case "muster" -> { extra.setMusterArea(settlement.getId(), region); settlement.setMusterGround(region.dimension(), region.min()); yield "Muster Ground registered with capacity for about " + region.horizontalArea() + " soldiers."; }
+            case "prayer" -> { extra.setPrayerSite(settlement.getId(), region); yield "Prayer Site registered."; }
+            default -> "Unknown region type.";
+        };
+    }
+
     private static String renameSettlement(ServerPlayer player, PrototypeData.SettlementRecord settlement, String value) {
         String clean = PrototypeData.cleanText(value, settlement.getName(), 64);
         if (clean.isBlank()) return "Settlement name cannot be blank.";
@@ -1002,7 +1038,8 @@ public final class PrototypeManager {
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_SILVER,
         WITHDRAW_SILVER_ONE, WITHDRAW_SILVER_TEN, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
-        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
+        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, SET_TOWN_SQUARE, SET_BARRACKS, HOUSING_POS1, HOUSING_POS2, MUSTER_POS1, MUSTER_POS2,
+        PRAYER_POS1, PRAYER_POS2, RECALCULATE_HOUSING, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
 
     public record ContractUseResult(boolean success, String message) {
