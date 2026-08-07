@@ -118,3 +118,11 @@ WORLD NEWS / UI
 - Admin levy/full-player resets now perform real military cleanup: loaded levies are removed, unloaded stragglers are retired so they cannot reappear, partial mobilisation reservations are cleared/refunded, and phantom deployment records are removed.
 - Legacy one-click faction peace is now server-blocked for Settlement Wars (including forged/old packets); local conflicts must use the structured Peace Terms system so observer parents cannot silently end them.
 - A levy annihilated in the field now immediately triggers the full Levy Massacre notification and a major public Military news entry; the catastrophe no longer waits for a Return Levy action that can never happen.
+
+FINAL HARDENING
+- Recurring Settlement War aid now has a persistent player-facing ledger, can be cancelled by the donating parent faction, and remains visible to the aided settlement.
+- Settlement-war action buttons were rearranged so Ignore / Aid / Join / Peace no longer overlap on the defending-parent view.
+- Peace Terms no longer recursively resolves attacker/defender ownership when opened by local settlement managers.
+- Manpower aid validates the recipient's remaining manpower capacity before deducting donor manpower, preventing silent resource loss.
+- Independent rulers no longer create meaningless blank-faction diplomacy records merely by opening the Diplomacy screen.
+- Network protocol advanced to 24 for the expanded diplomacy snapshot.

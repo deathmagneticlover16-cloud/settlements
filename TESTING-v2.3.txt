@@ -48,6 +48,9 @@ E. SETTLEMENT WAR / ESCALATION
 [ ] Ignore acknowledges the conflict without joining; faction may still change its mind later.
 [ ] Send Aid transfers specified food/wealth/manpower without joining.
 [ ] Recurring aid attempts again next campaign day.
+[ ] Aid / Ledger shows active daily commitments to both the donating parent faction and the aided settlement.
+[ ] Donating parent can cancel its own recurring commitment; the aided side cannot cancel somebody else's aid.
+[ ] Attempting manpower aid above the recipient's remaining MP capacity is rejected without deducting donor manpower.
 [ ] First parent joining changes escalation text to Faction-v-Settlement or Settlement-v-Faction.
 [ ] Second parent joining produces Faction-v-Faction and Recruits ENEMY relation both ways.
 
@@ -67,6 +70,7 @@ Test each separately on disposable claims/settlements:
 [ ] Whole settlement transfer.
 [ ] Individual claim transfer into chosen receiving settlement.
 [ ] Recognize independence.
+[ ] Open Peace Terms as attacker settlement manager, defender settlement manager, and each joined parent faction; side resolution is correct and the client does not recurse/crash.
 [ ] Reject ordinary terms.
 [ ] /settlements admin debug war_score <war> 90 then confirm capitulated defender cannot reject attacker terms.
 

@@ -29,7 +29,7 @@ KNOWN DESIGN BOUNDARIES
 - Tactical freecam, Total-War unit overview, testudo/phalanx, and commander combat abilities are intentionally NOT part of Settlements; those were separated into a future Recruits-command addon.
 - Children/heirs/fertility progression is intentionally out of scope.
 - Islam permits up to four spouses in the 2.3 family system. Additional NPC wives use diminishing capital/City-State effects (50%, 25%, 10%). Ending the primary marriage ends the full marriage household; every active marriage must be at least 7 Minecraft days old first.
-- Levy level caps are enforced; source-specific armour-stand XP suppression is not separately hooked in this build.
+- Levy level caps are enforced. Optional armor-stand XP suppression is also hooked for levy-tagged recruits; real combat XP remains allowed below the configured cap.
 - Very high Minecraft GUI scale can still reduce usable logical resolution. 2.3 layouts are substantially reorganized, but 1920x1080 users should prefer GUI scale 2-3 for the largest campaign screens.
 
 See COMMANDS-v2.3.txt and TESTING-v2.3.txt before the multiplayer test.
