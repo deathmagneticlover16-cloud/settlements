@@ -483,6 +483,12 @@ public final class CampaignManager {
 
         String[] split = extra == null ? new String[0] : extra.split("\\|", -1);
         CampaignData.WarType type = parseWarType(split.length > 0 ? split[0] : "");
+        if (type == CampaignData.WarType.SETTLEMENT_WAR) {
+            // Settlement Wars are deliberately settlement-v-settlement. Never allow the old
+            // faction-targeted declaration packet to recreate the confusing 2.0 behaviour
+            // or immediately mark both parent factions as enemies.
+            return "Settlement Wars must be declared through the settlement-v-settlement declaration screen.";
+        }
         if (type == CampaignData.WarType.INDEPENDENCE_WAR) {
             return "Independence wars are reserved for the later settlement-sovereignty system and cannot yet be declared from this screen.";
         }
@@ -494,7 +500,7 @@ public final class CampaignManager {
         PrototypeData.SettlementRecord targetSettlement = settlementId.isBlank() ? null
                 : PrototypeData.get(player.serverLevel()).getSettlement(settlementId);
         boolean needsSettlement = type == CampaignData.WarType.RAID || type == CampaignData.WarType.SKIRMISH
-                || type == CampaignData.WarType.SETTLEMENT_WAR || type == CampaignData.WarType.INDEPENDENCE_WAR;
+                || type == CampaignData.WarType.INDEPENDENCE_WAR;
         if (needsSettlement && targetSettlement == null) return "This conflict tier requires a valid target settlement.";
         if (targetSettlement != null) {
             if (type == CampaignData.WarType.INDEPENDENCE_WAR) {
