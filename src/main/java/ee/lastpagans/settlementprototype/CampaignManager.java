@@ -242,6 +242,8 @@ public final class CampaignManager {
         }
         String settlementId = split.length > 1 ? PrototypeData.normalizeId(split[1]) : "";
         CampaignData.WarGoal goal = parseWarGoal(split.length > 2 ? split[2] : "", type);
+        String customCasusBelli = split.length > 3 ? PrototypeData.cleanText(split[3], "", 100) : "";
+        if (goal == CampaignData.WarGoal.CUSTOM && customCasusBelli.isBlank()) return "Enter a custom Casus Belli before declaring war.";
 
         PrototypeData.SettlementRecord targetSettlement = settlementId.isBlank() ? null
                 : PrototypeData.get(player.serverLevel()).getSettlement(settlementId);
@@ -255,9 +257,10 @@ public final class CampaignManager {
                 return "The chosen settlement does not belong to the target faction.";
             }
         }
-        if (goal.type() != type) return "The selected war goal does not match the conflict tier.";
+        if (!goal.appliesTo(type)) return "The selected Casus Belli does not match the conflict tier.";
 
         CampaignData.WarRecord war = data.createWar(type, goal, own, target, settlementId, player.getUUID(), day);
+        if (goal == CampaignData.WarGoal.CUSTOM) data.setWarCustomCasusBelli(war.id(), customCasusBelli);
         int reliabilityPenalty = switch (previousState) {
             case MILITARY_ALLIANCE, DEFENSIVE_ALLIANCE -> -25;
             case NON_AGGRESSION -> -15;
@@ -269,12 +272,12 @@ public final class CampaignManager {
             return "War declaration aborted because Recruits did not confirm ENEMY relations in both directions.";
         }
         Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), target);
-        CampaignToastSender.warDeclared(player.getServer(), own, target, type.displayName(), goal.displayName());
+        CampaignToastSender.warDeclared(player.getServer(), own, target, type.displayName(), war.casusBelliName());
         String targetText = targetSettlement == null ? factionName(target) : targetSettlement.getName() + " (" + factionName(target) + ")";
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR,
                 type.displayName() + " declared", factionName(own) + " declared a " + type.displayName() + " against " + targetText
-                        + ". War goal: " + goal.displayName() + ".", day, own, settlementId, CampaignData.NewsVisibility.PUBLIC);
-        return type.displayName() + " declared against " + targetText + " for the goal “" + goal.displayName() + "”. War ID: " + war.id();
+                        + ". Casus Belli: " + war.casusBelliName() + ".", day, own, settlementId, CampaignData.NewsVisibility.PUBLIC);
+        return type.displayName() + " declared against " + targetText + ". Casus Belli: “" + war.casusBelliName() + "”. War ID: " + war.id();
     }
 
     private static String declareSettlementWar(ServerPlayer player, CampaignData data, String extra, long day) {
@@ -420,7 +423,7 @@ public final class CampaignManager {
     private static CampaignData.WarGoal parseWarGoal(String raw, CampaignData.WarType type) {
         try {
             CampaignData.WarGoal goal = CampaignData.WarGoal.valueOf(raw.toUpperCase(Locale.ROOT).replace(' ', '_'));
-            return goal.type() == type ? goal : CampaignData.WarGoal.defaultFor(type);
+            return goal.appliesTo(type) ? goal : CampaignData.WarGoal.defaultFor(type);
         } catch (IllegalArgumentException ignored) {
             return CampaignData.WarGoal.defaultFor(type);
         }

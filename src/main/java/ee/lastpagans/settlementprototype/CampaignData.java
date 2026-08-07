@@ -355,7 +355,7 @@ public final class CampaignData extends SavedData {
         WarRecord war = new WarRecord(
                 UUID.randomUUID(),
                 type,
-                goal == null || goal.type() != type ? WarGoal.defaultFor(type) : goal,
+                goal == null || !goal.appliesTo(type) ? WarGoal.defaultFor(type) : goal,
                 attackerFaction,
                 defenderFaction,
                 PrototypeData.normalizeId(targetSettlement),
@@ -378,7 +378,7 @@ public final class CampaignData extends SavedData {
                                          String attackerFaction, String defenderFaction, WarGoal goal,
                                          String customCasusBelli, UUID declaredBy, long day) {
         WarRecord war = new WarRecord(UUID.randomUUID(), WarType.SETTLEMENT_WAR,
-                goal == null || goal.type() != WarType.SETTLEMENT_WAR ? WarGoal.CAPTURE_SETTLEMENT : goal,
+                goal == null || !goal.appliesTo(WarType.SETTLEMENT_WAR) ? WarGoal.CAPTURE_SETTLEMENT : goal,
                 attackerFaction == null ? "" : attackerFaction, defenderFaction == null ? "" : defenderFaction,
                 PrototypeData.normalizeId(defenderSettlement), declaredBy, day);
         war.attackerSettlement = PrototypeData.normalizeId(attackerSettlement);
@@ -392,6 +392,13 @@ public final class CampaignData extends SavedData {
 
     public WarRecord getWar(UUID id) {
         return wars.get(id);
+    }
+
+    public void setWarCustomCasusBelli(UUID id, String text) {
+        WarRecord war = id == null ? null : wars.get(id);
+        if (war == null) return;
+        war.customCasusBelli = PrototypeData.cleanText(text, "", 100);
+        setDirty();
     }
 
     public Collection<WarRecord> getWars() { return List.copyOf(wars.values()); }
@@ -801,7 +808,7 @@ public final class CampaignData extends SavedData {
         FORCE_VASSALAGE("Force Vassalage", WarType.FACTION_WAR),
         PUNITIVE_WAR("Punitive War", WarType.FACTION_WAR),
         HOLY_WAR("Holy War", WarType.FACTION_WAR),
-        CUSTOM("Custom Casus Belli", WarType.FACTION_WAR),
+        CUSTOM("Custom Casus Belli", null),
         GAIN_INDEPENDENCE("Gain Independence", WarType.INDEPENDENCE_WAR),
         SUPPRESS_REBELLION("Suppress Rebellion", WarType.INDEPENDENCE_WAR);
 
@@ -815,6 +822,7 @@ public final class CampaignData extends SavedData {
 
         public String displayName() { return displayName; }
         public WarType type() { return type; }
+        public boolean appliesTo(WarType warType) { return this == CUSTOM || type == warType; }
 
         public static WarGoal defaultFor(WarType type) {
             for (WarGoal goal : values()) if (goal.type == type) return goal;
@@ -1135,7 +1143,7 @@ public final class CampaignData extends SavedData {
             WarStatus status;
             try { type = WarType.valueOf(tag.getString("Type")); } catch (IllegalArgumentException ignored) { type = WarType.FACTION_WAR; }
             try { goal = WarGoal.valueOf(tag.getString("Goal")); } catch (IllegalArgumentException ignored) { goal = WarGoal.defaultFor(type); }
-            if (goal.type() != type) goal = WarGoal.defaultFor(type);
+            if (!goal.appliesTo(type)) goal = WarGoal.defaultFor(type);
             try { status = WarStatus.valueOf(tag.getString("Status")); } catch (IllegalArgumentException ignored) { status = WarStatus.ACTIVE; }
             WarRecord war = new WarRecord(
                     tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(),

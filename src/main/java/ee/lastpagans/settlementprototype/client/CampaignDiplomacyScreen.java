@@ -210,7 +210,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
 
     private List<CampaignData.WarGoal> goals() {
         CampaignData.WarType selected = selectedWarType();
-        return Arrays.stream(CampaignData.WarGoal.values()).filter(value -> value.type() == selected).toList();
+        return Arrays.stream(CampaignData.WarGoal.values()).filter(value -> value.appliesTo(selected)).toList();
     }
 
     private CampaignData.WarType selectedWarType() {
@@ -241,8 +241,10 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
     }
 
     private boolean declarationValid() {
-        if (selectedWarType() == CampaignData.WarType.SETTLEMENT_WAR)
-            return selectedSourceSettlement() != null && selectedTargetSettlement() != null;
+        if (selectedWarType() == CampaignData.WarType.SETTLEMENT_WAR) {
+            if (selectedSourceSettlement() == null || selectedTargetSettlement() == null) return false;
+            return selectedGoal() != CampaignData.WarGoal.CUSTOM || (customCasusBelli != null && !customCasusBelli.getValue().trim().isBlank());
+        }
         if (snapshot.relations().isEmpty()) return false;
         if (selectedWarType() != CampaignData.WarType.FACTION_WAR && selectedTargetSettlement() == null) return false;
         return selectedGoal() != CampaignData.WarGoal.CUSTOM || (customCasusBelli != null && !customCasusBelli.getValue().trim().isBlank());
