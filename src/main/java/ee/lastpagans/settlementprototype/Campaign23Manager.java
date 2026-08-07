@@ -103,6 +103,39 @@ public final class Campaign23Manager {
         processRecurringWarAid(server, extra, settlements, day);
         processReparations(server, extra, day);
         processForcedNapExpiry(server, extra, day);
+        processDevotionSites(server, extra, settlements, day);
+    }
+
+    private static void processDevotionSites(MinecraftServer server, Campaign23Data extra, PrototypeData settlements, long day) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            PrototypeData.CharacterRecord character = settlements.getCharacter(player.getUUID());
+            if (character == null || !character.isCreated()) continue;
+            String dim = player.serverLevel().dimension().location().toString();
+            BlockPos pos = player.blockPosition();
+            if (extra.lastHolyVisitDay(player.getUUID()) < day) {
+                for (Campaign23Data.HolySiteRecord site : extra.holySites()) {
+                    if (site.region().contains(dim, pos) && site.faith().equalsIgnoreCase(character.getFaith())) {
+                        extra.changeDevotion(player.getUUID(), site.devotionGain());
+                        extra.markHolyVisit(player.getUUID(), day);
+                        player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Holy Site visited: +" + site.devotionGain() + " Devotion (" + extra.devotion(player.getUUID()) + "/100)."));
+                        break;
+                    }
+                }
+            }
+            if (extra.lastPrayerDay(player.getUUID()) < day) {
+                for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
+                    Campaign23Data.RegionRecord site = extra.prayerSite(settlement.getId());
+                    if (site == null || !site.contains(dim, pos)) continue;
+                    boolean allowed = settlement.getFactionTeam().isBlank() ? settlement.getRole(player.getUUID()) != PrototypeData.SettlementRole.OUTSIDER
+                            : player.getTeam() != null && settlement.getFactionTeam().equals(player.getTeam().getName());
+                    if (!allowed) continue;
+                    extra.changeDevotion(player.getUUID(), 3);
+                    extra.markPrayer(player.getUUID(), day);
+                    player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Prayer at " + settlement.getName() + ": +3 Devotion (" + extra.devotion(player.getUUID()) + "/100)."));
+                    break;
+                }
+            }
+        }
     }
 
     private static void applyDailyModifierEffects(PrototypeData.SettlementRecord settlement, Campaign23Data extra, long day) {

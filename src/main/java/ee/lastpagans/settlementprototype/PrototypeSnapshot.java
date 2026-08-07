@@ -133,7 +133,8 @@ public record PrototypeSnapshot(
             }
         }
         CampaignData.MarriageRecord marriage = settlement.getOwnerId() == null ? null : campaign.getMarriage(settlement.getOwnerId());
-        if (marriage != null && (marriage.stabilityBonus() != 0 || marriage.wealthPerDay() != 0 || marriage.moraleBonus() != 0)) {
+        if (marriage != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)
+                && (marriage.stabilityBonus() != 0 || marriage.wealthPerDay() != 0 || marriage.moraleBonus() != 0)) {
             String details = joinEffects(marriage.stabilityBonus(), marriage.wealthPerDay(), marriage.moraleBonus());
             String tone = marriage.stabilityBonus() + marriage.wealthPerDay() + marriage.moraleBonus() >= 0 ? "POSITIVE" : "NEGATIVE";
             values.add(new EffectEntry("Spouse: " + marriage.spouseName(), "Marriage", "minecraft:rose_bush", tone, details, "While married"));

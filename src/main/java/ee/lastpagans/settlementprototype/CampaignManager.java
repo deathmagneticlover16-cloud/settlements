@@ -185,6 +185,7 @@ public final class CampaignManager {
         if (!validOtherFaction(own, target)) return "Select another faction.";
         Campaign23Data extraData = Campaign23Data.get(player.serverLevel());
         if (extraData.factionProtected(own) || extraData.factionProtected(target)) return "Protected admin factions cannot participate in wars.";
+        if (extraData.marriageAlliance(own, target)) return "A Marriage Alliance currently binds these factions. End the marriage before declaring a faction war.";
         CampaignData.TreatyState previousState = data.relation(own, target).state();
         if (previousState == CampaignData.TreatyState.WAR) return "Your factions are already at war.";
 
@@ -247,6 +248,10 @@ public final class CampaignManager {
         if (extraData.settlementProtected(source.getId()) || extraData.settlementProtected(target.getId())
                 || extraData.factionProtected(source.getFactionTeam()) || extraData.factionProtected(target.getFactionTeam())) {
             return "Protected admin settlements and factions cannot participate in wars.";
+        }
+        if (!source.getFactionTeam().isBlank() && !target.getFactionTeam().isBlank()
+                && extraData.marriageAlliance(source.getFactionTeam(), target.getFactionTeam())) {
+            return "These settlements belong to factions bound by a Marriage Alliance.";
         }
         boolean duplicate = data.getWars().stream().anyMatch(war -> war.status() == CampaignData.WarStatus.ACTIVE
                 && war.type() == CampaignData.WarType.SETTLEMENT_WAR
@@ -656,7 +661,7 @@ public final class CampaignManager {
                     CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
                     if (spouse == null) result = "That generated candidate is no longer available.";
                     else {
-                        data.marryNpc(player.getUUID(), spouse);
+                        data.marryNpc(player.getUUID(), spouse, day);
                         data.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL,
                                 "Marriage", PrototypeManager.characterOrAccountName(player) + " married " + spouse.name() + ".",
                                 day, factionId(player), "", CampaignData.NewsVisibility.PUBLIC);
@@ -667,6 +672,16 @@ public final class CampaignManager {
             case "REFRESH" -> {
                 if (!data.canRefreshCandidates(player.getUUID(), day)) result = "New candidates become available on day " + data.nextCandidateRefreshDay(player.getUUID()) + ".";
                 else { data.refreshCandidates(player.getUUID(), day); result = "A new set of spouse candidates has arrived."; }
+            }
+            case "SET_GENDER" -> {
+                String gender = value == null ? "ANY" : value.toUpperCase(Locale.ROOT);
+                if (!gender.equals("ANY") && !gender.equals("MALE") && !gender.equals("FEMALE")) result = "Use Any, Male, or Female.";
+                else { Campaign23Data.get(player.serverLevel()).setCandidateGender(player.getUUID(), gender); result = "Marriage candidate filter set to " + gender.toLowerCase(Locale.ROOT) + "."; }
+            }
+            case "REJECT_CANDIDATE" -> {
+                CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
+                if (spouse == null) result = "That candidate is no longer available.";
+                else { Campaign23Data.get(player.serverLevel()).rejectCandidate(player.getUUID(), spouse.id()); data.rejectCandidate(player.getUUID(), spouse.id()); result = spouse.name() + " was rejected and will not appear again in this candidate set."; }
             }
             case "PROPOSE_PLAYER" -> {
                 ServerPlayer target = targetPlayer == null || player.getServer() == null ? null : player.getServer().getPlayerList().getPlayer(targetPlayer);
@@ -682,9 +697,16 @@ public final class CampaignManager {
             }
             case "ACCEPT" -> {
                 UUID proposer = data.pendingMarriageProposer(player.getUUID());
-                boolean accepted = data.acceptPlayerMarriage(player.getUUID());
+                boolean accepted = data.acceptPlayerMarriage(player.getUUID(), day);
                 if (accepted) {
                     String other = proposer == null ? "another character" : characterName(player.serverLevel(), proposer);
+                    String firstFaction = proposer == null ? "" : factionForPlayerId(player.getServer(), proposer);
+                    String secondFaction = factionId(player);
+                    if (!firstFaction.isBlank() && !secondFaction.isBlank() && !firstFaction.equals(secondFaction)) {
+                        Campaign23Data.get(player.serverLevel()).addMarriageAlliance(firstFaction, secondFaction);
+                        CampaignToastSender.faction(player.getServer(), firstFaction, "MARRIAGE ALLIANCE", "A political marriage now binds your faction to " + factionName(secondFaction) + ".");
+                        CampaignToastSender.faction(player.getServer(), secondFaction, "MARRIAGE ALLIANCE", "A political marriage now binds your faction to " + factionName(firstFaction) + ".");
+                    }
                     data.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL,
                             "Marriage", PrototypeManager.characterOrAccountName(player) + " married " + other + ".",
                             day, factionId(player), "", CampaignData.NewsVisibility.PUBLIC);
@@ -692,7 +714,23 @@ public final class CampaignManager {
                 result = accepted ? "Marriage proposal accepted." : "No valid proposal found.";
             }
             case "REJECT" -> { data.rejectPlayerMarriage(player.getUUID()); result = "Marriage proposal rejected."; }
-            case "DIVORCE" -> { data.divorce(player.getUUID()); result = "Marriage ended."; }
+            case "DIVORCE" -> {
+                CampaignData.MarriageRecord marriage = data.getMarriage(player.getUUID());
+                if (marriage == null) result = "You are not married.";
+                else if (day - marriage.marriedDay() < 7L) result = "A voluntary divorce is unavailable until the marriage has lasted at least 7 Minecraft days.";
+                else {
+                    UUID spouseId = marriage.spousePlayerId();
+                    String firstFaction = factionId(player);
+                    String secondFaction = spouseId == null ? "" : factionForPlayerId(player.getServer(), spouseId);
+                    data.divorce(player.getUUID());
+                    if (!firstFaction.isBlank() && !secondFaction.isBlank() && !firstFaction.equals(secondFaction)) {
+                        Campaign23Data.get(player.serverLevel()).removeMarriageAlliance(firstFaction, secondFaction);
+                        CampaignToastSender.faction(player.getServer(), firstFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(secondFaction) + " has ended.");
+                        CampaignToastSender.faction(player.getServer(), secondFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(firstFaction) + " has ended.");
+                    }
+                    result = "Marriage ended.";
+                }
+            }
             default -> result = "Unknown family action.";
         }
         openFamily(player, result);
@@ -779,6 +817,20 @@ public final class CampaignManager {
                 && FactionEvents.recruitsDiplomacyManager.getRelation(second, first) == status;
         if (verified) FactionEvents.recruitsDiplomacyManager.broadcastDiplomacyMapToAll(level);
         return verified;
+    }
+
+    private static String factionForPlayerId(MinecraftServer server, UUID playerId) {
+        if (server == null || playerId == null) return "";
+        ServerPlayer online = server.getPlayerList().getPlayer(playerId);
+        if (online != null && online.getTeam() != null) return online.getTeam().getName();
+        if (FactionEvents.recruitsFactionManager != null) {
+            for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
+                if (faction == null) continue;
+                if (playerId.equals(faction.getTeamLeaderUUID())) return faction.getStringID();
+                if (faction.getMembers().stream().anyMatch(info -> info != null && playerId.equals(info.getUUID()))) return faction.getStringID();
+            }
+        }
+        return "";
     }
 
     public static String factionId(ServerPlayer player) { return player.getTeam() == null ? "" : player.getTeam().getName(); }

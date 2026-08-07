@@ -24,7 +24,10 @@ public final class Campaign23Data extends SavedData {
     private static final String DATA_NAME = "last_pagans_campaign_23";
 
     private final Map<String, Integer> factionWealth = new HashMap<>();
+    private final Map<String, Integer> marriageAlliances = new HashMap<>();
     private final Map<UUID, Integer> devotion = new HashMap<>();
+    private final Map<UUID, Long> lastHolyVisitDay = new HashMap<>();
+    private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
     private final Map<String, Long> debugTimeOffsetMillis = new HashMap<>();
     private final Map<String, Long> lastModifierDay = new HashMap<>();
@@ -53,7 +56,10 @@ public final class Campaign23Data extends SavedData {
     public static Campaign23Data load(CompoundTag tag) {
         Campaign23Data data = new Campaign23Data();
         readStringIntMap(tag, "FactionWealth", data.factionWealth);
+        readStringIntMap(tag, "MarriageAlliances", data.marriageAlliances);
         readUuidIntMap(tag, "Devotion", data.devotion);
+        readUuidLongMap(tag, "LastHolyVisitDay", data.lastHolyVisitDay);
+        readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
         readStringIntMap(tag, "Prosperity", data.prosperity);
         readStringLongMap(tag, "DebugOffsets", data.debugTimeOffsetMillis);
         readStringLongMap(tag, "LastModifierDay", data.lastModifierDay);
@@ -135,7 +141,10 @@ public final class Campaign23Data extends SavedData {
     @Override
     public CompoundTag save(CompoundTag tag) {
         writeStringIntMap(tag, "FactionWealth", factionWealth);
+        writeStringIntMap(tag, "MarriageAlliances", marriageAlliances);
         writeUuidIntMap(tag, "Devotion", devotion);
+        writeUuidLongMap(tag, "LastHolyVisitDay", lastHolyVisitDay);
+        writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
         writeStringIntMap(tag, "Prosperity", prosperity);
         writeStringLongMap(tag, "DebugOffsets", debugTimeOffsetMillis);
         writeStringLongMap(tag, "LastModifierDay", lastModifierDay);
@@ -175,10 +184,18 @@ public final class Campaign23Data extends SavedData {
     public void setFactionWealth(String faction, int value) { if (faction == null || faction.isBlank()) return; factionWealth.put(faction, Math.max(0, value)); setDirty(); }
     public void changeFactionWealth(String faction, int delta) { setFactionWealth(faction, factionWealth(faction) + delta); }
     public boolean spendFactionWealth(String faction, int amount) { int cost = Math.max(0, amount); if (factionWealth(faction) < cost) return false; setFactionWealth(faction, factionWealth(faction) - cost); return true; }
+    public int marriageAllianceCount(String first, String second) { return marriageAlliances.getOrDefault(pairKey(first, second), 0); }
+    public boolean marriageAlliance(String first, String second) { return marriageAllianceCount(first, second) > 0; }
+    public void addMarriageAlliance(String first, String second) { String key = pairKey(first, second); if (key.isBlank()) return; marriageAlliances.put(key, marriageAlliances.getOrDefault(key, 0) + 1); setDirty(); }
+    public void removeMarriageAlliance(String first, String second) { String key = pairKey(first, second); if (key.isBlank()) return; int next = marriageAlliances.getOrDefault(key, 0) - 1; if (next <= 0) marriageAlliances.remove(key); else marriageAlliances.put(key, next); setDirty(); }
 
     public int devotion(UUID player) { return devotion.getOrDefault(player, 0); }
     public void setDevotion(UUID player, int value) { if (player == null) return; devotion.put(player, clamp(value, 0, 100)); setDirty(); }
     public void changeDevotion(UUID player, int delta) { setDevotion(player, devotion(player) + delta); }
+    public long lastHolyVisitDay(UUID player) { return lastHolyVisitDay.getOrDefault(player, Long.MIN_VALUE / 4); }
+    public long lastPrayerDay(UUID player) { return lastPrayerDay.getOrDefault(player, Long.MIN_VALUE / 4); }
+    public void markHolyVisit(UUID player, long day) { if (player != null) { lastHolyVisitDay.put(player, day); setDirty(); } }
+    public void markPrayer(UUID player, long day) { if (player != null) { lastPrayerDay.put(player, day); setDirty(); } }
 
     public int prosperity(String settlement) { return prosperity.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setProsperity(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
@@ -241,6 +258,9 @@ public final class Campaign23Data extends SavedData {
     public void changeWarScore(UUID war, int delta) { setWarScore(war, warScore(war) + delta); }
 
     public CandidateHistory candidateHistory(UUID player) { return candidateHistory.computeIfAbsent(player, CandidateHistory::new); }
+    public void setCandidateGender(UUID player, String gender) { CandidateHistory h = candidateHistory(player); h.setPreferredGender(gender); setDirty(); }
+    public void rejectCandidate(UUID player, String id) { CandidateHistory h = candidateHistory(player); h.reject(id); setDirty(); }
+    public void markCandidateSeen(UUID player, String id) { CandidateHistory h = candidateHistory(player); h.seen(id); setDirty(); }
 
     public long forcedNapUntil(String firstFaction, String secondFaction) { return forcedNapUntilDay.getOrDefault(pairKey(firstFaction, secondFaction), 0L); }
     public void setForcedNap(String firstFaction, String secondFaction, long untilDay) {

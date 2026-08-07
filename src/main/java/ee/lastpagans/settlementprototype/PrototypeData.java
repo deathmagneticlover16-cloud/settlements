@@ -981,7 +981,7 @@ public final class PrototypeData extends SavedData {
                 else if (wealthEffect < 0) wealth = Math.max(0, wealth + wealthEffect);
             }
 
-            if (campaign != null && ownerId != null) {
+            if (campaign != null && ownerId != null && (rank == SettlementRank.CAPITAL || rank == SettlementRank.CITY_STATE)) {
                 CampaignData.MarriageRecord marriage = campaign.getMarriage(ownerId);
                 if (marriage != null) {
                     if (marriage.stabilityBonus() != 0) changeStability(marriage.stabilityBonus());

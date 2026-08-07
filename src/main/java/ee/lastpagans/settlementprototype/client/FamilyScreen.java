@@ -18,6 +18,7 @@ public final class FamilyScreen extends Screen {
     private int left;
     private int top;
     private DropdownWidget candidateDrop;
+    private DropdownWidget genderDrop;
     private int candidateIndex;
 
     public FamilyScreen(FamilySnapshot snapshot) {
@@ -31,11 +32,18 @@ public final class FamilyScreen extends Screen {
         top = (height - H) / 2;
 
         if (!snapshot.married()) {
+            List<String> genders = List.of("Any", "Female", "Male");
+            int genderIndex = snapshot.preferredGender().equalsIgnoreCase("FEMALE") ? 1 : snapshot.preferredGender().equalsIgnoreCase("MALE") ? 2 : 0;
+            genderDrop = addRenderableWidget(new DropdownWidget(left + 244, top + 59, 92, 20, genders, genderIndex, value ->
+                    PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket("SET_GENDER", value, null))));
             List<String> names = snapshot.candidates().stream().map(FamilySnapshot.Candidate::name).toList();
-            candidateDrop = addRenderableWidget(new DropdownWidget(left + 244, top + 59, 238, 20, names, 0,
+            candidateIndex = Math.max(0, Math.min(candidateIndex, Math.max(0, names.size() - 1)));
+            if (!names.isEmpty()) candidateDrop = addRenderableWidget(new DropdownWidget(left + 342, top + 59, 140, 20, names, candidateIndex,
                     value -> candidateIndex = Math.max(0, names.indexOf(value))));
             addRenderableWidget(Button.builder(Component.literal("Marry selected candidate"), button -> marrySelected())
                     .bounds(left + 244, top + 236, 168, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Reject"), button -> rejectSelected())
+                    .bounds(left + 418, top + 236, 64, 20).build());
             Button refresh = addRenderableWidget(Button.builder(Component.literal("Generate new candidates"), button -> send("REFRESH"))
                     .bounds(left + 318, top + 292, 164, 18).build());
             refresh.active = snapshot.canRefresh();
@@ -46,8 +54,9 @@ public final class FamilyScreen extends Screen {
                         .bounds(left + 174, top + 226, 60, 20).build());
             }
         } else {
-            addRenderableWidget(Button.builder(Component.literal("End marriage"), button -> send("DIVORCE"))
+            Button divorce = addRenderableWidget(Button.builder(Component.literal("End marriage"), button -> send("DIVORCE"))
                     .bounds(left + 18, top + 226, 120, 20).build());
+            divorce.active = snapshot.canDivorce();
         }
         addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
                         PrototypeNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
@@ -60,18 +69,26 @@ public final class FamilyScreen extends Screen {
         PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket("MARRY_NPC", candidate.id(), null));
     }
 
+    private void rejectSelected() {
+        if (snapshot.candidates().isEmpty()) return;
+        FamilySnapshot.Candidate candidate = snapshot.candidates().get(Math.min(candidateIndex, snapshot.candidates().size() - 1));
+        PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket("REJECT_CANDIDATE", candidate.id(), null));
+    }
+
     private void send(String action) {
         PrototypeNetwork.CHANNEL.sendToServer(new FamilyActionPacket(action, "", null));
     }
 
     @Override
     public boolean mouseClicked(double x, double y, int button) {
+        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseClicked(x, y, button)) return true;
         if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseClicked(x, y, button)) return true;
         return super.mouseClicked(x, y, button);
     }
 
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
+        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseScrolled(x, y, delta)) return true;
         if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseScrolled(x, y, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
@@ -94,6 +111,7 @@ public final class FamilyScreen extends Screen {
             graphics.drawWordWrap(font, Component.literal(snapshot.spouseTraits()), left + 72, top + 141, 150, 0xFFFFFFFF);
             graphics.drawString(font, "Effects", left + 22, top + 177, 0xFF999999, false);
             graphics.drawWordWrap(font, Component.literal(snapshot.spouseEffect()), left + 72, top + 177, 150, 0xFFCCCCCC);
+            if (!snapshot.canDivorce()) graphics.drawString(font, "Divorce unlocks after 7 days", left + 22, top + 211, 0xFFFFC080, false);
         } else {
             graphics.drawString(font, "No spouse", left + 22, top + 64, 0xFFCCCCCC, false);
             if (snapshot.pendingProposer() != null) {
@@ -112,12 +130,13 @@ public final class FamilyScreen extends Screen {
             FamilySnapshot.Candidate candidate = snapshot.candidates().get(Math.min(candidateIndex, snapshot.candidates().size() - 1));
             int x = left + 252;
             int y = top + 91;
-            line(graphics, "Faith", candidate.faith(), x, y);
-            line(graphics, "Culture", candidate.culture(), x, y + 18);
-            graphics.drawString(font, "Traits", x, y + 40, 0xFF999999, false);
-            graphics.drawWordWrap(font, Component.literal(candidate.traits()), x + 54, y + 40, 166, 0xFFFFFFFF);
-            graphics.drawString(font, "Settlement effects", x, y + 79, 0xFF999999, false);
-            graphics.drawWordWrap(font, Component.literal(candidate.effect()), x, y + 95, 218, 0xFFCCCCCC);
+            line(graphics, "Gender", candidate.gender(), x, y);
+            line(graphics, "Faith", candidate.faith(), x, y + 18);
+            line(graphics, "Culture", candidate.culture(), x, y + 36);
+            graphics.drawString(font, "Traits", x, y + 58, 0xFF999999, false);
+            graphics.drawWordWrap(font, Component.literal(candidate.traits()), x + 54, y + 58, 166, 0xFFFFFFFF);
+            graphics.drawString(font, "Capital effects", x, y + 97, 0xFF999999, false);
+            graphics.drawWordWrap(font, Component.literal(candidate.effect()), x, y + 113, 218, 0xFFCCCCCC);
             graphics.drawString(font, "Candidate refresh: day " + snapshot.nextRefreshDay(), x, top + 211,
                     snapshot.canRefresh() ? 0xFF92D18B : 0xFF888888, false);
         } else if (snapshot.married()) {

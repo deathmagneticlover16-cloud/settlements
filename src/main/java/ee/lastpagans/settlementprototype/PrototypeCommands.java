@@ -249,6 +249,13 @@ public final class PrototypeCommands {
                                 .then(Commands.literal("faction").then(Commands.argument("faction", StringArgumentType.word())
                                         .then(Commands.argument("protected", BoolArgumentType.bool())
                                                 .executes(context -> adminProtectFaction(context.getSource(), StringArgumentType.getString(context, "faction"), BoolArgumentType.getBool(context, "protected")))))))
+                        .then(Commands.literal("holysite")
+                                .then(Commands.literal("pos1").executes(context -> adminHolySitePos1(context.getSource())))
+                                .then(Commands.literal("add").then(Commands.argument("id", StringArgumentType.word())
+                                        .then(Commands.argument("faith", StringArgumentType.greedyString())
+                                                .executes(context -> adminHolySiteAdd(context.getSource(), StringArgumentType.getString(context, "id"), StringArgumentType.getString(context, "faith"))))))
+                                .then(Commands.literal("remove").then(Commands.argument("id", StringArgumentType.word())
+                                        .executes(context -> adminHolySiteRemove(context.getSource(), StringArgumentType.getString(context, "id"))))))
                         .then(Commands.literal("debug")
                                 .then(Commands.literal("advance").then(Commands.argument("settlement", StringArgumentType.word())
                                         .then(Commands.argument("days", IntegerArgumentType.integer(1, 3650))
@@ -1014,12 +1021,24 @@ public final class PrototypeCommands {
 
     private static int adminProtectSettlement(CommandSourceStack source, String id, boolean protect) {
         PrototypeData.SettlementRecord s = PrototypeData.get(source.getLevel()).getSettlement(id); if (s == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
-        Campaign23Data.get(source.getLevel()).setSettlementProtected(s.getId(), protect); source.sendSuccess(() -> Component.literal(s.getName() + " protected=" + protect + "."), true); return 1;
+        Campaign23Data.get(source.getLevel()).setSettlementProtected(s.getId(), protect);
+        if (ClaimEvents.recruitsClaimManager != null) for (PrototypeData.ClaimLink link : s.getClaimLinks()) { RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(link.id()); if (claim != null) { claim.setAdminClaim(protect); ClaimEvents.recruitsClaimManager.addOrUpdateClaim(source.getLevel(), claim); } }
+        if (ClaimEvents.recruitsClaimManager != null) ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(source.getLevel());
+        source.sendSuccess(() -> Component.literal(s.getName() + " protected=" + protect + ". Linked Recruits claims were updated as admin claims."), true); return 1;
     }
     private static int adminProtectFaction(CommandSourceStack source, String faction, boolean protect) {
         if (FactionEvents.recruitsFactionManager == null || FactionEvents.recruitsFactionManager.getFactionByStringID(faction) == null) { source.sendFailure(Component.literal("Unknown Recruits faction.")); return 0; }
-        Campaign23Data.get(source.getLevel()).setFactionProtected(faction, protect); source.sendSuccess(() -> Component.literal(faction + " protected=" + protect + "."), true); return 1;
+        Campaign23Data.get(source.getLevel()).setFactionProtected(faction, protect);
+        for (PrototypeData.SettlementRecord settlement : PrototypeData.get(source.getLevel()).settlementsForFaction(faction)) adminProtectSettlement(source, settlement.getId(), protect);
+        source.sendSuccess(() -> Component.literal(faction + " protected=" + protect + "."), true); return 1;
     }
+    private static int adminHolySitePos1(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException { ServerPlayer p=player(source); Campaign23Manager.setRegionPos1(p); source.sendSuccess(() -> Component.literal("Holy Site pos1 set. Stand at the opposite corner and run /settlements admin holysite add <id> <faith>."), false); return 1; }
+    private static int adminHolySiteAdd(CommandSourceStack source, String id, String faith) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer p=player(source); if (!CampaignDefinitions.isValidReligion(faith)) { source.sendFailure(Component.literal("Unknown faith. Use one of the configured Settlements religions.")); return 0; }
+        Campaign23Data.RegionRecord region=Campaign23Manager.completeRegion(p); if(region==null||!region.valid()){source.sendFailure(Component.literal("Set holy-site pos1 first in this dimension."));return 0;}
+        Campaign23Data.get(p.serverLevel()).addHolySite(new Campaign23Data.HolySiteRecord(id, id.replace('_',' '), faith, region, 20)); source.sendSuccess(() -> Component.literal("Holy Site " + id + " registered for " + faith + ". Visiting it once per Minecraft day grants 20 Devotion."), true); return 1;
+    }
+    private static int adminHolySiteRemove(CommandSourceStack source, String id) { boolean removed=Campaign23Data.get(source.getLevel()).removeHolySite(id); if(!removed){source.sendFailure(Component.literal("Holy Site not found."));return 0;} source.sendSuccess(() -> Component.literal("Holy Site removed."), true); return 1; }
 
     private static int adminDebugAdvance(CommandSourceStack source, String id, int days) {
         PrototypeData.SettlementRecord s = PrototypeData.get(source.getLevel()).getSettlement(id); if (s == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
