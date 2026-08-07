@@ -53,6 +53,7 @@ public final class PrototypeEvents {
         if (settlement == null) settlement = data.findSettlementTrackingUnit(entity.getUUID());
         if (settlement == null) return;
         Campaign23Data.get(level).removeMercenaryContract(entity.getUUID());
+        Campaign23Manager.onMilitaryDeath(level, entity, settlement);
         Campaign23Manager.onLevyDeath(level, entity);
         if (settlement.removeProfessional(entity.getUUID())) {
             settlement.addChronicle("A professional soldier died; one MP became vacant.");

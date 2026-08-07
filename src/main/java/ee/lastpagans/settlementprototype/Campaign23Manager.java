@@ -471,6 +471,31 @@ public final class Campaign23Manager {
         }
     }
 
+    public static void onMilitaryDeath(ServerLevel level, Entity entity, PrototypeData.SettlementRecord settlement) {
+        if (level == null || entity == null || settlement == null) return;
+        CampaignData campaign = CampaignData.get(level);
+        Campaign23Data extra = Campaign23Data.get(level);
+        String faction = settlement.getFactionTeam();
+        boolean levy = "levy".equals(entity.getPersistentData().getString(PrototypeManager.TAG_KIND));
+        int impact = levy ? 1 : 2;
+        for (CampaignData.WarRecord war : campaign.getWars()) {
+            if (war.status() != CampaignData.WarStatus.ACTIVE) continue;
+            boolean attacker = settlement.getId().equals(war.attackerSettlement())
+                    || (!faction.isBlank() && (faction.equals(war.attackerFaction()) && (war.type() != CampaignData.WarType.SETTLEMENT_WAR || war.attackerFactionJoined())
+                    || war.supportingAttackers().contains(faction)));
+            boolean defender = settlement.getId().equals(war.defenderSettlement())
+                    || (!faction.isBlank() && (faction.equals(war.defenderFaction()) && (war.type() != CampaignData.WarType.SETTLEMENT_WAR || war.defenderFactionJoined())
+                    || war.supportingDefenders().contains(faction)));
+            if (attacker == defender) continue;
+            extra.changeWarScore(war.id(), attacker ? -impact : impact);
+            int score = extra.warScore(war.id());
+            if (Math.abs(score) >= 90) {
+                String winner = score > 0 ? war.attackerFaction() : war.defenderFaction();
+                if (!winner.isBlank()) CampaignToastSender.faction(level.getServer(), winner, "ENEMY CAPITULATING", "War score has reached " + score + ". Compulsory peace terms are now available.");
+            }
+        }
+    }
+
     public static void onLevyDeath(ServerLevel level, Entity entity) {
         if (entity == null || !entity.getPersistentData().getBoolean(PrototypeManager.TAG_MANAGED)
                 || !"levy".equals(entity.getPersistentData().getString(PrototypeManager.TAG_KIND))
