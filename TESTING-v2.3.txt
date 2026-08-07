@@ -123,3 +123,6 @@ K. ADMIN / DEBUG
 [ ] debug advance does not move vanilla world time.
 
 When reporting a failure, include: exact button/command, both players' faction + settlement roles, visible error/toast, server log snippet, and /settlements admin inspect output for the affected settlement/player.
+[ ] Settlement Manage tab opens on Locations with no overlapping labels/buttons at supported GUI scales.
+[ ] Identity sub-page cleanly separates banner, rename, and ownership-transfer controls.
+[ ] Claims sub-page cleanly separates Link / Unlink Current / Unlink All and requires a second confirmation before clearing all claims.

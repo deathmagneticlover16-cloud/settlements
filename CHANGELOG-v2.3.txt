@@ -136,3 +136,5 @@ FINAL HARDENING
 - Local Settlement Wars no longer reset observer-parent diplomacy in the SavedData end-war path; the protection now exists at both the data and synchronization layers.
 - Legacy /settlements transfer can no longer bypass polity boundaries for ordinary players; operator use remains an explicit repair override.
 - Faction/settlement GUI action payload capacity was widened for valid 32-character settlement IDs plus 64-character names; network protocol advanced to 25.
+- Settlement Manage was split into dedicated Locations, Identity, and Claims sub-pages so location setup, banners/ownership, and claim controls no longer compete for the same fixed-height panel.
+- Claims management now has a dedicated readable panel with Link Current / Unlink Current / confirmed Unlink All controls and explanatory text matching the original 2.3 mockup intent.

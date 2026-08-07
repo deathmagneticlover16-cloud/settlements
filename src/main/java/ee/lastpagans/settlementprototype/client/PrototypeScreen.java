@@ -27,6 +27,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     private Tab tab = Tab.OVERVIEW;
     private BannerRenderer factionBanner, settlementBanner;
     private boolean confirmClearClaims;
+    private ManagePage managePage = ManagePage.LOCATIONS;
     private EditBox renameBox, transferBox;
 
     public PrototypeScreen(PrototypeSnapshot snapshot) {
@@ -110,51 +111,75 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     private void managementButtons() {
         if (!snapshot.canManage()) return;
 
-        addRenderableWidget(Button.builder(Component.literal("Town Square: here"), b -> send(PrototypeManager.SettlementAction.SET_TOWN_SQUARE))
-                .bounds(left + 20, top + 104, 150, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Barracks: here"), b -> send(PrototypeManager.SettlementAction.SET_BARRACKS))
-                .bounds(left + 176, top + 104, 150, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Locations"), b -> { managePage = ManagePage.LOCATIONS; buildWidgets(); })
+                .bounds(left + 20, top + 102, 112, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Identity"), b -> { managePage = ManagePage.IDENTITY; buildWidgets(); })
+                .bounds(left + 138, top + 102, 112, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Claims"), b -> { managePage = ManagePage.CLAIMS; buildWidgets(); })
+                .bounds(left + 256, top + 102, 112, 18).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Housing pos1"), b -> send(PrototypeManager.SettlementAction.HOUSING_POS1))
-                .bounds(left + 20, top + 128, 98, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Housing pos2"), b -> send(PrototypeManager.SettlementAction.HOUSING_POS2))
-                .bounds(left + 124, top + 128, 98, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Recalc housing"), b -> send(PrototypeManager.SettlementAction.RECALCULATE_HOUSING))
-                .bounds(left + 228, top + 128, 104, 18).build());
-
-        addRenderableWidget(Button.builder(Component.literal("Muster pos1"), b -> send(PrototypeManager.SettlementAction.MUSTER_POS1))
-                .bounds(left + 20, top + 150, 98, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Muster pos2"), b -> send(PrototypeManager.SettlementAction.MUSTER_POS2))
-                .bounds(left + 124, top + 150, 98, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Prayer pos1"), b -> send(PrototypeManager.SettlementAction.PRAYER_POS1))
-                .bounds(left + 228, top + 150, 98, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Prayer pos2"), b -> send(PrototypeManager.SettlementAction.PRAYER_POS2))
-                .bounds(left + 332, top + 150, 98, 18).build());
-
-        renameBox = new EditBox(font, left + 20, top + 176, 160, 20, Component.literal("New settlement name")); renameBox.setMaxLength(64); addRenderableWidget(renameBox);
-        addRenderableWidget(Button.builder(Component.literal("Rename"), b -> send(PrototypeManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
-                .bounds(left + 186, top + 176, 70, 20).build());
-        if ("OWNER".equals(snapshot.role())) {
-            transferBox = new EditBox(font, left + 276, top + 176, 138, 20, Component.literal("Online player")); transferBox.setMaxLength(32); addRenderableWidget(transferBox);
-            addRenderableWidget(Button.builder(Component.literal("Transfer"), b -> send(PrototypeManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
-                    .bounds(left + 420, top + 176, 84, 20).build());
+        switch (managePage) {
+            case LOCATIONS -> locationManagementButtons();
+            case IDENTITY -> identityManagementButtons();
+            case CLAIMS -> claimManagementButtons();
         }
+    }
 
-        addRenderableWidget(Button.builder(Component.literal("Set held banner"), button -> send(PrototypeManager.SettlementAction.SET_CUSTOM_BANNER))
-                .bounds(left + 20, top + 204, 132, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Use faction banner"), button -> send(PrototypeManager.SettlementAction.USE_FACTION_BANNER))
-                .bounds(left + 158, top + 204, 142, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("No banner"), button -> send(PrototypeManager.SettlementAction.CLEAR_BANNER))
-                .bounds(left + 306, top + 204, 110, 18).build());
+    private void locationManagementButtons() {
+        addRenderableWidget(Button.builder(Component.literal("Set Town Square Here"), b -> send(PrototypeManager.SettlementAction.SET_TOWN_SQUARE))
+                .bounds(left + 30, top + 146, 150, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Set Barracks Here"), b -> send(PrototypeManager.SettlementAction.SET_BARRACKS))
+                .bounds(left + 360, top + 146, 150, 18).build());
 
+        addRenderableWidget(Button.builder(Component.literal("Housing Pos 1"), b -> send(PrototypeManager.SettlementAction.HOUSING_POS1))
+                .bounds(left + 30, top + 190, 104, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Housing Pos 2"), b -> send(PrototypeManager.SettlementAction.HOUSING_POS2))
+                .bounds(left + 140, top + 190, 104, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Recalculate"), b -> send(PrototypeManager.SettlementAction.RECALCULATE_HOUSING))
+                .bounds(left + 250, top + 190, 92, 18).build());
+
+        addRenderableWidget(Button.builder(Component.literal("Muster Pos 1"), b -> send(PrototypeManager.SettlementAction.MUSTER_POS1))
+                .bounds(left + 30, top + 234, 104, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Muster Pos 2"), b -> send(PrototypeManager.SettlementAction.MUSTER_POS2))
+                .bounds(left + 140, top + 234, 104, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Prayer Pos 1"), b -> send(PrototypeManager.SettlementAction.PRAYER_POS1))
+                .bounds(left + 300, top + 234, 104, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Prayer Pos 2"), b -> send(PrototypeManager.SettlementAction.PRAYER_POS2))
+                .bounds(left + 410, top + 234, 104, 18).build());
+    }
+
+    private void identityManagementButtons() {
+        addRenderableWidget(Button.builder(Component.literal("Set Held Banner"), button -> send(PrototypeManager.SettlementAction.SET_CUSTOM_BANNER))
+                .bounds(left + 30, top + 154, 142, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Use Faction Banner"), button -> send(PrototypeManager.SettlementAction.USE_FACTION_BANNER))
+                .bounds(left + 178, top + 154, 152, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("No Banner"), button -> send(PrototypeManager.SettlementAction.CLEAR_BANNER))
+                .bounds(left + 336, top + 154, 112, 18).build());
+
+        renameBox = new EditBox(font, left + 30, top + 208, 224, 20, Component.literal("New settlement name"));
+        renameBox.setMaxLength(64);
+        addRenderableWidget(renameBox);
+        addRenderableWidget(Button.builder(Component.literal("Rename"), b -> send(PrototypeManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
+                .bounds(left + 260, top + 208, 78, 20).build());
+
+        if ("OWNER".equals(snapshot.role())) {
+            transferBox = new EditBox(font, left + 30, top + 252, 224, 20, Component.literal("Online player"));
+            transferBox.setMaxLength(32);
+            addRenderableWidget(transferBox);
+            addRenderableWidget(Button.builder(Component.literal("Transfer Ownership"), b -> send(PrototypeManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
+                    .bounds(left + 260, top + 252, 128, 20).build());
+        }
+    }
+
+    private void claimManagementButtons() {
         addRenderableWidget(Button.builder(Component.literal("Link Claim Here"), button -> send(PrototypeManager.SettlementAction.LINK_CURRENT_CLAIM))
-                .bounds(left + 20, top + 230, 132, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Unlink Current"), button -> send(PrototypeManager.SettlementAction.UNLINK_CURRENT_CLAIM))
-                .bounds(left + 158, top + 230, 142, 18).build());
-        addRenderableWidget(Button.builder(Component.literal(confirmClearClaims ? "CONFIRM UNLINK ALL" : "Unlink All Claims"), button -> {
+                .bounds(left + 30, top + 164, 150, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Unlink Current Claim"), button -> send(PrototypeManager.SettlementAction.UNLINK_CURRENT_CLAIM))
+                .bounds(left + 30, top + 206, 150, 20).build());
+        addRenderableWidget(Button.builder(Component.literal(confirmClearClaims ? "CONFIRM UNLINK ALL" : "UNLINK ALL CLAIMS"), button -> {
                     if (confirmClearClaims) { send(PrototypeManager.SettlementAction.CLEAR_CLAIMS); confirmClearClaims = false; }
                     else { confirmClearClaims = true; buildWidgets(); }
-                }).bounds(left + 306, top + 230, 154, 18).build());
+                }).bounds(left + 30, top + 248, 150, 20).build());
     }
 
 
@@ -301,15 +326,56 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
             graphics.drawWordWrap(font, Component.literal("Read-only faction view. Only the settlement owner, co-owners, or administrators can change banners, claims, housing, military locations, resources, or recruitment."), left + 22, top + 112, W - 44, 0xFFFFC080);
             return;
         }
-        stat(graphics, "Banner mode", pretty(snapshot.bannerMode()), 22, 110);
-        stat(graphics, "Faction banner", snapshot.factionId().isBlank() ? "none" : fit(snapshot.factionName(), 180), 22, 132);
-        stat(graphics, "Military roster", fit(snapshot.rosterName(), 180), 22, 154);
-        stat(graphics, "Linked claims", snapshot.claimCount(), 22, 176);
-        stat(graphics, "Barracks area", snapshot.barracksSet() ? snapshot.barracksRadius() + " block radius" : "not set", 22, 198);
-        stat(graphics, "Barracks capacity", snapshot.barracksSet() ? snapshot.barracksCapacity() : "—", 22, 220);
-        graphics.drawWordWrap(font, Component.literal(
-                "Town Square is for civilians. The Muster Ground is the military spawn area. Barracks provide a home, rest point and optional upkeep chest. Multiple Recruits claims may be linked to one settlement."),
-                left + 286, top + 112, 226, 0xFFAAAAAA);
+
+        switch (managePage) {
+            case LOCATIONS -> renderLocationManagement(graphics);
+            case IDENTITY -> renderIdentityManagement(graphics);
+            case CLAIMS -> renderClaimManagement(graphics);
+        }
+    }
+
+    private void renderLocationManagement(GuiGraphics graphics) {
+        graphics.drawString(font, "SETTLEMENT LOCATIONS", left + 30, top + 128, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Town Square: " + (snapshot.townSquareSet() ? "set" : "missing"), left + 30, top + 168, snapshot.townSquareSet() ? 0xFFA9D18E : 0xFFFFA080, false);
+        graphics.drawString(font, "Barracks: " + (snapshot.barracksSet() ? snapshot.barracksRadius() + " block radius · capacity " + snapshot.barracksCapacity() : "missing"), left + 360, top + 168, snapshot.barracksSet() ? 0xFFA9D18E : 0xFFFFA080, false);
+
+        graphics.drawString(font, "HOUSING", left + 30, top + 182, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Registered capacity: " + snapshot.housingCapacity(), left + 360, top + 194, 0xFFAAAAAA, false);
+
+        graphics.drawString(font, "MUSTER GROUND", left + 30, top + 226, 0xFFE7D8B0, false);
+        graphics.drawString(font, snapshot.musterGroundSet() ? "Military spawn region is set." : "Choose two corners for the military spawn region.", left + 30, top + 256, snapshot.musterGroundSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
+
+        graphics.drawString(font, "PRAYER SITE", left + 300, top + 226, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Choose two corners for the settlement prayer region.", left + 300, top + 256, 0xFFAAAAAA, false);
+    }
+
+    private void renderIdentityManagement(GuiGraphics graphics) {
+        graphics.drawString(font, "SETTLEMENT IDENTITY", left + 30, top + 128, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Banner mode: " + pretty(snapshot.bannerMode()), left + 30, top + 138, 0xFFAAAAAA, false);
+        graphics.drawString(font, "Faction: " + (snapshot.factionId().isBlank() ? "Independent" : fit(snapshot.factionName(), 250)), left + 30, top + 184, 0xFFAAAAAA, false);
+        graphics.drawString(font, "Rename settlement", left + 30, top + 198, 0xFFE7D8B0, false);
+        if ("OWNER".equals(snapshot.role())) {
+            graphics.drawString(font, "Transfer ownership to an online player", left + 30, top + 242, 0xFFE7D8B0, false);
+        } else {
+            graphics.drawString(font, "Only the settlement owner may transfer ownership.", left + 30, top + 242, 0xFF888888, false);
+        }
+    }
+
+    private void renderClaimManagement(GuiGraphics graphics) {
+        graphics.drawString(font, "CLAIMS", left + 30, top + 128, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Linked claims: " + snapshot.claimCount(), left + 360, top + 130, 0xFFFFFFFF, false);
+        if (snapshot.claimLinked()) {
+            graphics.drawString(font, "Current/primary: " + fit(snapshot.claimName(), 150), left + 360, top + 144, 0xFFAAAAAA, false);
+        }
+
+        graphics.drawWordWrap(font, Component.literal("Links the Recruits claim you are currently standing in to this settlement."),
+                left + 198, top + 162, 306, 0xFFAAAAAA);
+        graphics.drawWordWrap(font, Component.literal("Removes only the claim you are currently standing in from this settlement."),
+                left + 198, top + 204, 306, 0xFFAAAAAA);
+        graphics.drawWordWrap(font, Component.literal(confirmClearClaims
+                        ? "WARNING: press the red button again to remove every linked claim."
+                        : "Removes ALL linked claims. This can break a large settlement's territory setup and requires confirmation."),
+                left + 198, top + 246, 306, confirmClearClaims ? 0xFFFF8080 : 0xFFAAAAAA);
     }
 
     private void stat(GuiGraphics graphics, String label, Object value, int x, int y) {
@@ -332,4 +398,5 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
 
     @Override public boolean isPauseScreen() { return false; }
     private enum Tab { OVERVIEW, RESIDENTS, TREASURY, EFFECTS, MANAGEMENT }
+    private enum ManagePage { LOCATIONS, IDENTITY, CLAIMS }
 }
