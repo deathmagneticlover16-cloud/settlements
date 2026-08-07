@@ -117,3 +117,4 @@ WORLD NEWS / UI
 - Settlement-war Join/Ignore responses now notify the real political sides, including independent settlement managers; a defending parent that chooses Ignore visibly informs both local settlements instead of changing state silently.
 - Admin levy/full-player resets now perform real military cleanup: loaded levies are removed, unloaded stragglers are retired so they cannot reappear, partial mobilisation reservations are cleared/refunded, and phantom deployment records are removed.
 - Legacy one-click faction peace is now server-blocked for Settlement Wars (including forged/old packets); local conflicts must use the structured Peace Terms system so observer parents cannot silently end them.
+- A levy annihilated in the field now immediately triggers the full Levy Massacre notification and a major public Military news entry; the catastrophe no longer waits for a Return Levy action that can never happen.

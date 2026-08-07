@@ -775,7 +775,12 @@ public final class Campaign23Manager {
 
         long now = extra.nowMillis(settlement.getId());
         long serviceAge = Math.max(0L, now - deployment.deployedAtMillis);
-        applyLevyCasualtyModifier(level, settlement, extra, 1.0D);
+        Campaign23Data.ModifierRecord massacre = applyLevyCasualtyModifier(level, settlement, extra, 1.0D);
+        CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "LEVY MASSACRE",
+                "The levy has been annihilated. 0 of " + deployment.initialUnits + " men returned; " + (massacre == null ? "the settlement is in mourning." : massacre.detail));
+        CampaignData.get(level).addNews(CampaignData.NewsCategory.MILITARY, CampaignData.NewsImportance.MAJOR,
+                "Levy Massacre", settlement.getName() + " lost its entire levy of " + deployment.initialUnits + " men.",
+                level.getDayTime() / 24000L, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
         extra.removeLevyDeployment(batchId);
         settleLevyServicePenaltyAfterReturn(level, settlement, extra, serviceAge);
 
