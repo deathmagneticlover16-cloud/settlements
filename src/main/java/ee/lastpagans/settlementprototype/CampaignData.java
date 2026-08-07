@@ -448,7 +448,12 @@ public final class CampaignData extends SavedData {
     }
 
     public static int spouseEffectPercent(int spouseIndex) {
-        return switch (Math.max(0, spouseIndex)) { case 0 -> 100; case 1 -> 50; case 2 -> 25; default -> 10; };
+        return switch (Math.max(0, spouseIndex)) {
+            case 0 -> 100;
+            case 1 -> SettlementConfig.SECOND_SPOUSE_EFFECT_PERCENT.get();
+            case 2 -> SettlementConfig.THIRD_SPOUSE_EFFECT_PERCENT.get();
+            default -> SettlementConfig.LATER_SPOUSE_EFFECT_PERCENT.get();
+        };
     }
 
     public static int scaledSpouseEffect(int value, int spouseIndex) {

@@ -24,6 +24,11 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue LEVY_OUTRAGE_HOURS;
     public static final ForgeConfigSpec.IntValue LEVY_EMERGENCY_RELIEF_PERCENT;
     public static final ForgeConfigSpec.BooleanValue BLOCK_LEVY_ARMOR_STAND_XP;
+    public static final ForgeConfigSpec.IntValue DEFAULT_MAX_SPOUSES;
+    public static final ForgeConfigSpec.IntValue ISLAM_MAX_SPOUSES;
+    public static final ForgeConfigSpec.IntValue SECOND_SPOUSE_EFFECT_PERCENT;
+    public static final ForgeConfigSpec.IntValue THIRD_SPOUSE_EFFECT_PERCENT;
+    public static final ForgeConfigSpec.IntValue LATER_SPOUSE_EFFECT_PERCENT;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -71,6 +76,19 @@ public final class SettlementConfig {
         BLOCK_LEVY_ARMOR_STAND_XP = builder.comment("Prevents levy-tagged recruits from gaining Recruits combat XP by repeatedly attacking armor stands. Real combat XP is unaffected.")
                 .define("blockLevyArmorStandXp", true);
         builder.pop();
+
+        builder.push("marriage");
+        DEFAULT_MAX_SPOUSES = builder.comment("Maximum active spouses for faiths without a special rule.")
+                .defineInRange("defaultMaximumSpouses", 1, 1, 8);
+        ISLAM_MAX_SPOUSES = builder.comment("Maximum active spouses for characters whose faith is Islam.")
+                .defineInRange("islamMaximumSpouses", 4, 1, 8);
+        SECOND_SPOUSE_EFFECT_PERCENT = builder.comment("Settlement-effect strength of the second spouse.")
+                .defineInRange("secondSpouseEffectPercent", 50, 0, 100);
+        THIRD_SPOUSE_EFFECT_PERCENT = builder.comment("Settlement-effect strength of the third spouse.")
+                .defineInRange("thirdSpouseEffectPercent", 25, 0, 100);
+        LATER_SPOUSE_EFFECT_PERCENT = builder.comment("Settlement-effect strength of the fourth and later spouses.")
+                .defineInRange("laterSpouseEffectPercent", 10, 0, 100);
+        builder.pop();
         SPEC = builder.build();
     }
 
@@ -79,6 +97,10 @@ public final class SettlementConfig {
     public static int effectiveLevyLevelCap() {
         int cap = LEVY_LEVEL_CAP.get();
         return ENABLE_RECRUIT_LEVEL_OVERRIDE.get() ? Math.min(cap, RECRUIT_LEVEL_CAP.get()) : cap;
+    }
+
+    public static int maxSpousesForFaith(String faith) {
+        return faith != null && faith.equalsIgnoreCase("Islam") ? ISLAM_MAX_SPOUSES.get() : DEFAULT_MAX_SPOUSES.get();
     }
 
     public static long hoursMillis(ForgeConfigSpec.IntValue hours) {

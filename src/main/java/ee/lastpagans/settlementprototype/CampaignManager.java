@@ -1379,10 +1379,11 @@ public final class CampaignManager {
                         result = "You married " + spouse.name() + ".";
                     } else {
                         PrototypeData.CharacterRecord character = PrototypeData.get(player.serverLevel()).getCharacter(player.getUUID());
-                        boolean permitsAdditionalWives = character != null && character.getFaith().equalsIgnoreCase("Islam");
+                        int maximumSpouses = character == null ? 1 : SettlementConfig.maxSpousesForFaith(character.getFaith());
+                        boolean permitsAdditionalWives = maximumSpouses > 1;
                         if (!permitsAdditionalWives) result = "Your faith permits only one active spouse.";
-                        else if (!spouse.gender().equalsIgnoreCase("Female")) result = "Additional spouses under this faith rule must be female candidates.";
-                        else if (data.spouseCount(player.getUUID()) >= 4) result = "You already have the maximum of four spouses.";
+                        else if (character != null && character.getFaith().equalsIgnoreCase("Islam") && !spouse.gender().equalsIgnoreCase("Female")) result = "Additional spouses under this faith rule must be female candidates.";
+                        else if (data.spouseCount(player.getUUID()) >= maximumSpouses) result = "You already have the maximum of " + maximumSpouses + " spouses permitted by your faith.";
                         else if (data.marryAdditionalNpc(player.getUUID(), spouse, day)) {
                             int count = data.spouseCount(player.getUUID());
                             int percent = CampaignData.spouseEffectPercent(count - 1);
