@@ -21,8 +21,9 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private final DiplomacySnapshot.WarEntry war;
     private int left, top;
     private EditBox wealth, manpower, reparations, reparationsDays, napDays;
+    private String wealthValue = "0", manpowerValue = "0", reparationsValue = "0", reparationsDaysValue = "0", napDaysValue = "0";
     private DropdownWidget faith, settlement, claim, destination;
-    private int settlementIndex, claimIndex, destinationIndex;
+    private int faithIndex, settlementIndex, claimIndex, destinationIndex;
     private boolean convertFaith, transferSettlement, transferClaim, recognizeIndependence;
 
     public PeaceTreatyScreen(Screen parent, DiplomacySnapshot snapshot, DiplomacySnapshot.WarEntry war) {
@@ -31,24 +32,25 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
 
     @Override protected void init() {
         setupCampaignScale(W, H); left = campaignLeft(W); top = campaignTop(H);
-        wealth = number(left + 142, top + 68, 104); manpower = number(left + 142, top + 96, 104);
-        reparations = number(left + 142, top + 124, 104); reparationsDays = number(left + 142, top + 152, 104);
-        napDays = number(left + 142, top + 180, 104);
+        wealth = number(left + 142, top + 68, 104, wealthValue); manpower = number(left + 142, top + 96, 104, manpowerValue);
+        reparations = number(left + 142, top + 124, 104, reparationsValue); reparationsDays = number(left + 142, top + 152, 104, reparationsDaysValue);
+        napDays = number(left + 142, top + 180, 104, napDaysValue);
 
-        addRenderableWidget(Button.builder(Component.literal(convertFaith ? "☑ Force faith conversion" : "☐ Force faith conversion"), b -> { convertFaith = !convertFaith; rebuildWidgets(); })
+        addRenderableWidget(Button.builder(Component.literal(convertFaith ? "☑ Force faith conversion" : "☐ Force faith conversion"), b -> { preserveValues(); convertFaith = !convertFaith; rebuildWidgets(); })
                 .bounds(left + 272, top + 68, 220, 20).build());
-        if (convertFaith) faith = addRenderableWidget(new DropdownWidget(left + 272, top + 92, 220, 20, CampaignDefinitions.RELIGIONS, 0, v -> {}));
+        faithIndex = clamp(faithIndex, CampaignDefinitions.RELIGIONS.size());
+        if (convertFaith) faith = addRenderableWidget(new DropdownWidget(left + 272, top + 92, 220, 20, CampaignDefinitions.RELIGIONS, faithIndex, v -> faithIndex = Math.max(0, CampaignDefinitions.RELIGIONS.indexOf(v))));
 
         List<DiplomacySnapshot.SettlementTarget> enemySettlements = enemySettlements();
         List<String> enemyNames = enemySettlements.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
         settlementIndex = clamp(settlementIndex, enemyNames.size());
-        addRenderableWidget(Button.builder(Component.literal(transferSettlement ? "☑ Transfer settlement" : "☐ Transfer settlement"), b -> { transferSettlement = !transferSettlement; rebuildWidgets(); })
+        addRenderableWidget(Button.builder(Component.literal(transferSettlement ? "☑ Transfer settlement" : "☐ Transfer settlement"), b -> { preserveValues(); transferSettlement = !transferSettlement; rebuildWidgets(); })
                 .bounds(left + 272, top + 120, 220, 20).build());
         if (transferSettlement) settlement = addRenderableWidget(new DropdownWidget(left + 272, top + 144, 220, 20,
                 enemyNames.isEmpty() ? List.of("No enemy settlement") : enemyNames, settlementIndex,
-                v -> { settlementIndex = Math.max(0, enemyNames.indexOf(v)); claimIndex = 0; rebuildWidgets(); }));
+                v -> { preserveValues(); settlementIndex = Math.max(0, enemyNames.indexOf(v)); claimIndex = 0; rebuildWidgets(); }));
 
-        addRenderableWidget(Button.builder(Component.literal(transferClaim ? "☑ Transfer individual claim" : "☐ Transfer individual claim"), b -> { transferClaim = !transferClaim; rebuildWidgets(); })
+        addRenderableWidget(Button.builder(Component.literal(transferClaim ? "☑ Transfer individual claim" : "☐ Transfer individual claim"), b -> { preserveValues(); transferClaim = !transferClaim; rebuildWidgets(); })
                 .bounds(left + 272, top + 172, 220, 20).build());
         if (transferClaim) {
             List<DiplomacySnapshot.ClaimTarget> claims = selectedEnemySettlement() == null ? List.of() : selectedEnemySettlement().claims();
@@ -58,14 +60,22 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
             destination = addRenderableWidget(new DropdownWidget(left + 272, top + 220, 220, 20, ownNames.isEmpty() ? List.of("No receiving settlement") : ownNames, destinationIndex, v -> destinationIndex = Math.max(0, ownNames.indexOf(v))));
         }
 
-        addRenderableWidget(Button.builder(Component.literal(recognizeIndependence ? "☑ Recognize independence" : "☐ Recognize independence"), b -> { recognizeIndependence = !recognizeIndependence; rebuildWidgets(); })
+        addRenderableWidget(Button.builder(Component.literal(recognizeIndependence ? "☑ Recognize independence" : "☐ Recognize independence"), b -> { preserveValues(); recognizeIndependence = !recognizeIndependence; rebuildWidgets(); })
                 .bounds(left + 272, top + 248, 220, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Send Treaty"), b -> send()).bounds(left + 300, top + 305, 112, 22).build());
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 418, top + 305, 74, 22).build());
     }
 
     @Override protected void rebuildWidgets() { clearWidgets(); init(); }
-    private EditBox number(int x, int y, int w) { EditBox box = new EditBox(font, x, y, w, 20, Component.empty()); box.setValue("0"); box.setFilter(v -> v.isEmpty() || v.matches("[0-9]{0,7}")); addRenderableWidget(box); return box; }
+    private void preserveValues() {
+        if (wealth != null) wealthValue = wealth.getValue();
+        if (manpower != null) manpowerValue = manpower.getValue();
+        if (reparations != null) reparationsValue = reparations.getValue();
+        if (reparationsDays != null) reparationsDaysValue = reparationsDays.getValue();
+        if (napDays != null) napDaysValue = napDays.getValue();
+        if (faith != null) faithIndex = Math.max(0, CampaignDefinitions.RELIGIONS.indexOf(faith.value()));
+    }
+    private EditBox number(int x, int y, int w, String value) { EditBox box = new EditBox(font, x, y, w, 20, Component.empty()); box.setValue(value == null || value.isBlank() ? "0" : value); box.setFilter(v -> v.isEmpty() || v.matches("[0-9]{0,7}")); addRenderableWidget(box); return box; }
     private int value(EditBox box) { try { return Math.max(0, Integer.parseInt(box.getValue().isBlank() ? "0" : box.getValue())); } catch (NumberFormatException ignored) { return 0; } }
 
     private List<DiplomacySnapshot.SettlementTarget> ownSettlements() { return snapshot.settlements().stream().filter(DiplomacySnapshot.SettlementTarget::manageable).toList(); }
@@ -85,6 +95,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private DiplomacySnapshot.ClaimTarget selectedClaim() { DiplomacySnapshot.SettlementTarget s = selectedEnemySettlement(); if (s == null || s.claims().isEmpty()) return null; return s.claims().get(clamp(claimIndex, s.claims().size())); }
 
     private void send() {
+        preserveValues();
         List<String> terms = new ArrayList<>();
         if (value(wealth) > 0) terms.add("WEALTH~~" + value(wealth) + "~0~");
         if (value(manpower) > 0) terms.add("MANPOWER~~" + value(manpower) + "~0~");
