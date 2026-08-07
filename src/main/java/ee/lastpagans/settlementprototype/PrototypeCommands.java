@@ -550,6 +550,13 @@ public final class PrototypeCommands {
         if (claim.getOwnerFactionStringID() != null && settlement.getFactionTeam().isBlank()) {
             settlement.setFactionTeam(claim.getOwnerFactionStringID());
         }
+        if (added && Campaign23Data.get(player.serverLevel()).settlementProtected(settlement.getId())) {
+            // Claims linked after an admin settlement/faction was protected must inherit
+            // Recruits' admin-claim flag too, otherwise the new district can still be sieged.
+            claim.setAdminClaim(true);
+            ClaimEvents.recruitsClaimManager.addOrUpdateClaim(player.serverLevel(), claim);
+            ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(player.serverLevel());
+        }
         if (notify) player.sendSystemMessage(Component.literal((added ? "Linked claim " : "Claim was already linked: ")
                 + claim.getName() + ". Total claims: " + settlement.getClaimCount() + "."));
         return true;
