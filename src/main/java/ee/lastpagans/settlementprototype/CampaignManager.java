@@ -578,6 +578,17 @@ public final class CampaignManager {
         else if (own.equals(war.defenderFaction())) attackerSide = false;
         else return "Your faction is not the parent faction of either settlement.";
         if ((attackerSide && war.attackerFactionJoined()) || (!attackerSide && war.defenderFactionJoined())) return "Your faction has already joined this war.";
+
+        boolean completesFactionWar = (attackerSide ? war.defenderFactionJoined() : war.attackerFactionJoined())
+                && !war.attackerFaction().isBlank() && !war.defenderFaction().isBlank()
+                && !war.attackerFaction().equals(war.defenderFaction());
+        // The second parent joining is the moment the local conflict becomes faction-v-faction.
+        // Verify Recruits can actually become ENEMY before committing that escalation to our save.
+        if (completesFactionWar
+                && !syncRelation(player.serverLevel(), war.attackerFaction(), war.defenderFaction(), CampaignData.TreatyState.WAR)) {
+            return "War escalation aborted because Recruits did not confirm ENEMY relations in both directions.";
+        }
+
         war.joinParentFaction(attackerSide);
         Campaign23Data.get(player.serverLevel()).setIgnoredWarIntervention(war.id(), own, false);
         data.setDirty();
@@ -586,15 +597,10 @@ public final class CampaignManager {
         PrototypeData.SettlementRecord settlement = PrototypeData.get(player.serverLevel()).getSettlement(settlementId);
         String settlementName = settlement == null ? settlementId : settlement.getName();
         String escalation = war.escalationName();
-        if (war.attackerFactionJoined() && war.defenderFactionJoined()
-                && !war.attackerFaction().isBlank() && !war.defenderFaction().isBlank()
-                && !war.attackerFaction().equals(war.defenderFaction())) {
+        if (completesFactionWar) {
             CampaignData.DiplomacyRecord relation = data.relation(war.attackerFaction(), war.defenderFaction());
             relation.setState(CampaignData.TreatyState.WAR, day);
             relation.changeRelationship(-40);
-            if (!syncRelation(player.serverLevel(), war.attackerFaction(), war.defenderFaction(), CampaignData.TreatyState.WAR)) {
-                return "Campaign escalation was recorded, but Recruits relation synchronization failed. An administrator should inspect the war.";
-            }
         }
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "War escalated",
                 factionName(own) + " joined the " + side + " settlement, escalating the conflict to " + escalation + ".",
