@@ -14,7 +14,7 @@ SETTLEMENTS
 - Physical housing regions (pos1/pos2); valid bed heads contribute housing.
 - Physical Muster Ground regions; horizontal usable area limits levy size.
 - Town Square, Barracks, Muster Ground and Prayer Site separated.
-- Dynamic Prosperity.
+- Dynamic Prosperity driven primarily by a rolling 7-day average of actual wealth deposited into the settlement, with migration-safe fallback for old saves.
 - Automatic Village -> Town progression; independent high-tier settlements can become City-States.
 - Civic Pride and icon-based active settlement modifier display.
 

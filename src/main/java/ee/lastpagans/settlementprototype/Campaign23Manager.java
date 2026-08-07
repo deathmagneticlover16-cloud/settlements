@@ -20,6 +20,7 @@ import net.minecraft.world.scores.PlayerTeam;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -73,14 +74,19 @@ public final class Campaign23Manager {
         return beds;
     }
 
-    public static int recalculateProsperity(PrototypeData.SettlementRecord settlement, Campaign23Data extra) {
+    public static int recalculateProsperity(PrototypeData.SettlementRecord settlement, Campaign23Data extra, long currentDay) {
         int population = Math.max(1, settlement.getCivilianPopulation());
-        int wealthPerCapita = Math.min(50, (settlement.getWealth() * 10) / population);
-        int foodSecurity = Math.min(20, settlement.getFood() / Math.max(1, settlement.getVillagerCount()));
-        int stability = settlement.getStability() / 4;
+        int averageDeposit = extra.averageWealthDeposit(settlement.getId(), currentDay, 7);
+        // Prosperity is primarily about money actually entering the local economy, not a ruler hoarding a static treasury.
+        int economicFlow = extra.hasWealthDepositHistory(settlement.getId())
+                ? Math.min(60, (averageDeposit * 25) / population)
+                : Math.min(40, (settlement.getWealth() * 10) / population); // migration fallback for old saves
+        int reserve = Math.min(10, settlement.getWealth() / Math.max(10, population / 10));
+        int foodSecurity = Math.min(10, settlement.getFood() / Math.max(1, settlement.getVillagerCount() * 2));
+        int stability = settlement.getStability() / 5;
         int housing = settlement.getFreeHousing() > 0 ? 5 : settlement.getVillagerCount() > settlement.getHousingCapacity() ? -10 : 0;
         int modifiers = extra.modifiers(settlement.getId()).stream().mapToInt(value -> value.prosperity).sum();
-        int result = Math.max(0, Math.min(100, wealthPerCapita + foodSecurity + stability + housing + modifiers));
+        int result = Math.max(0, Math.min(100, economicFlow + reserve + foodSecurity + stability + housing + modifiers));
         extra.setProsperity(settlement.getId(), result);
         return result;
     }
@@ -91,7 +97,7 @@ public final class Campaign23Manager {
         for (PrototypeData.SettlementRecord settlement : settlements.getSettlements()) {
             extra.expireModifiers(settlement.getId());
             updateReligiousUnrest(server, settlement, extra, settlements);
-            int prosperity = recalculateProsperity(settlement, extra);
+            int prosperity = recalculateProsperity(settlement, extra, day);
             applyDailyModifierEffects(settlement, extra, day);
             updateSettlementTier(server.overworld(), settlement, prosperity, extra);
         }

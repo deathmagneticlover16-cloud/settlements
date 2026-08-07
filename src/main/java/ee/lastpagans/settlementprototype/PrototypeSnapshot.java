@@ -203,9 +203,14 @@ public record PrototypeSnapshot(
             values.add(new EffectEntry(modifier.name, modifier.source, modifier.iconItem, modifier.tone, detail, duration));
         }
         int prosperity = extra.prosperity(settlement.getId());
+        long currentDay = player.serverLevel().getDayTime() / 24000L;
+        int averageDeposit = extra.averageWealthDeposit(settlement.getId(), currentDay, 7);
+        String prosperityDetail = "Recent wealth entering the settlement is the main driver. 7-day average deposit: " + averageDeposit + " wealth/day. "
+                + (prosperity >= 65 ? "A strong economy supports settlement growth and advancement."
+                : prosperity < 30 ? "Weak economic activity is holding the settlement back."
+                : "The settlement economy is stable but unexceptional.");
         values.add(new EffectEntry("Prosperity: " + prosperity + "/100", "Settlement economy", "minecraft:emerald",
-                prosperity >= 65 ? "POSITIVE" : prosperity < 30 ? "NEGATIVE" : "MIXED",
-                prosperity >= 65 ? "A strong economy supports settlement growth and advancement." : prosperity < 30 ? "Weak economic activity is holding the settlement back." : "The settlement economy is stable but unexceptional.", "Current"));
+                prosperity >= 65 ? "POSITIVE" : prosperity < 30 ? "NEGATIVE" : "MIXED", prosperityDetail, "Current"));
         return values.stream().limit(32).toList();
     }
 

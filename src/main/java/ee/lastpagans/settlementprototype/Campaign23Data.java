@@ -32,6 +32,8 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<UUID, Integer> divorceCount = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
+    /** Rolling settlement wealth deposits used to calculate Prosperity from actual economic activity. */
+    private final Map<String, List<WealthDepositRecord>> wealthDeposits = new HashMap<>();
     /** Temporary manpower awarded by peace terms. It is recruitable, but never raises a settlement's native MP ceiling. */
     private final Map<String, Integer> foreignManpower = new HashMap<>();
     private final Map<String, Long> debugTimeOffsetMillis = new HashMap<>();
@@ -72,6 +74,17 @@ public final class Campaign23Data extends SavedData {
         readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
         readUuidIntMap(tag, "DivorceCount", data.divorceCount);
         readStringIntMap(tag, "Prosperity", data.prosperity);
+        for (Tag raw : tag.getList("WealthDeposits", Tag.TAG_COMPOUND)) {
+            CompoundTag entry = (CompoundTag) raw;
+            String settlement = PrototypeData.normalizeId(entry.getString("Settlement"));
+            if (settlement.isBlank()) continue;
+            List<WealthDepositRecord> samples = new ArrayList<>();
+            for (Tag sampleRaw : entry.getList("Samples", Tag.TAG_COMPOUND)) {
+                WealthDepositRecord sample = WealthDepositRecord.fromNBT((CompoundTag) sampleRaw);
+                if (sample.amount() > 0) samples.add(sample);
+            }
+            if (!samples.isEmpty()) data.wealthDeposits.put(settlement, samples);
+        }
         readStringIntMap(tag, "ForeignManpower", data.foreignManpower);
         readStringLongMap(tag, "DebugOffsets", data.debugTimeOffsetMillis);
         readStringLongMap(tag, "LastModifierDay", data.lastModifierDay);
@@ -178,6 +191,13 @@ public final class Campaign23Data extends SavedData {
         writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
         writeUuidIntMap(tag, "DivorceCount", divorceCount);
         writeStringIntMap(tag, "Prosperity", prosperity);
+        ListTag wealthDepositTag = new ListTag();
+        wealthDeposits.forEach((settlement, samples) -> {
+            CompoundTag entry = new CompoundTag(); entry.putString("Settlement", settlement);
+            ListTag list = new ListTag(); samples.forEach(sample -> list.add(sample.toNBT()));
+            entry.put("Samples", list); wealthDepositTag.add(entry);
+        });
+        tag.put("WealthDeposits", wealthDepositTag);
         writeStringIntMap(tag, "ForeignManpower", foreignManpower);
         writeStringLongMap(tag, "DebugOffsets", debugTimeOffsetMillis);
         writeStringLongMap(tag, "LastModifierDay", lastModifierDay);
@@ -244,6 +264,49 @@ public final class Campaign23Data extends SavedData {
 
     public int prosperity(String settlement) { return prosperity.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setProsperity(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
+    public void recordWealthDeposit(String settlement, int amount, long day) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (id.isBlank() || amount <= 0) return;
+        List<WealthDepositRecord> samples = wealthDeposits.computeIfAbsent(id, ignored -> new ArrayList<>());
+        for (int i = 0; i < samples.size(); i++) {
+            WealthDepositRecord sample = samples.get(i);
+            if (sample.day() == day) {
+                samples.set(i, new WealthDepositRecord(day, Math.min(1_000_000, sample.amount() + amount)));
+                pruneWealthDeposits(id, day, 30);
+                setDirty();
+                return;
+            }
+        }
+        samples.add(new WealthDepositRecord(day, Math.min(1_000_000, amount)));
+        pruneWealthDeposits(id, day, 30);
+        setDirty();
+    }
+    public int averageWealthDeposit(String settlement, long currentDay, int windowDays) {
+        String id = PrototypeData.normalizeId(settlement);
+        int window = Math.max(1, windowDays);
+        long firstDay = currentDay - window + 1L;
+        long sum = 0L;
+        long earliest = Long.MAX_VALUE;
+        for (WealthDepositRecord sample : wealthDeposits.getOrDefault(id, List.of())) {
+            if (sample.day() >= firstDay && sample.day() <= currentDay) {
+                sum += sample.amount();
+                earliest = Math.min(earliest, sample.day());
+            }
+        }
+        if (earliest == Long.MAX_VALUE) return 0;
+        int observedDays = (int) Math.max(1L, Math.min(window, currentDay - earliest + 1L));
+        return (int) Math.min(Integer.MAX_VALUE, sum / observedDays);
+    }
+    public boolean hasWealthDepositHistory(String settlement) {
+        return !wealthDeposits.getOrDefault(PrototypeData.normalizeId(settlement), List.of()).isEmpty();
+    }
+    private void pruneWealthDeposits(String settlement, long currentDay, int keepDays) {
+        List<WealthDepositRecord> samples = wealthDeposits.get(settlement);
+        if (samples == null) return;
+        long firstDay = currentDay - Math.max(1, keepDays) + 1L;
+        samples.removeIf(sample -> sample.day() < firstDay || sample.day() > currentDay + 1L);
+        if (samples.isEmpty()) wealthDeposits.remove(settlement);
+    }
 
     public int foreignManpower(String settlement) { return foreignManpower.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setForeignManpower(String settlement, int value) {
@@ -415,6 +478,12 @@ public final class Campaign23Data extends SavedData {
         setDirty();
     }
     public void resetCandidateHistory(UUID player) { if (player != null && candidateHistory.remove(player) != null) setDirty(); }
+
+    public record WealthDepositRecord(long day, int amount) {
+        public WealthDepositRecord { amount = Math.max(0, amount); }
+        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putLong("Day", day); tag.putInt("Amount", amount); return tag; }
+        private static WealthDepositRecord fromNBT(CompoundTag tag) { return new WealthDepositRecord(tag.getLong("Day"), tag.getInt("Amount")); }
+    }
 
     public record RegionRecord(String dimension, BlockPos min, BlockPos max) {
         public RegionRecord {

@@ -551,6 +551,7 @@ public final class PrototypeManager {
         int value = coins * SILVER_TO_WEALTH;
         held.shrink(coins);
         settlement.addWealth(value, characterOrAccountName(player));
+        Campaign23Data.get(player.serverLevel()).recordWealthDeposit(settlement.getId(), value, player.serverLevel().getDayTime() / 24000L);
         return "Converted " + coins + " silver into " + value + " wealth.";
     }
 

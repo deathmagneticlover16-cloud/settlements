@@ -180,7 +180,11 @@ public final class CampaignManager {
                 if (!leader) result = "Only the faction leader may manage the faction treasury.";
                 else if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
                 else if (!extra.spendFactionWealth(factionId, amount)) result = "The faction treasury does not contain " + amount + " wealth.";
-                else { target.changeWealth(amount); result = amount + " wealth moved from the faction treasury to " + target.getName() + "."; }
+                else {
+                    target.changeWealth(amount);
+                    extra.recordWealthDeposit(target.getId(), amount, player.serverLevel().getDayTime() / 24000L);
+                    result = amount + " wealth moved from the faction treasury to " + target.getName() + ".";
+                }
             }
             default -> result = "Unknown faction action.";
         }
@@ -655,6 +659,7 @@ public final class CampaignManager {
         target.changeAvailableManpower(manpower);
         target.changeFood(food);
         target.changeWealth(wealth);
+        if (wealth > 0) extra.recordWealthDeposit(target.getId(), wealth, level.getDayTime() / 24000L);
         return null;
     }
 
