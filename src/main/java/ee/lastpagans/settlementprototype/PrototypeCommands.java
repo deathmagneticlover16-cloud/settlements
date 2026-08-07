@@ -690,7 +690,14 @@ public final class PrototypeCommands {
         PrototypeData.SettlementRecord settlement = requireOwnerOrAdmin(player, id);
         if (settlement == null) return 0;
         PrototypeData data = PrototypeData.get(player.serverLevel());
-        if (target.getTeam() == null && data.getSettlements().stream().filter(value -> target.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank() && value != settlement).count() >= 2) {
+        String settlementFaction = settlement.getFactionTeam() == null ? "" : settlement.getFactionTeam();
+        String targetFaction = target.getTeam() == null ? "" : target.getTeam().getName();
+        boolean adminOverride = source.hasPermission(2);
+        if (!adminOverride && !settlementFaction.equals(targetFaction)) {
+            source.sendFailure(Component.literal("Settlement ownership can only be transferred within its current polity. Use diplomacy for cross-polity territorial transfers."));
+            return 0;
+        }
+        if (targetFaction.isBlank() && data.getSettlements().stream().filter(value -> target.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank() && value != settlement).count() >= 2) {
             source.sendFailure(Component.literal(target.getGameProfile().getName() + " already owns the maximum two independent settlements."));
             return 0;
         }
