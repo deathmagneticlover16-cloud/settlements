@@ -119,6 +119,8 @@ public final class PrototypeManager {
 
     public static boolean canView(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
         if (player.createCommandSourceStack().hasPermission(2)) return true;
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        if (extra.settlementProtected(settlement.getId()) || extra.factionProtected(settlement.getFactionTeam())) return false;
 
         String factionId = settlement.getFactionTeam();
         if (factionId != null && !factionId.isBlank()) {

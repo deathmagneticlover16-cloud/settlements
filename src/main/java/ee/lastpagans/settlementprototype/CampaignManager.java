@@ -468,6 +468,8 @@ public final class CampaignManager {
                                   String own, String target, UUID war, long day) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot send treaties.";
         if (!validOtherFaction(own, target)) return "Select another faction.";
+        Campaign23Data protectedData = Campaign23Data.get(player.serverLevel());
+        if (protectedData.factionProtected(own) || protectedData.factionProtected(target)) return "Protected admin factions are excluded from ordinary diplomacy.";
         if (data.relation(own, target).state() == CampaignData.TreatyState.WAR) return "End the war before proposing a treaty.";
         data.createProposal(type, own, target, player.getUUID(), war, day);
         data.relation(own, target).changeRelationship(2);
@@ -1226,6 +1228,9 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot accept treaties.";
         CampaignData.DiplomacyProposal proposal = proposalId == null ? null : data.getProposal(proposalId);
         if (proposal == null || proposal.status() != CampaignData.ProposalStatus.PENDING || !own.equals(proposal.toFaction())) return "That proposal is unavailable.";
+        Campaign23Data protectedData = Campaign23Data.get(player.serverLevel());
+        if (protectedData.factionProtected(proposal.fromFaction()) || protectedData.factionProtected(proposal.toFaction()))
+            return "Protected admin factions are excluded from ordinary diplomacy.";
         if (proposal.type() == CampaignData.ProposalType.CALL_TO_WAR && proposal.linkedWar() != null) {
             CampaignData.WarRecord war = data.getWar(proposal.linkedWar());
             if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "The linked war has already ended.";
@@ -1292,6 +1297,9 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot reject treaties.";
         CampaignData.DiplomacyProposal proposal = proposalId == null ? null : data.getProposal(proposalId);
         if (proposal == null || proposal.status() != CampaignData.ProposalStatus.PENDING || !own.equals(proposal.toFaction())) return "That proposal is unavailable.";
+        Campaign23Data protectedData = Campaign23Data.get(player.serverLevel());
+        if (protectedData.factionProtected(proposal.fromFaction()) || protectedData.factionProtected(proposal.toFaction()))
+            return "Protected admin factions are excluded from ordinary diplomacy.";
         data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.REJECTED);
         data.relation(proposal.fromFaction(), proposal.toFaction()).changeRelationship(-5);
         CampaignToastSender.faction(player.getServer(), proposal.fromFaction(), "PROPOSAL REJECTED", factionName(own) + " rejected your " + pretty(proposal.type().name()) + " proposal.");
@@ -1301,6 +1309,8 @@ public final class CampaignManager {
     private static String breakTreaty(ServerPlayer player, CampaignData data, String own, String target, long day) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot break treaties.";
         if (!validOtherFaction(own, target)) return "Select another faction.";
+        Campaign23Data protectedData = Campaign23Data.get(player.serverLevel());
+        if (protectedData.factionProtected(own) || protectedData.factionProtected(target)) return "Protected admin factions are excluded from ordinary diplomacy.";
         CampaignData.DiplomacyRecord relation = data.relation(own, target);
         if (relation.state() == CampaignData.TreatyState.WAR || relation.state() == CampaignData.TreatyState.NEUTRAL) return "There is no treaty to break.";
         relation.setState(CampaignData.TreatyState.NEUTRAL, day);
