@@ -61,6 +61,32 @@ public abstract class ScaledCampaignScreen extends Screen {
         return campaignScale;
     }
 
+    /**
+     * Returns a single-line window that automatically travels to the end of long text and back.
+     * Short labels are returned untouched. The end positions pause briefly so names/status messages
+     * remain readable instead of constantly sliding.
+     */
+    protected final String scrollingText(String value, int pixelWidth) {
+        String text = value == null ? "" : value;
+        if (text.isEmpty() || pixelWidth <= 0 || font.width(text) <= pixelWidth) return text;
+        int lastStart = 0;
+        for (int i = 1; i < text.length(); i++) {
+            if (font.width(text.substring(i)) <= pixelWidth) { lastStart = i; break; }
+        }
+        if (lastStart <= 0) lastStart = Math.max(1, text.length() - 1);
+        final int pauseSteps = 5;
+        int travel = Math.max(1, lastStart);
+        int period = pauseSteps + travel + pauseSteps + travel;
+        int step = (int)((net.minecraft.Util.getMillis() / 260L) % period);
+        int start;
+        if (step < pauseSteps) start = 0;
+        else if (step < pauseSteps + travel) start = step - pauseSteps;
+        else if (step < pauseSteps + travel + pauseSteps) start = travel;
+        else start = travel - (step - (pauseSteps + travel + pauseSteps));
+        start = Math.max(0, Math.min(lastStart, start));
+        return font.plainSubstrByWidth(text.substring(start), pixelWidth);
+    }
+
     protected final void beginCampaignRender(GuiGraphics graphics) {
         graphics.pose().pushPose();
         graphics.pose().scale(campaignScale, campaignScale, 1.0F);

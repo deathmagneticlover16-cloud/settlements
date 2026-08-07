@@ -319,8 +319,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
     }
 
     private String fit(String value, int pixelWidth) {
-        if (value == null) return "";
-        return font.width(value) <= pixelWidth ? value : font.plainSubstrByWidth(value, Math.max(0, pixelWidth - font.width("…"))) + "…";
+        return scrollingText(value, pixelWidth);
     }
 
     @Override public boolean isPauseScreen() { return false; }
