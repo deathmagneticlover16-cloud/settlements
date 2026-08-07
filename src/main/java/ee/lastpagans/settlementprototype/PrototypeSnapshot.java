@@ -26,7 +26,7 @@ public record PrototypeSnapshot(
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
         int professionals, int levymen, int pendingContracts,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet,
-        int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages,
+        int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, LevyStatusEntry levyStatus,
         String factionTeam, boolean claimLinked, int claimCount, String claimName,
         String notice, List<EffectEntry> effects, List<String> chronicle, List<String> contributions, String message
 ) {
@@ -53,6 +53,7 @@ public record PrototypeSnapshot(
                 .toList();
 
         MilitarySummary military = militarySummary(player, settlement);
+        LevyStatusEntry levyStatus = levyStatus(player, settlement);
         List<EffectEntry> effects = buildEffects(player, settlement, campaign, military.averageMorale());
 
         return new PrototypeSnapshot(
@@ -65,7 +66,7 @@ public record PrototypeSnapshot(
                 settlement.getMaximumManpower(), settlement.getAvailableManpower(), Campaign23Data.get(player.serverLevel()).foreignManpower(settlement.getId()), settlement.getUsedManpower(), settlement.getLevyReservedManpower(), settlement.getSupportedManpower(),
                 settlement.getProfessionalCount(), settlement.getLivingLevymen(), settlement.getPendingContracts(),
                 settlement.hasTownSquare(), settlement.hasMusterGround(), settlement.hasBarracks(), settlement.getBarracksChest() != null,
-                settlement.getBarracksRadius(), settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(),
+                settlement.getBarracksRadius(), settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), levyStatus,
                 settlement.getFactionTeam(), settlement.hasClaim(), settlement.getClaimCount(), settlement.getClaimSummary(), settlement.getNotice(), effects,
                 settlement.getChronicle().stream().limit(8).toList(), settlement.getContributions().stream().limit(8).toList(), message == null ? "" : message
         );
@@ -89,6 +90,40 @@ public record PrototypeSnapshot(
             moraleCount++;
         }
         return new MilitarySummary(moraleCount == 0 ? 0 : Math.round((float) moraleTotal / moraleCount), mercenaries, wages);
+    }
+
+    private static LevyStatusEntry levyStatus(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        long now = extra.nowMillis(settlement.getId());
+        int playerCap = SettlementConfig.PLAYER_LEVY_CAP.get();
+        int factionCap = settlement.getFactionTeam().isBlank() ? playerCap : SettlementConfig.FACTION_LEVY_CAP.get();
+        int playerDeployed = extra.levyDeployments().stream()
+                .filter(value -> player.getUUID().equals(value.ownerId))
+                .mapToInt(value -> Math.max(0, value.initialUnits - value.returnedUnits)).sum()
+                + extra.levyMobilizations().stream().filter(value -> player.getUUID().equals(value.ownerId))
+                .mapToInt(value -> value.totalUnits).sum();
+        int factionDeployed;
+        if (settlement.getFactionTeam().isBlank()) factionDeployed = playerDeployed;
+        else factionDeployed = extra.levyDeployments().stream().filter(value -> settlement.getFactionTeam().equals(value.factionId))
+                .mapToInt(value -> Math.max(0, value.initialUnits - value.returnedUnits)).sum()
+                + extra.levyMobilizations().stream().filter(value -> settlement.getFactionTeam().equals(value.factionId))
+                .mapToInt(value -> value.totalUnits).sum();
+
+        Campaign23Data.LevyMobilization mobilization = extra.levyMobilizations().stream()
+                .filter(value -> player.getUUID().equals(value.ownerId) && settlement.getId().equals(value.settlementId))
+                .findFirst().orElse(null);
+        int mobilizingTotal = mobilization == null ? 0 : mobilization.totalUnits;
+        int mobilizingSpawned = mobilization == null ? 0 : mobilization.spawnedUnits;
+        long mobilizationRemaining = mobilization == null ? 0L : Math.max(0L, mobilization.finishesAtMillis - now);
+        long cooldownRemaining = Math.max(0L, extra.levyCooldownUntil(player.getUUID()) - now);
+        String service = extra.modifiers(settlement.getId()).stream()
+                .filter(value -> value.id.equals("extended_service") || value.id.equals("weary_levies")
+                        || value.id.equals("levy_exhaustion") || value.id.equals("popular_outrage"))
+                .max(java.util.Comparator.comparingInt(value -> switch (value.id) {
+                    case "extended_service" -> 1; case "weary_levies" -> 2; case "levy_exhaustion" -> 3; case "popular_outrage" -> 4; default -> 0;
+                })).map(value -> value.name).orElse("Normal service");
+        return new LevyStatusEntry(playerDeployed, playerCap, factionDeployed, factionCap, mobilizingTotal, mobilizingSpawned,
+                mobilizationRemaining, cooldownRemaining, service);
     }
 
     private static List<EffectEntry> buildEffects(ServerPlayer player, PrototypeData.SettlementRecord settlement,
@@ -208,7 +243,7 @@ public record PrototypeSnapshot(
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
         buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet);
-        buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages);
+        buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
         writeList(buffer, effects, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions); buffer.writeUtf(message, 256);
     }
@@ -222,7 +257,7 @@ public record PrototypeSnapshot(
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), LevyStatusEntry.decode(buffer),
                 buffer.readUtf(64), buffer.readBoolean(), buffer.readVarInt(), buffer.readUtf(180), buffer.readUtf(160),
                 readList(buffer, EffectEntry::decode, 32), readStrings(buffer), readStrings(buffer), buffer.readUtf(256)
         );
@@ -282,6 +317,20 @@ public record PrototypeSnapshot(
 
         private static EffectEntry decode(FriendlyByteBuf buffer) {
             return new EffectEntry(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(80), buffer.readUtf(16), buffer.readUtf(220), buffer.readUtf(64));
+        }
+    }
+
+    public record LevyStatusEntry(int playerDeployed, int playerCap, int factionDeployed, int factionCap,
+                                  int mobilizingTotal, int mobilizingSpawned, long mobilizationRemainingMillis,
+                                  long cooldownRemainingMillis, String serviceState) {
+        private void encode(FriendlyByteBuf buffer) {
+            buffer.writeVarInt(playerDeployed); buffer.writeVarInt(playerCap); buffer.writeVarInt(factionDeployed); buffer.writeVarInt(factionCap);
+            buffer.writeVarInt(mobilizingTotal); buffer.writeVarInt(mobilizingSpawned); buffer.writeLong(mobilizationRemainingMillis);
+            buffer.writeLong(cooldownRemainingMillis); buffer.writeUtf(serviceState == null ? "Normal service" : serviceState, 48);
+        }
+        private static LevyStatusEntry decode(FriendlyByteBuf buffer) {
+            return new LevyStatusEntry(buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+                    buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readLong(), buffer.readUtf(48));
         }
     }
 

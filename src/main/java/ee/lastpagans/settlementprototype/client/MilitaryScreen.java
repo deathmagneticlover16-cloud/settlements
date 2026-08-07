@@ -16,11 +16,12 @@ import java.util.Locale;
 
 /** Strategic recruitment and upkeep screen. This deliberately is not an RTS unit overview. */
 public final class MilitaryScreen extends ScaledCampaignScreen {
-    private static final int W = 540, H = 330;
+    private static final int W = 540, H = 360;
     private PrototypeSnapshot snapshot;
     private int left, top;
     private DropdownWidget unitDropdown;
     private int selectedUnit;
+    private long snapshotReceivedAt = System.currentTimeMillis();
 
     public MilitaryScreen(PrototypeSnapshot snapshot) {
         super(Component.literal("Military"));
@@ -36,6 +37,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
 
     public void updateSnapshot(PrototypeSnapshot value) {
         snapshot = value;
+        snapshotReceivedAt = System.currentTimeMillis();
         selectedUnit = Math.min(selectedUnit, Math.max(0, professionalTemplates().size() - 1));
         rebuildWidgets();
     }
@@ -63,24 +65,24 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                     .bounds(left + 254 + i * 66, top + 140, 62, 20).build());
         }
         addRenderableWidget(Button.builder(Component.literal("Raise Levy"), button -> send(PrototypeManager.SettlementAction.RAISE_LEVY))
-                .bounds(left + 24, top + 250, 106, 20).build());
+                .bounds(left + 24, top + 274, 106, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Return Levy"), button -> send(PrototypeManager.SettlementAction.RETURN_LEVY))
-                .bounds(left + 136, top + 250, 106, 20).build());
+                .bounds(left + 136, top + 274, 106, 20).build());
         addRenderableWidget(Button.builder(Component.literal("To Barracks"), button -> send(PrototypeManager.SettlementAction.RETURN_TO_BARRACKS))
-                .bounds(left + 248, top + 250, 104, 20).build());
+                .bounds(left + 248, top + 274, 104, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Recover MP"), button -> send(PrototypeManager.SettlementAction.RUN_CHECKER))
-                .bounds(left + 358, top + 250, 96, 20).build());
+                .bounds(left + 358, top + 274, 96, 20).build());
 
         addRenderableWidget(Button.builder(Component.literal("◀ Previous"), button -> switchSettlement(false))
-                .bounds(left + 14, top + 301, 92, 18).build());
+                .bounds(left + 14, top + 331, 92, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Next ▶"), button -> switchSettlement(true))
-                .bounds(left + 112, top + 301, 78, 18).build());
+                .bounds(left + 112, top + 331, 78, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Settlement"), button ->
                 PrototypeNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT)))
-                .bounds(left + 322, top + 301, 92, 18).build());
+                .bounds(left + 322, top + 331, 92, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
                 PrototypeNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
-                .bounds(left + 420, top + 301, 106, 18).build());
+                .bounds(left + 420, top + 331, 106, 18).build());
     }
 
     private List<PrototypeSnapshot.UnitTemplateEntry> professionalTemplates() {
@@ -128,7 +130,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0171717);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 58, 0xFF3B3023);
-        graphics.fill(left + 14, top + 68, left + W - 14, top + 286, 0xFF242424);
+        graphics.fill(left + 14, top + 68, left + W - 14, top + 316, 0xFF242424);
         graphics.drawCenteredString(font, "MILITARY — " + fit(snapshot.settlementName().toUpperCase(Locale.ROOT), 420), left + W / 2, top + 13, 0xFFE7D8B0);
         graphics.drawCenteredString(font, fit(snapshot.factionName() + " · " + snapshot.rosterName(), 440), left + W / 2, top + 31, 0xFFB8B0A0);
 
@@ -158,10 +160,22 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         }
 
         graphics.drawString(font, "Faction/settlement wage obligation: " + snapshot.mercenaryWages() + " wealth / cycle", left + 286, top + 214, 0xFFB8B0A0, false);
-        status(graphics, "Town Square", snapshot.townSquareSet(), 24, 230);
-        status(graphics, "Muster Ground", snapshot.musterGroundSet(), 190, 230);
-        status(graphics, "Barracks", snapshot.barracksSet(), 374, 230);
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 281, 0xFFFFD27A);
+        PrototypeSnapshot.LevyStatusEntry levy = snapshot.levyStatus();
+        String factionLabel = snapshot.factionId().isBlank() ? "Independent" : "Faction";
+        graphics.drawString(font, "Levy capacity: you " + levy.playerDeployed() + "/" + levy.playerCap()
+                + " · " + factionLabel + " " + levy.factionDeployed() + "/" + levy.factionCap(), left + 24, top + 230, 0xFFB8B0A0, false);
+        long elapsed = Math.max(0L, System.currentTimeMillis() - snapshotReceivedAt);
+        long musterRemaining = Math.max(0L, levy.mobilizationRemainingMillis() - elapsed);
+        long cooldownRemaining = Math.max(0L, levy.cooldownRemainingMillis() - elapsed);
+        String levyState = levy.mobilizingTotal() > 0 && musterRemaining > 0
+                ? "Mustering " + levy.mobilizingSpawned() + "/" + levy.mobilizingTotal() + " · " + duration(musterRemaining) + " remaining"
+                : cooldownRemaining > 0 ? "Cooldown " + duration(cooldownRemaining)
+                : "Ready to mobilise";
+        graphics.drawString(font, "Levy status: " + levyState + " · " + levy.serviceState(), left + 24, top + 244, 0xFFB8B0A0, false);
+        status(graphics, "Town Square", snapshot.townSquareSet(), 24, 260);
+        status(graphics, "Muster Ground", snapshot.musterGroundSet(), 190, 260);
+        status(graphics, "Barracks", snapshot.barracksSet(), 374, 260);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 305, 0xFFFFD27A);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -173,6 +187,18 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
     private void status(GuiGraphics graphics, String label, boolean set, int x, int y) {
         graphics.drawString(font, (set ? "✓ " : "! ") + label + (set ? " set" : " missing"), left + x, top + y,
                 set ? 0xFFA9D18E : 0xFFFFA080, false);
+    }
+
+    private static String duration(long millis) {
+        long totalSeconds = Math.max(0L, millis / 1000L);
+        long days = totalSeconds / 86400L;
+        long hours = (totalSeconds / 3600L) % 24L;
+        long minutes = (totalSeconds / 60L) % 60L;
+        long seconds = totalSeconds % 60L;
+        if (days > 0) return days + "d " + hours + "h";
+        if (hours > 0) return hours + "h " + minutes + "m";
+        if (minutes > 0) return minutes + "m " + seconds + "s";
+        return seconds + "s";
     }
 
     private String fit(String value, int pixelWidth) {
