@@ -695,7 +695,10 @@ public final class CampaignManager {
                 .filter(source -> !source.getId().equals(target.getId())).toList();
         int availableMp = sources.stream().mapToInt(PrototypeData.SettlementRecord::getAvailableManpower).sum();
         int availableFood = sources.stream().mapToInt(PrototypeData.SettlementRecord::getFood).sum();
+        int recipientRoom = Math.max(0, target.getMaximumManpower() - target.getUsedManpower()
+                - target.getLevyReservedManpower() - target.getAvailableManpower());
         if (availableMp < manpower) return "Your faction settlements do not have enough available manpower.";
+        if (manpower > recipientRoom) return "The aided settlement only has room for " + recipientRoom + " more manpower.";
         if (availableFood < food) return "Your faction settlements do not have enough food.";
         extra.spendFactionWealth(faction, wealth);
         int mpLeft = manpower, foodLeft = food;
