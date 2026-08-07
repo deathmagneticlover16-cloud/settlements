@@ -103,7 +103,7 @@ public record DiplomacySnapshot(
                     value.supportingAttackers().stream().map(CampaignManager::factionName).toList(),
                     value.supportingDefenders().stream().map(CampaignManager::factionName).toList(),
                     value.attackerFactionJoined(), value.defenderFactionJoined(), attackerParent, defenderParent,
-                    Campaign23Data.get(player.serverLevel()).warScore(value.id()));
+                    campaign23.ignoredWarIntervention(value.id(), own), campaign23.warScore(value.id()));
         }).toList();
 
         boolean canDeclareWar = player.createCommandSourceStack().hasPermission(2) || leader
@@ -216,7 +216,7 @@ public record DiplomacySnapshot(
                            String targetSettlementId, String targetSettlementName, long startedDay,
                            List<String> supportingAttackers, List<String> supportingDefenders,
                            boolean attackerFactionJoined, boolean defenderFactionJoined,
-                           boolean viewerIsAttackerParent, boolean viewerIsDefenderParent, int warScore) {
+                           boolean viewerIsAttackerParent, boolean viewerIsDefenderParent, boolean viewerIgnoredIntervention, int warScore) {
         private static void encode(WarEntry value, FriendlyByteBuf buffer) {
             buffer.writeUUID(value.id); buffer.writeUtf(value.type, 32); buffer.writeUtf(value.typeName, 48);
             buffer.writeUtf(value.goal, 48); buffer.writeUtf(value.goalName, 100);
@@ -226,13 +226,13 @@ public record DiplomacySnapshot(
             buffer.writeUtf(value.targetSettlementId, 64); buffer.writeUtf(value.targetSettlementName, 64); buffer.writeLong(value.startedDay);
             writeStrings(buffer, value.supportingAttackers); writeStrings(buffer, value.supportingDefenders);
             buffer.writeBoolean(value.attackerFactionJoined); buffer.writeBoolean(value.defenderFactionJoined);
-            buffer.writeBoolean(value.viewerIsAttackerParent); buffer.writeBoolean(value.viewerIsDefenderParent); buffer.writeInt(value.warScore);
+            buffer.writeBoolean(value.viewerIsAttackerParent); buffer.writeBoolean(value.viewerIsDefenderParent); buffer.writeBoolean(value.viewerIgnoredIntervention); buffer.writeInt(value.warScore);
         }
         private static WarEntry decode(FriendlyByteBuf buffer) {
             return new WarEntry(buffer.readUUID(), buffer.readUtf(32), buffer.readUtf(48), buffer.readUtf(48), buffer.readUtf(100),
                     buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64),
                     buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(64), buffer.readLong(),
                     readStrings(buffer), readStrings(buffer), buffer.readBoolean(), buffer.readBoolean(),
-                    buffer.readBoolean(), buffer.readBoolean(), buffer.readInt());
+                    buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readInt());
         }
     }}

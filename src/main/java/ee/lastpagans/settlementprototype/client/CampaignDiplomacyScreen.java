@@ -168,10 +168,17 @@ public final class CampaignDiplomacyScreen extends Screen {
             int y = top + 128 + i * 43;
             boolean settlementWar = "SETTLEMENT_WAR".equals(war.type());
             if (settlementWar && ((war.viewerIsAttackerParent() && !war.attackerFactionJoined()) || (war.viewerIsDefenderParent() && !war.defenderFactionJoined()))) {
+                int actionX = left + 300;
+                if (war.viewerIsDefenderParent()) {
+                    Button ignore = addRenderableWidget(Button.builder(Component.literal(war.viewerIgnoredIntervention() ? "Ignored" : "Ignore"), b -> sendToFaction("IGNORE_SETTLEMENT_WAR", snapshot.ownFactionId(), null, war.id(), ""))
+                            .bounds(actionX, y, 58, 20).build());
+                    ignore.active = snapshot.canManage() && !war.viewerIgnoredIntervention();
+                    actionX += 64;
+                }
                 Button aid = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> minecraft.setScreen(new WarAidScreen(this, war)))
-                        .bounds(left + 330, y, 72, 20).build());
+                        .bounds(actionX, y, 72, 20).build());
                 Button join = addRenderableWidget(Button.builder(Component.literal("Join War"), b -> sendToFaction("JOIN_SETTLEMENT_WAR", snapshot.ownFactionId(), null, war.id(), ""))
-                        .bounds(left + 408, y, 78, 20).build());
+                        .bounds(actionX + 78, y, 78, 20).build());
                 aid.active = join.active = snapshot.canManage();
             } else {
                 Button call = addRenderableWidget(Button.builder(Component.literal("Call Ally"), b -> sendToFaction("CALL_TO_WAR", selectedWarAllyId(), null, war.id(), ""))

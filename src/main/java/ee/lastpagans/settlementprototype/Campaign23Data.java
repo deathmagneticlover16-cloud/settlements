@@ -45,6 +45,7 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, PeaceOfferRecord> peaceOffers = new LinkedHashMap<>();
     private final Map<UUID, List<AidRecord>> aidByWar = new HashMap<>();
     private final Map<UUID, Integer> warScore = new HashMap<>();
+    private final Map<UUID, List<String>> ignoredWarInterventions = new HashMap<>();
     private final Map<UUID, CandidateHistory> candidateHistory = new HashMap<>();
     private final Map<String, Long> forcedNapUntilDay = new HashMap<>();
     private final List<ReparationRecord> reparations = new ArrayList<>();
@@ -129,6 +130,13 @@ public final class Campaign23Data extends SavedData {
             if (!values.isEmpty()) data.aidByWar.put(war, values);
         }
         readUuidIntMap(tag, "WarScore", data.warScore);
+        for (Tag raw : tag.getList("IgnoredWarInterventions", Tag.TAG_COMPOUND)) {
+            CompoundTag entry = (CompoundTag) raw;
+            if (!entry.hasUUID("War")) continue;
+            List<String> factions = new ArrayList<>();
+            for (Tag factionRaw : entry.getList("Factions", Tag.TAG_STRING)) factions.add(factionRaw.getAsString());
+            if (!factions.isEmpty()) data.ignoredWarInterventions.put(entry.getUUID("War"), factions);
+        }
         for (Tag raw : tag.getList("CandidateHistory", Tag.TAG_COMPOUND)) {
             CandidateHistory history = CandidateHistory.fromNBT((CompoundTag) raw);
             if (history.playerId != null) data.candidateHistory.put(history.playerId, history);
@@ -182,6 +190,13 @@ public final class Campaign23Data extends SavedData {
         aidByWar.forEach((war, values) -> { CompoundTag entry = new CompoundTag(); entry.putUUID("War", war); ListTag list = new ListTag(); values.forEach(value -> list.add(value.toNBT())); entry.put("Values", list); aid.add(entry); });
         tag.put("WarAid", aid);
         writeUuidIntMap(tag, "WarScore", warScore);
+        ListTag ignoredInterventions = new ListTag();
+        ignoredWarInterventions.forEach((war, factions) -> {
+            CompoundTag entry = new CompoundTag(); entry.putUUID("War", war);
+            ListTag list = new ListTag(); factions.forEach(faction -> list.add(net.minecraft.nbt.StringTag.valueOf(faction)));
+            entry.put("Factions", list); ignoredInterventions.add(entry);
+        });
+        tag.put("IgnoredWarInterventions", ignoredInterventions);
         ListTag histories = new ListTag(); candidateHistory.values().forEach(value -> histories.add(value.toNBT())); tag.put("CandidateHistory", histories);
         writeStringLongMap(tag, "ForcedNapUntil", forcedNapUntilDay);
         ListTag reparationsTag = new ListTag(); reparations.forEach(value -> reparationsTag.add(value.toNBT())); tag.put("Reparations", reparationsTag);
@@ -267,6 +282,17 @@ public final class Campaign23Data extends SavedData {
     public int warScore(UUID war) { return clamp(warScore.getOrDefault(war, 0), -100, 100); }
     public void setWarScore(UUID war, int score) { if (war == null) return; warScore.put(war, clamp(score, -100, 100)); setDirty(); }
     public void changeWarScore(UUID war, int delta) { setWarScore(war, warScore(war) + delta); }
+    public boolean ignoredWarIntervention(UUID war, String faction) {
+        return war != null && faction != null && ignoredWarInterventions.getOrDefault(war, List.of()).contains(faction);
+    }
+    public void setIgnoredWarIntervention(UUID war, String faction, boolean ignored) {
+        if (war == null || faction == null || faction.isBlank()) return;
+        List<String> values = ignoredWarInterventions.computeIfAbsent(war, key -> new ArrayList<>());
+        if (ignored) { if (!values.contains(faction)) values.add(faction); } else values.remove(faction);
+        if (values.isEmpty()) ignoredWarInterventions.remove(war);
+        setDirty();
+    }
+    public void clearWarInterventionState(UUID war) { if (war != null && ignoredWarInterventions.remove(war) != null) setDirty(); }
 
     public CandidateHistory candidateHistory(UUID player) { return candidateHistory.computeIfAbsent(player, CandidateHistory::new); }
     public void setCandidateGender(UUID player, String gender) { CandidateHistory h = candidateHistory(player); h.setPreferredGender(gender); setDirty(); }

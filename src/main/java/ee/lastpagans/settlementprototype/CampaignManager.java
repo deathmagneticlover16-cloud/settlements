@@ -201,6 +201,7 @@ public final class CampaignManager {
             case "OFFER_PEACE" -> offerPeace(player, data, own, warId, day);
             case "CALL_TO_WAR" -> callToWar(player, data, own, targetFaction, warId, day);
             case "JOIN_SETTLEMENT_WAR" -> joinSettlementWar(player, data, own, warId, day);
+            case "IGNORE_SETTLEMENT_WAR" -> ignoreSettlementWar(player, data, own, warId);
             case "SEND_AID" -> sendWarAid(player, data, own, warId, extra, day);
             case "ACCEPT_PROPOSAL" -> acceptProposal(player, data, own, proposalId, day);
             case "REJECT_PROPOSAL" -> rejectProposal(player, data, own, proposalId);
@@ -323,6 +324,7 @@ public final class CampaignManager {
         else return "Your faction is not the parent faction of either settlement.";
         if ((attackerSide && war.attackerFactionJoined()) || (!attackerSide && war.defenderFactionJoined())) return "Your faction has already joined this war.";
         war.joinParentFaction(attackerSide);
+        Campaign23Data.get(player.serverLevel()).setIgnoredWarIntervention(war.id(), own, false);
         data.setDirty();
         String side = attackerSide ? "attacking" : "defending";
         String settlementId = attackerSide ? war.attackerSettlement() : war.defenderSettlement();
@@ -346,6 +348,16 @@ public final class CampaignManager {
         CampaignToastSender.faction(player.getServer(), war.defenderFaction(), "WAR ESCALATED", factionName(own) + " joined " + settlementName + ". Conflict: " + escalation);
         Campaign23Manager.applyEmergencyMobilization(player.serverLevel(), attackerSide ? war.defenderFaction() : war.attackerFaction());
         return "Your faction joined the war. Conflict is now " + escalation + ".";
+    }
+
+    private static String ignoreSettlementWar(ServerPlayer player, CampaignData data, String own, UUID warId) {
+        if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot answer this settlement war.";
+        CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.SETTLEMENT_WAR) return "Select an active Settlement War.";
+        if (!own.equals(war.defenderFaction())) return "Only the defending settlement's parent faction may formally ignore the conflict.";
+        if (war.defenderFactionJoined()) return "Your faction has already joined this war.";
+        Campaign23Data.get(player.serverLevel()).setIgnoredWarIntervention(war.id(), own, true);
+        return "Your faction will not intervene in this Settlement War. You may still send aid or join later if circumstances change.";
     }
 
     private static String sendWarAid(ServerPlayer player, CampaignData data, String own, UUID warId, String extra, long day) {
