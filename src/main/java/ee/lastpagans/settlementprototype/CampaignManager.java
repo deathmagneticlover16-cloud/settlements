@@ -92,7 +92,8 @@ public final class CampaignManager {
                 catch (IllegalArgumentException ignored) {}
                 name = parts[1];
             }
-            openFaction(player, createFaction(player, name, teamColor, (byte)Math.max(0, Math.min(15, tier))));
+            // Recruits 1.15.2 exposes 25 faction unit colors (indices 0-24), not the 16 DyeColor values.
+            openFaction(player, createFaction(player, name, teamColor, (byte)Math.max(0, Math.min(24, tier))));
             return;
         }
         if ("CREATE_SETTLEMENT".equals(action)) {

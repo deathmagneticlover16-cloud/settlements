@@ -94,7 +94,17 @@ public final class FactionScreen extends ScaledCampaignScreen {
             factionNameEdit.setHint(Component.literal("Faction name"));
             addRenderableWidget(factionNameEdit);
             List<String> teamColors = List.of("White","Red","Dark Red","Gold","Yellow","Green","Dark Green","Aqua","Dark Aqua","Blue","Dark Blue","Light Purple","Dark Purple","Gray","Dark Gray","Black");
-            List<String> unitColors = List.of("White","Orange","Magenta","Light Blue","Yellow","Lime","Pink","Gray","Light Gray","Cyan","Purple","Blue","Brown","Green","Red","Black");
+            // Recruits does not use Minecraft DyeColor ordinals here. Its faction unit palette has
+            // 25 entries in this exact order. Keep the displayed order aligned with the byte index
+            // written into RecruitsFaction, or colors silently map to entirely different values.
+            List<String> unitColors = List.of(
+                    "White", "Black", "Light Gray", "Gray", "Dark Gray",
+                    "Light Blue", "Blue", "Dark Blue",
+                    "Light Green", "Green", "Dark Green",
+                    "Light Red", "Red", "Dark Red",
+                    "Light Brown", "Brown", "Dark Brown",
+                    "Light Cyan", "Cyan", "Dark Cyan",
+                    "Yellow", "Orange", "Magenta", "Purple", "Gold");
             teamColorIndex = Math.max(0, Math.min(teamColorIndex, teamColors.size() - 1));
             unitColorIndex = Math.max(0, Math.min(unitColorIndex, unitColors.size() - 1));
             teamColorDrop = addRenderableWidget(new DropdownWidget(left + 132, top + 150, 142, 20, teamColors, teamColorIndex, value -> teamColorIndex = teamColors.indexOf(value)));
@@ -226,7 +236,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
         if (name.isBlank()) return;
         String[] formatting = {"WHITE","RED","DARK_RED","GOLD","YELLOW","GREEN","DARK_GREEN","AQUA","DARK_AQUA","BLUE","DARK_BLUE","LIGHT_PURPLE","DARK_PURPLE","GRAY","DARK_GRAY","BLACK"};
         String teamColor = formatting[Math.max(0, Math.min(teamColorIndex, formatting.length - 1))];
-        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("CREATE_FACTION", null, Math.max(0, Math.min(15, unitColorIndex)), teamColor + "|" + name));
+        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("CREATE_FACTION", null, Math.max(0, Math.min(24, unitColorIndex)), teamColor + "|" + name));
     }
 
     private void factionSettlementAction(String action) {
