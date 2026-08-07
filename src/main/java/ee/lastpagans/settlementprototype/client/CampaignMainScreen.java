@@ -60,7 +60,7 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
         graphics.fill(left + 10, top + 86, left + W - 10, top + 176, 0xFF242424);
         graphics.fill(left + 10, top + 184, left + W - 10, top + 245, 0xFF242424);
         if (minecraft != null && minecraft.player != null) PortraitRenderer.render(graphics, minecraft.player, left + 16, top + 9, 64, 66, uiMouseX, uiMouseY);
-        if (banner != null) banner.renderBanner(graphics, left + W - 58, top + 7, 20, 40, 22);
+        if (banner != null) banner.renderBanner(graphics, left + W - 58, top + 7, 20, 40, CAMPAIGN_BANNER_SCALE);
 
         graphics.drawString(font, snapshot.characterName(), left + 94, top + 13, 0xFFFFFFFF, false);
         graphics.drawString(font, snapshot.titleLine(), left + 94, top + 29, 0xFFE7D8B0, false);

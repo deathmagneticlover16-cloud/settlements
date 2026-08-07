@@ -233,7 +233,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             return;
         }
 
-        if (banner != null) banner.renderBanner(graphics, left + 18, top + 7, 20, 40, 22);
+        if (banner != null) banner.renderBanner(graphics, left + 18, top + 7, 20, 40, CAMPAIGN_BANNER_SCALE);
         graphics.drawString(font, fit(snapshot.factionName().toUpperCase(), 340), left + 72, top + 13, 0xFFFFFFFF, false);
         graphics.drawString(font, "Leader: " + fit(snapshot.leaderName(), 270), left + 72, top + 31, 0xFFE7D8B0, false);
         graphics.drawString(font, "Your rank: [" + snapshot.viewerRank() + "]", left + 72, top + 47, 0xFFCCCCCC, false);

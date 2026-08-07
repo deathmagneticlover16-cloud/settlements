@@ -13,6 +13,9 @@ import net.minecraft.network.chat.Component;
  * virtual canvas so buttons/dropdowns remain clickable at every vanilla GUI scale.
  */
 public abstract class ScaledCampaignScreen extends Screen {
+    /** Recruits BannerRenderer ignores its width/height parameters and uses only the final scale. */
+    protected static final int CAMPAIGN_BANNER_SCALE = 12;
+    protected static final int CAMPAIGN_SMALL_BANNER_SCALE = 7;
     private float campaignScale = 1.0F;
     private int campaignVirtualWidth;
     private int campaignVirtualHeight;

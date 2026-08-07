@@ -210,9 +210,9 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
 
         BannerRenderer large = "CUSTOM".equals(snapshot.bannerMode()) && settlementBanner != null
                 ? settlementBanner : "FACTION".equals(snapshot.bannerMode()) ? factionBanner : null;
-        if (large != null) large.renderBanner(graphics, left + 17, top + 7, 20, 40, 22);
+        if (large != null) large.renderBanner(graphics, left + 17, top + 7, 20, 40, CAMPAIGN_BANNER_SCALE);
         if (settlementBanner != null && factionBanner != null && large == settlementBanner) {
-            factionBanner.renderBanner(graphics, left + 56, top + 17, 20, 40, 10);
+            factionBanner.renderBanner(graphics, left + 56, top + 17, 20, 40, CAMPAIGN_SMALL_BANNER_SCALE);
         }
 
         graphics.drawString(font, fit(snapshot.settlementName().toUpperCase(Locale.ROOT), 360), left + 86, top + 13, 0xFFFFFFFF, false);
