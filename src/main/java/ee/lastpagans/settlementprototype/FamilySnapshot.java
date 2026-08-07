@@ -68,7 +68,17 @@ public record FamilySnapshot(
                 spouseFaith = spouse != null && spouse.isCreated() ? spouse.getFaith() : "Unknown";
                 spouseCulture = "Player character";
                 spouseTraits = spouse != null ? traitNames(spouse.getTraits()) : "Unknown";
-                spouseEffect = "Player marriage alliance";
+                if (spouse != null && spouse.isCreated()) {
+                    int stability = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
+                    int wealth = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.WEALTH);
+                    int morale = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.MORALE);
+                    List<String> effects = new ArrayList<>();
+                    if (stability != 0) effects.add((stability > 0 ? "+" : "") + stability + " stability/day");
+                    if (wealth != 0) effects.add((wealth > 0 ? "+" : "") + wealth + " wealth/day");
+                    if (morale != 0) effects.add((morale > 0 ? "+" : "") + morale + " recruit morale");
+                    spouseEffect = effects.isEmpty() ? "Marriage Alliance; no direct capital trait effects"
+                            : "Marriage Alliance; capital receives " + String.join(", ", effects);
+                } else spouseEffect = "Player marriage alliance";
                 playerSpouse = true;
             } else {
                 spouseName = marriage.spouseName();

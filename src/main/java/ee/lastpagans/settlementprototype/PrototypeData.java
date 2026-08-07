@@ -1004,9 +1004,11 @@ public final class PrototypeData extends SavedData {
             if (campaign != null && ownerId != null && (rank == SettlementRank.CAPITAL || rank == SettlementRank.CITY_STATE)) {
                 CampaignData.MarriageRecord marriage = campaign.getMarriage(ownerId);
                 if (marriage != null) {
-                    if (marriage.stabilityBonus() != 0) changeStability(marriage.stabilityBonus());
-                    if (marriage.wealthPerDay() > 0) wealth += marriage.wealthPerDay();
-                    else if (marriage.wealthPerDay() < 0) wealth = Math.max(0, wealth + marriage.wealthPerDay());
+                    int spouseStability = marriage.effectiveStabilityBonus(owner);
+                    int spouseWealth = marriage.effectiveWealthPerDay(owner);
+                    if (spouseStability != 0) changeStability(spouseStability);
+                    if (spouseWealth > 0) wealth += spouseWealth;
+                    else if (spouseWealth < 0) wealth = Math.max(0, wealth + spouseWealth);
                 }
                 int spouseIndex = 1;
                 for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(ownerId)) {

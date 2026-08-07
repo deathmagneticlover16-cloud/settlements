@@ -1461,6 +1461,34 @@ public final class CampaignData extends SavedData {
         public int stabilityBonus() { return stabilityBonus; }
         public int wealthPerDay() { return wealthPerDay; }
         public int moraleBonus() { return moraleBonus; }
+
+        /**
+         * Player marriages intentionally use the spouse's live character traits rather than
+         * snapshotting bonuses when the marriage is created. This means later legitimate
+         * character edits/admin repairs stay in sync. NPC marriages keep their generated
+         * fixed bonuses.
+         */
+        public int effectiveStabilityBonus(PrototypeData characters) {
+            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return stabilityBonus;
+            PrototypeData.CharacterRecord spouse = characters.getCharacter(spousePlayerId);
+            return spouse == null || !spouse.isCreated() ? 0
+                    : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
+        }
+
+        public int effectiveWealthPerDay(PrototypeData characters) {
+            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return wealthPerDay;
+            PrototypeData.CharacterRecord spouse = characters.getCharacter(spousePlayerId);
+            return spouse == null || !spouse.isCreated() ? 0
+                    : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.WEALTH);
+        }
+
+        public int effectiveMoraleBonus(PrototypeData characters) {
+            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return moraleBonus;
+            PrototypeData.CharacterRecord spouse = characters.getCharacter(spousePlayerId);
+            return spouse == null || !spouse.isCreated() ? 0
+                    : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.MORALE);
+        }
+
         public long marriedDay() { return marriedDay; }
     }
 

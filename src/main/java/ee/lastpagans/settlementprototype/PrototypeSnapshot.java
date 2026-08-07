@@ -151,8 +151,8 @@ public record PrototypeSnapshot(
                             ? "Loaded soldiers are suffering Recruits' low-morale penalties." : "Loaded soldiers have middling morale.", "Current"));
         }
 
-        PrototypeData.CharacterRecord ruler = player.serverLevel() == null ? null
-                : PrototypeData.get(player.serverLevel()).getCharacter(settlement.getOwnerId());
+        PrototypeData data = PrototypeData.get(player.serverLevel());
+        PrototypeData.CharacterRecord ruler = settlement.getOwnerId() == null ? null : data.getCharacter(settlement.getOwnerId());
         if (ruler != null) {
             for (String traitId : ruler.getTraits()) {
                 CampaignDefinitions.TraitDefinition definition = CampaignDefinitions.trait(traitId);
@@ -166,11 +166,21 @@ public record PrototypeSnapshot(
             }
         }
         CampaignData.MarriageRecord marriage = settlement.getOwnerId() == null ? null : campaign.getMarriage(settlement.getOwnerId());
-        if (marriage != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)
-                && (marriage.stabilityBonus() != 0 || marriage.wealthPerDay() != 0 || marriage.moraleBonus() != 0)) {
-            String details = joinEffects(marriage.stabilityBonus(), marriage.wealthPerDay(), marriage.moraleBonus());
-            String tone = marriage.stabilityBonus() + marriage.wealthPerDay() + marriage.moraleBonus() >= 0 ? "POSITIVE" : "NEGATIVE";
-            values.add(new EffectEntry("Spouse: " + marriage.spouseName(), "Marriage", "minecraft:rose_bush", tone, details, "While married"));
+        if (marriage != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)) {
+            int spouseStability = marriage.effectiveStabilityBonus(data);
+            int spouseWealth = marriage.effectiveWealthPerDay(data);
+            int spouseMorale = marriage.effectiveMoraleBonus(data);
+            if (spouseStability != 0 || spouseWealth != 0 || spouseMorale != 0) {
+                String details = joinEffects(spouseStability, spouseWealth, spouseMorale);
+                String tone = spouseStability + spouseWealth + spouseMorale >= 0 ? "POSITIVE" : "NEGATIVE";
+                String spouseName = marriage.spouseName();
+                if (marriage.kind() == CampaignData.MarriageKind.PLAYER && marriage.spousePlayerId() != null) {
+                    PrototypeData.CharacterRecord spouseCharacter = data.getCharacter(marriage.spousePlayerId());
+                    spouseName = spouseCharacter != null && spouseCharacter.isCreated() ? spouseCharacter.getDisplayName() : "Player spouse";
+                    details += " — derived from spouse traits";
+                }
+                values.add(new EffectEntry("Spouse: " + spouseName, "Marriage", "minecraft:rose_bush", tone, details, "While married"));
+            }
         }
         if (settlement.getOwnerId() != null && (settlement.getRank() == PrototypeData.SettlementRank.CAPITAL || settlement.getRank() == PrototypeData.SettlementRank.CITY_STATE)) {
             int spouseIndex = 1;
