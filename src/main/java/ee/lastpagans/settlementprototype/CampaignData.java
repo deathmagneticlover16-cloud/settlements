@@ -446,16 +446,22 @@ public final class CampaignData extends SavedData {
 
     public boolean marryAdditionalNpc(UUID playerId, NpcSpouse spouse, long day) {
         if (playerId == null || spouse == null || !marriages.containsKey(playerId)) return false;
+        MarriageRecord primary = marriages.get(playerId);
+        if (primary != null && primary.kind == MarriageKind.NPC && primary.spouseId.equals(spouse.id())) return false;
         List<MarriageRecord> values = additionalNpcMarriages.computeIfAbsent(playerId, key -> new ArrayList<>());
         if (values.size() >= 3) return false;
-        if (values.stream().anyMatch(value -> value.spouseId.equals(spouse.id))) return false;
+        if (values.stream().anyMatch(value -> value.spouseId.equals(spouse.id()))) return false;
         values.add(MarriageRecord.forNpc(playerId, spouse, day));
+        List<NpcSpouse> candidates = spouseCandidates.get(playerId);
+        if (candidates != null) candidates.removeIf(value -> value.id().equals(spouse.id()));
         setDirty();
         return true;
     }
 
     public void marryNpc(UUID playerId, NpcSpouse spouse, long day) {
         marriages.put(playerId, MarriageRecord.forNpc(playerId, spouse, day));
+        List<NpcSpouse> candidates = spouseCandidates.get(playerId);
+        if (candidates != null && spouse != null) candidates.removeIf(value -> value.id().equals(spouse.id()));
         pendingPlayerMarriageProposals.remove(playerId);
         setDirty();
     }
