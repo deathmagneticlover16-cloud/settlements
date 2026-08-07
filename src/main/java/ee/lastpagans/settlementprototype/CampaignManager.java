@@ -125,6 +125,7 @@ public final class CampaignManager {
             case "LEAVE_FACTION" -> result = leaveFaction(player, factionId);
             case "KICK_MEMBER" -> result = kickFactionMember(player, factionId, targetPlayer);
             case "SEND_FACTION_INVITE" -> result = sendFactionInvitation(player, factionId, targetPlayer);
+            case "TRANSFER_LEADERSHIP" -> result = transferFactionLeadership(player, factionId, targetPlayer);
             case "SET_MEMBER_RANK" -> {
                 if (!leader) result = "Only the faction leader may assign ranks.";
                 else if (targetPlayer == null) result = "Select a faction member.";
@@ -380,6 +381,31 @@ public final class CampaignManager {
         if (target != null) CampaignToastSender.send(target, "REMOVED FROM FACTION", "You were removed from " + faction.getTeamDisplayName() + ".");
         CampaignToastSender.faction(player.getServer(), factionId, "FACTION MEMBER REMOVED", account + " was removed from the faction.");
         return account + " was removed from " + faction.getTeamDisplayName() + ".";
+    }
+
+    private static String transferFactionLeadership(ServerPlayer player, String factionId, UUID targetId) {
+        if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
+        RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (faction == null) return "Faction data is unavailable.";
+        if (!player.getUUID().equals(faction.getTeamLeaderUUID())) return "Only the actual faction leader may transfer leadership.";
+        if (targetId == null || targetId.equals(player.getUUID())) return "Select another faction member.";
+        String account = faction.getMembers().stream().filter(info -> info != null && targetId.equals(info.getUUID()))
+                .map(info -> info.getName()).findFirst().orElse("");
+        if (account.isBlank()) return "That player is no longer a member of your faction.";
+
+        RecruitsFaction edited = RecruitsFaction.fromNBT(faction.toNBT());
+        edited.setTeamLeaderID(targetId);
+        edited.setTeamLeaderName(account);
+        FactionEvents.modifyTeam(player.serverLevel(), factionId, edited, player, 0);
+        RecruitsFaction confirmed = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        if (confirmed == null || !targetId.equals(confirmed.getTeamLeaderUUID())) return "Recruits did not confirm the leadership transfer.";
+
+        CampaignData campaign = CampaignData.get(player.serverLevel());
+        campaign.setFactionMemberRank(factionId, player.getUUID(), 3);
+        campaign.clearFactionMemberRank(factionId, targetId);
+        PrototypeManager.broadcastProfiles(player.getServer());
+        CampaignToastSender.faction(player.getServer(), factionId, "NEW FACTION LEADER", account + " is now the leader of " + confirmed.getTeamDisplayName() + ".");
+        return "Faction leadership transferred to " + account + ".";
     }
 
     private static boolean canProcessFactionApplications(ServerPlayer player, String factionId) {

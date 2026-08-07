@@ -147,17 +147,19 @@ public final class FactionScreen extends ScaledCampaignScreen {
                         .toList();
                 if (!memberNames.isEmpty()) {
                     memberIndex = Math.max(0, Math.min(memberIndex, memberNames.size() - 1));
-                    memberDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 316, 190, 20,
+                    memberDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 316, 160, 20,
                             memberNames, memberIndex, value -> memberIndex = Math.max(0, memberNames.indexOf(value))));
                     List<String> ranks = snapshot.ranks().stream().filter(rank -> rank.tier() < 4)
                             .map(rank -> "Tier " + rank.tier() + " — " + rank.title()).toList();
                     rankIndex = Math.max(0, Math.min(rankIndex, Math.max(0, ranks.size() - 1)));
-                    rankDrop = addRenderableWidget(new DropdownWidget(left + 218, top + 316, 130, 20,
+                    rankDrop = addRenderableWidget(new DropdownWidget(left + 188, top + 316, 120, 20,
                             ranks, rankIndex, value -> rankIndex = Math.max(0, ranks.indexOf(value))));
-                    addRenderableWidget(Button.builder(Component.literal("Set rank"), button -> setRank())
-                            .bounds(left + 354, top + 316, 80, 20).build());
+                    addRenderableWidget(Button.builder(Component.literal("Set Rank"), button -> setRank())
+                            .bounds(left + 314, top + 316, 70, 20).build());
                     addRenderableWidget(Button.builder(Component.literal("Remove"), button -> kickMember())
-                            .bounds(left + 440, top + 316, 98, 20).build());
+                            .bounds(left + 390, top + 316, 70, 20).build());
+                    addRenderableWidget(Button.builder(Component.literal("Transfer"), button -> transferLeadership())
+                            .bounds(left + 466, top + 316, 72, 20).build());
                 }
             }
             if (snapshot.viewerTier() >= 3 && !snapshot.joinRequests().isEmpty()) {
@@ -255,6 +257,13 @@ public final class FactionScreen extends ScaledCampaignScreen {
         if (snapshot.joinRequests().isEmpty()) return;
         FactionSnapshot.RequestEntry request = snapshot.joinRequests().get(Math.min(requestIndex, snapshot.joinRequests().size() - 1));
         PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket(accept ? "ACCEPT_JOIN_REQUEST" : "REJECT_JOIN_REQUEST", null, 0, request.accountName()));
+    }
+
+    private void transferLeadership() {
+        List<FactionSnapshot.MemberEntry> selectable = snapshot.members().stream().filter(member -> !member.leader()).toList();
+        if (selectable.isEmpty()) return;
+        FactionSnapshot.MemberEntry member = selectable.get(Math.min(memberIndex, selectable.size() - 1));
+        PrototypeNetwork.CHANNEL.sendToServer(new FactionActionPacket("TRANSFER_LEADERSHIP", member.playerId(), 0, ""));
     }
 
     private void kickMember() {
