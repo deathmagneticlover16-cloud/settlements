@@ -566,7 +566,7 @@ public final class CampaignManager {
         PrototypeData.SettlementRecord target = settlements.getSettlement(targetId);
         if (source == null || target == null) return "Select both your settlement and the target settlement.";
         if (source.getId().equals(target.getId())) return "A settlement cannot declare war on itself.";
-        if (!PrototypeManager.canManage(player, source)) return "You do not have permission to declare war for " + source.getName() + ".";
+        if (!canRepresentSettlement(player, source)) return "You do not hold political authority to declare war for " + source.getName() + ".";
         Campaign23Data extraData = Campaign23Data.get(player.serverLevel());
         if (extraData.settlementProtected(source.getId()) || extraData.settlementProtected(target.getId())
                 || extraData.factionProtected(source.getFactionTeam()) || extraData.factionProtected(target.getFactionTeam())) {
@@ -787,6 +787,21 @@ public final class CampaignManager {
         return !principal.isBlank() && factionId.equals(principal);
     }
 
+    /**
+     * Ordinary diplomacy must be based on the player's real political authority, not operator permission.
+     * Operators can administer every settlement through admin tools, but that must never make them a
+     * belligerent on both sides of a player war or turn every foreign settlement into "your settlement".
+     */
+    static boolean canRepresentSettlement(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
+        if (player == null || settlement == null) return false;
+        PrototypeData.SettlementRole role = settlement.getRole(player.getUUID());
+        if (!role.canManage()) return false;
+        String playerFaction = factionId(player);
+        String settlementFaction = settlement.getFactionTeam() == null ? "" : settlement.getFactionTeam();
+        if (settlementFaction.isBlank()) return playerFaction.isBlank();
+        return settlementFaction.equals(playerFaction);
+    }
+
     /** Identifies a structured-peace party without relying on blank settlement ids in faction wars. */
     static boolean peacePartyIsSide(CampaignData.WarRecord war, String factionId, String settlementId, boolean attackerSide) {
         if (war == null) return false;
@@ -809,13 +824,13 @@ public final class CampaignManager {
         String ownFaction = factionId(player);
         PrototypeData.SettlementRecord attackerSettlementRecord = settlements.getSettlement(war.attackerSettlement());
         PrototypeData.SettlementRecord defenderSettlementRecord = settlements.getSettlement(war.defenderSettlement());
-        boolean managesAttackerSettlement = attackerSettlementRecord != null && PrototypeManager.canManage(player, attackerSettlementRecord);
-        boolean managesDefenderSettlement = defenderSettlementRecord != null && PrototypeManager.canManage(player, defenderSettlementRecord);
+        boolean managesAttackerSettlement = attackerSettlementRecord != null && canRepresentSettlement(player, attackerSettlementRecord);
+        boolean managesDefenderSettlement = defenderSettlementRecord != null && canRepresentSettlement(player, defenderSettlementRecord);
         boolean attackerByFaction = factionIsPrincipalOnSide(war, ownFaction, true);
         boolean defenderByFaction = factionIsPrincipalOnSide(war, ownFaction, false);
         boolean attacker = attackerByFaction || managesAttackerSettlement;
         boolean defender = defenderByFaction || managesDefenderSettlement;
-        if (attacker && defender) return "You are connected to both sides of this war; an administrator must resolve the conflicting ownership first.";
+        if (attacker && defender) return "You hold political authority on both belligerent settlements. Remove the conflicting settlement role before negotiating peace.";
         if (!attacker && !defender) return "You are not an actual belligerent in this war. A parent faction must Join War before negotiating on behalf of its settlement.";
         boolean actingAsFaction = attacker ? attackerByFaction : defenderByFaction;
         if (actingAsFaction && !ownFaction.isBlank() && !canManageDiplomacy(player, ownFaction, 3) && !player.createCommandSourceStack().hasPermission(2))
@@ -873,7 +888,7 @@ public final class CampaignManager {
         boolean admin = player.createCommandSourceStack().hasPermission(2);
         boolean authorized = admin || (targetFactionActuallyParticipates
                 ? offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3)
-                : offer.targetFaction().isBlank() && targetSettlement != null && PrototypeManager.canManage(player, targetSettlement));
+                : offer.targetFaction().isBlank() && targetSettlement != null && canRepresentSettlement(player, targetSettlement));
         if (!authorized) return "You are not authorized to answer those peace terms.";
         int score = extra.warScore(war.id());
         boolean proposerAttacker = peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), true);

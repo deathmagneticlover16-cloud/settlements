@@ -69,7 +69,7 @@ public record DiplomacySnapshot(
                         && !campaign23.factionProtected(value.getFactionTeam())))
                 .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
                         CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(),
-                        PrototypeManager.canManage(player, value), value.getClaimLinks().stream()
+                        CampaignManager.canRepresentSettlement(player, value), value.getClaimLinks().stream()
                         .map(claim -> new ClaimTarget(claim.id(), claim.name())).toList()))
                 .sorted(Comparator.comparing(SettlementTarget::factionName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(SettlementTarget::settlementName, String.CASE_INSENSITIVE_ORDER))
@@ -85,7 +85,7 @@ public record DiplomacySnapshot(
             boolean targetFaction = canManage && !own.isBlank() && own.equals(offer.targetFaction());
             boolean targetSettlement = offer.targetFaction().isBlank() && !offer.targetSettlement().isBlank()
                     && settlementsData.getSettlement(offer.targetSettlement()) != null
-                    && PrototypeManager.canManage(player, settlementsData.getSettlement(offer.targetSettlement()));
+                    && CampaignManager.canRepresentSettlement(player, settlementsData.getSettlement(offer.targetSettlement()));
             if (!targetFaction && !targetSettlement) continue;
             String fromName = !offer.proposerFaction().isBlank() ? CampaignManager.factionName(offer.proposerFaction())
                     : (settlementsData.getSettlement(offer.proposerSettlement()) == null ? "Independent settlement" : settlementsData.getSettlement(offer.proposerSettlement()).getName());
@@ -135,8 +135,7 @@ public record DiplomacySnapshot(
             }
         }
 
-        boolean canDeclareWar = player.createCommandSourceStack().hasPermission(2) || leader
-                || settlements.stream().anyMatch(SettlementTarget::manageable);
+        boolean canDeclareWar = leader || settlements.stream().anyMatch(SettlementTarget::manageable);
         return new DiplomacySnapshot(own, ownName, rank, canManage, canDeclareWar, relations, settlements, proposals, wars, aid,
                 message == null ? "" : message);
     }
