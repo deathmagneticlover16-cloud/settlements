@@ -612,6 +612,7 @@ public final class PrototypeData extends SavedData {
             return names.get(0) + ", " + names.get(1) + " +" + (names.size() - 2) + " more";
         }
         public int getVillagerCount() { return villagerResidents.size(); }
+        public Set<UUID> getVillagerIds() { return Set.copyOf(villagerResidents); }
         public int getProfessionalCount() { return professionalUnits.size(); }
         public int getLivingLevymen() { return levyUnitToBatch.size(); }
         public int getLevyReservedManpower() { return levyBatches.values().stream().mapToInt(batch -> batch.manpowerSpent).sum(); }
@@ -1190,7 +1191,7 @@ public final class PrototypeData extends SavedData {
             this.address = cleanText(address, "Neutral", 16);
             this.title = cleanText(title, "Lord", 32);
             this.created = !this.firstName.isBlank() && !this.lastName.isBlank();
-            // Starting traits are selected explicitly in the 2.3 three-card creation flow. Legacy saves retain their existing traits.
+            // Starting traits are selected explicitly in the three-card character creation flow. Legacy saves retain their existing traits.
         }
 
         public void setHouse(String house) { this.house = cleanText(house, "", 32); }

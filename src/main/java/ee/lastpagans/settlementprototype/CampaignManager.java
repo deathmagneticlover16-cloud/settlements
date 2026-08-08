@@ -127,6 +127,12 @@ public final class CampaignManager {
         }
         CampaignData data = CampaignData.get(player.serverLevel());
         boolean leader = isFactionLeader(player, factionId);
+        boolean administrator = player.createCommandSourceStack().hasPermission(2);
+        boolean protectedFaction = Campaign23Data.get(player.serverLevel()).factionProtected(factionId);
+        if (protectedFaction && !administrator && !"LEAVE_FACTION".equals(action)) {
+            openFaction(player, "Protected admin factions cannot be administered through normal faction controls.");
+            return;
+        }
         String result;
         switch (action) {
             case "ACCEPT_JOIN_REQUEST" -> result = acceptFactionJoinRequest(player, factionId, value);
@@ -424,7 +430,7 @@ public final class CampaignManager {
     }
 
     private static boolean canProcessFactionApplications(ServerPlayer player, String factionId) {
-        if (player.createCommandSourceStack().hasPermission(2) || isFactionLeader(player, factionId)) return true;
+        if (isFactionLeader(player, factionId)) return true;
         return CampaignData.get(player.serverLevel()).factionRankTier(factionId, player.getUUID(), false) >= 3;
     }
 
@@ -840,8 +846,8 @@ public final class CampaignManager {
         if (attacker && defender) return "You hold political authority on both belligerent settlements. Remove the conflicting settlement role before negotiating peace.";
         if (!attacker && !defender) return "You are not an actual belligerent in this war. A parent faction must Join War before negotiating on behalf of its settlement.";
         boolean actingAsFaction = attacker ? attackerByFaction : defenderByFaction;
-        if (actingAsFaction && !ownFaction.isBlank() && !canManageDiplomacy(player, ownFaction, 3) && !player.createCommandSourceStack().hasPermission(2))
-            return "Your faction rank cannot negotiate peace.";
+        if (actingAsFaction && !ownFaction.isBlank() && !canManageDiplomacy(player, ownFaction, 3))
+            return "Your faction rank cannot negotiate peace. Administrator permission does not count as political authority; use admin recovery tools for administrative intervention.";
         String proposerFaction = actingAsFaction ? ownFaction : "";
         String targetFaction = participatingFaction(war, !attacker);
         String proposerSettlement = attacker ? war.attackerSettlement() : war.defenderSettlement();
@@ -892,10 +898,9 @@ public final class CampaignManager {
         if (offerTargetsAttacker == offerTargetsDefender) return "That peace offer no longer identifies exactly one target side.";
         boolean targetFactionActuallyParticipates = !offer.targetFaction().isBlank()
                 && factionIsPrincipalOnSide(war, offer.targetFaction(), offerTargetsAttacker);
-        boolean admin = player.createCommandSourceStack().hasPermission(2);
-        boolean authorized = admin || (targetFactionActuallyParticipates
+        boolean authorized = targetFactionActuallyParticipates
                 ? offer.targetFaction().equals(own) && canManageDiplomacy(player, own, 3)
-                : offer.targetFaction().isBlank() && targetSettlement != null && canRepresentSettlement(player, targetSettlement));
+                : offer.targetFaction().isBlank() && targetSettlement != null && canRepresentSettlement(player, targetSettlement);
         if (!authorized) return "You are not authorized to answer those peace terms.";
         int score = extra.warScore(war.id());
         boolean proposerAttacker = peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), true);
@@ -1640,8 +1645,9 @@ public final class CampaignManager {
     }
 
     public static boolean isFactionLeader(ServerPlayer player, String factionId) {
-        if (player.createCommandSourceStack().hasPermission(2)) return true;
-        if (factionId == null || factionId.isBlank() || FactionEvents.recruitsFactionManager == null) return false;
+        // Political office is deliberately independent from operator permission. Admins use explicit
+        // recovery/admin commands; being OP must never silently make a player the ruler of a faction.
+        if (player == null || factionId == null || factionId.isBlank() || FactionEvents.recruitsFactionManager == null) return false;
         RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
         return faction != null && player.getUUID().equals(faction.getTeamLeaderUUID());
     }

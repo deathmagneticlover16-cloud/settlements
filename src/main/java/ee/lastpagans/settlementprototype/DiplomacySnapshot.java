@@ -34,8 +34,7 @@ public record DiplomacySnapshot(
                 : FactionEvents.recruitsFactionManager.getFactionByStringID(own);
         boolean leader = ownFaction != null && player.getUUID().equals(ownFaction.getTeamLeaderUUID());
         String rank = own.isBlank() ? "Independent" : campaign.factionRankTitle(own, player.getUUID(), leader);
-        boolean canManage = player.createCommandSourceStack().hasPermission(2) || leader
-                || (!own.isBlank() && campaign.factionRankTier(own, player.getUUID(), false) >= 3);
+        boolean canManage = leader || (!own.isBlank() && campaign.factionRankTier(own, player.getUUID(), false) >= 3);
 
         List<RelationEntry> relations = new ArrayList<>();
         if (FactionEvents.recruitsFactionManager != null) {

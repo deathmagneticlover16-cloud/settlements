@@ -53,9 +53,13 @@ public record FactionSnapshot(
         PrototypeData settlementData = PrototypeData.get(player.serverLevel());
         CampaignData campaign = CampaignData.get(player.serverLevel());
         boolean actualLeader = player.getUUID().equals(faction.getTeamLeaderUUID());
-        boolean viewerLeader = player.createCommandSourceStack().hasPermission(2) || actualLeader;
-        int viewerTier = viewerLeader ? 4 : campaign.factionRankTier(factionId, player.getUUID(), false);
-        String viewerRank = campaign.factionRankTitle(factionId, player.getUUID(), actualLeader);
+        boolean protectedFaction = Campaign23Data.get(player.serverLevel()).factionProtected(factionId);
+        boolean administrator = player.createCommandSourceStack().hasPermission(2);
+        boolean viewerLeader = actualLeader && (!protectedFaction || administrator);
+        int viewerTier = viewerLeader ? 4 : protectedFaction && !administrator ? 0
+                : campaign.factionRankTier(factionId, player.getUUID(), false);
+        String viewerRank = protectedFaction && !administrator ? "Protected"
+                : campaign.factionRankTitle(factionId, player.getUUID(), actualLeader);
 
         Map<UUID, String> accountNames = new LinkedHashMap<>();
         for (RecruitsPlayerInfo info : faction.getMembers()) {

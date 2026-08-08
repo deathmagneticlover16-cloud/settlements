@@ -11,6 +11,7 @@ OPENING
 /settlements open [id]
 /settlements list
 /character open
+/character seat <settlement>    (GUI Main Seat selector is preferred)
 
 SETTLEMENT FALLBACK / ADVANCED
 /settlements create <id> <name>              (GUI creation is preferred)
@@ -45,12 +46,15 @@ ADMIN STATS
 Supported values include stability, food, wealth, housing, maximum_manpower, available_manpower, contracts and prosperity.
 
 FACTION ADMIN
-/settlements admin faction create <player> <name>
+/settlements admin faction create <player> <team_color> <unit_color_0-24> <name>
+  Target player must still hold a unique patterned banner. Example Team Colors: BLUE, DARK_BLUE, RED, GOLD, WHITE.
 /settlements admin faction wealth set <faction> <value>
 /settlements admin faction wealth add <faction> <value>
 
 ADMIN RECOVERY / RESET
 /settlements admin reset character <player>
+  Prints the destructive warning.
+/settlements admin reset character <player> confirm
   Wipes character identity/traits and forces character creation again; settlement ownership is retained.
 /settlements admin reset player <player> confirm
   Nuclear Settlements-mod reset for that player. Active/partially mustered levy entities are retired as part of the cleanup. Use deliberately.

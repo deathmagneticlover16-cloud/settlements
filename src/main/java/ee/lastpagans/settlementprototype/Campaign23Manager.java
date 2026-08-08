@@ -136,7 +136,7 @@ public final class Campaign23Manager {
     public static void refreshTaxPolicyModifier(PrototypeData.SettlementRecord settlement, Campaign23Data extra) {
         Campaign23Data.TaxPolicy policy = extra.taxPolicy(settlement.getId());
         String modifierId = "tax_policy";
-        if (policy == Campaign23Data.TaxPolicy.NORMAL) {
+        if (policy == Campaign23Data.TaxPolicy.NORMAL || settlement.getCivilianPopulation() <= 0) {
             extra.removeModifier(settlement.getId(), modifierId);
             return;
         }

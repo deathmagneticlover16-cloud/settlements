@@ -71,7 +71,7 @@ public final class CampaignToastSender {
                                                  String title, String body, Set<UUID> notified) {
         if (server == null || settlement == null) return;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (PrototypeManager.canManage(player, settlement) && notified.add(player.getUUID())) send(player, title, body);
+            if (CampaignManager.canRepresentSettlement(player, settlement) && notified.add(player.getUUID())) send(player, title, body);
         }
     }
 

@@ -701,6 +701,13 @@ public final class PrototypeManager {
             openCharacterSheet(player, returnToMain);
             return;
         }
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        if (!player.createCommandSourceStack().hasPermission(2)
+                && (extra.settlementProtected(settlement.getId()) || extra.factionProtected(settlement.getFactionTeam()))) {
+            player.sendSystemMessage(Component.literal("Protected admin settlements cannot be selected as a normal player's Main Seat."));
+            openCharacterSheet(player, returnToMain);
+            return;
+        }
         character.setPrimarySeat(settlement.getId());
         data.setDirty();
         player.sendSystemMessage(Component.literal(settlement.getName() + " is now your Main Seat."));

@@ -100,11 +100,11 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     private void treasuryButtons() {
         if (snapshot.canManage()) {
             Button low = addRenderableWidget(Button.builder(Component.literal("Low"), button -> send(PrototypeManager.SettlementAction.SET_TAX_POLICY, "LOW"))
-                    .bounds(left + 20, top + 218, 100, 18).build());
+                    .bounds(left + 20, top + 222, 100, 18).build());
             Button normal = addRenderableWidget(Button.builder(Component.literal("Normal"), button -> send(PrototypeManager.SettlementAction.SET_TAX_POLICY, "NORMAL"))
-                    .bounds(left + 126, top + 218, 100, 18).build());
+                    .bounds(left + 126, top + 222, 100, 18).build());
             Button high = addRenderableWidget(Button.builder(Component.literal("High"), button -> send(PrototypeManager.SettlementAction.SET_TAX_POLICY, "HIGH"))
-                    .bounds(left + 232, top + 218, 100, 18).build());
+                    .bounds(left + 232, top + 222, 100, 18).build());
             low.active = !"Low".equalsIgnoreCase(snapshot.taxPolicy());
             normal.active = !"Normal".equalsIgnoreCase(snapshot.taxPolicy());
             high.active = !"High".equalsIgnoreCase(snapshot.taxPolicy());
@@ -375,7 +375,7 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
         String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " wealth/day · Last +" + snapshot.lastTaxIncome()
                 + " · Stability " + signed(snapshot.taxStabilityPerDay()) + "/day · Prosperity " + signed(snapshot.taxProsperityModifier());
         graphics.drawString(font, fit(snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, 0xFFAAAAAA, false);
-        renderTaxBar(graphics, left + 20, top + 211, 312, snapshot.taxPolicy());
+        renderTaxBar(graphics, left + 20, top + 216, 312, snapshot.taxPolicy());
 
         graphics.drawString(font, "RECENT CONTRIBUTIONS", left + 356, top + 110, 0xFFE7D8B0, false);
         for (int i = 0; i < Math.min(9, snapshot.contributions().size()); i++) {

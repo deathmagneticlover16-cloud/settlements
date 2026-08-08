@@ -52,9 +52,27 @@ ADMIN / RECOVERY / DEBUG
 - Existing inspect/recalculate/modifier/time/levy/mercenary/devotion/war-score tools remain available.
 
 NETWORK
-- Campaign protocol is now 27. Every client and server must use the same 2.4.0 build.
+- Campaign protocol is now 28. Every client and server must use the same 2.4.0 build.
 
 INTENTIONAL BOUNDARIES
 - Children/heirs/fertility remain out of scope.
 - Tactical freecam, formations, testudo/phalanx, Total War unit overview and commander-combat systems remain in the separate Recruits addon line.
 - Direct Independence War declaration remains reserved for a future sovereignty/vassal system; 2.4 retains independent diplomacy and Recognize Independence peace terms.
+
+RELEASE-HARDENING PASS (post initial 2.4 test release)
+- Fixed the operator-authority diplomacy bug: OP permission no longer counts as settlement political ownership for declaration/peace-side resolution.
+- Removed the remaining implicit "OP = faction leader" behavior from ordinary faction and diplomacy screens/actions; administrator powers now stay in explicit admin/recovery tooling.
+- Fixed Settlement War source/target lists when the viewer is an operator.
+- Replaced the cryptic false "connected to both sides" peace failure with real role-based side detection and a clearer message for genuine conflicting settlement roles.
+- Protected admin factions/settlements are no longer shown as ordinary diplomacy targets even to operators.
+- Protected admin factions reject ordinary faction-management actions from stale/non-admin members; leaving remains possible.
+- Internal Settlement Wars between settlements of the same parent faction remain local; the shared parent cannot Join War, Ignore intervention, or use parent-faction war aid to ambiguously choose both sides.
+- Implemented settlement taxation: Low/Normal/High policy, persisted daily collection, population/prosperity-scaled income, Stability/Prosperity consequences, Treasury UI and Effects integration.
+- Added Character Sheet Reliability display using the character's current faction Dynamic Reliability.
+- Added GUI Main Seat selection for personally owned settlements with server-side ownership validation.
+- Main Seat is cleared automatically if ownership of that settlement is transferred away.
+- Registered civilian villagers are now periodically confined to any of their settlement's linked Recruits claims; residents that wander outside all linked claims are returned to the nearest linked claim.
+- Removed Dynasty from character creation, persistence, packets and UI. Main House remains editable.
+- Legacy Fertile/Dynasty wording is no longer presented as an active future inheritance feature.
+- Admin faction creation now requires explicit Team Color and Recruits Unit Color instead of silently creating white/default-color factions.
+- Campaign protocol raised to 28 for the new snapshot/character packet formats and Main Seat packet.

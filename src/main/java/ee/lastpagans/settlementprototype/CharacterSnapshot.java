@@ -35,7 +35,9 @@ public record CharacterSnapshot(
         }
 
         CampaignData campaign = CampaignData.get(player.serverLevel());
-        int devotion = Campaign23Data.get(player.serverLevel()).devotion(player.getUUID());
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        boolean administrator = player.createCommandSourceStack().hasPermission(2);
+        int devotion = extra.devotion(player.getUUID());
         String devotionTier = devotion >= 90 ? "Exalted" : devotion >= 70 ? "Devout" : devotion >= 45 ? "Faithful" : devotion >= 20 ? "Observant" : "Uncommitted";
         String factionId = player.getTeam() == null ? "" : player.getTeam().getName();
         String factionName = "Independent";
@@ -57,7 +59,10 @@ public record CharacterSnapshot(
 
         String seatName = "";
         PrototypeData.SettlementRecord seat = data.getSettlement(character.getPrimarySeat());
-        if (seat != null && player.getUUID().equals(seat.getOwnerId())) seatName = seat.getName();
+        if (seat != null && player.getUUID().equals(seat.getOwnerId())
+                && (administrator || (!extra.settlementProtected(seat.getId()) && !extra.factionProtected(seat.getFactionTeam())))) {
+            seatName = seat.getName();
+        }
 
         String titleLine = character.getTitle();
         if (!seatName.isBlank()) titleLine += " of " + seatName;
@@ -76,6 +81,8 @@ public record CharacterSnapshot(
         }
 
         List<HoldingEntry> holdings = data.getOwnedSettlements(player.getUUID()).stream()
+                .filter(settlement -> administrator || (!extra.settlementProtected(settlement.getId())
+                        && !extra.factionProtected(settlement.getFactionTeam())))
                 .map(settlement -> new HoldingEntry(settlement.getId(), settlement.getName(), settlement.getRank().displayName()))
                 .toList();
 

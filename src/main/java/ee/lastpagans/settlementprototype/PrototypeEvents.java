@@ -1,6 +1,7 @@
 package ee.lastpagans.settlementprototype;
 
 import com.talhanation.recruits.ClaimEvent;
+import com.talhanation.recruits.ClaimEvents;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsClaim;
@@ -9,6 +10,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.Villager;
@@ -28,6 +31,7 @@ import java.util.UUID;
 public final class PrototypeEvents {
     private static final Map<UUID, Integer> PENDING_CHARACTER_SCREENS = new HashMap<>();
     private static int checkerTicks;
+    private static int residentBoundaryTicks;
 
     private PrototypeEvents() {
     }
@@ -221,6 +225,12 @@ public final class PrototypeEvents {
             }
         }
 
+        residentBoundaryTicks++;
+        if (residentBoundaryTicks >= SettlementConfig.RESIDENT_BOUNDARY_CHECK_TICKS.get()) {
+            residentBoundaryTicks = 0;
+            enforceResidentClaimBoundaries(server);
+        }
+
         checkerTicks++;
         if (checkerTicks < 600) return;
         checkerTicks = 0;
@@ -236,6 +246,61 @@ public final class PrototypeEvents {
         CampaignManager.broadcastMapMarkers(server);
     }
 
+    /**
+     * Registered civilian residents are territorial settlement population, not free-roaming global
+     * villagers. Every five seconds, loaded residents are checked against every linked Recruits
+     * claim belonging to their settlement. A resident outside all linked claims is returned to the
+     * nearest linked claim chunk. Settlements without a usable linked claim are left untouched.
+     */
+    private static void enforceResidentClaimBoundaries(MinecraftServer server) {
+        if (server == null || ClaimEvents.recruitsClaimManager == null) return;
+        PrototypeData data = PrototypeData.get(server.overworld());
+        for (PrototypeData.SettlementRecord settlement : data.getSettlements()) {
+            if (settlement.getClaimLinks().isEmpty() || settlement.getVillagerCount() == 0) continue;
+            for (UUID villagerId : settlement.getVillagerIds()) {
+                Villager villager = findLoadedResident(server, villagerId);
+                if (villager == null || !villager.isAlive() || !(villager.level() instanceof ServerLevel level)) continue;
+
+                String dimension = level.dimension().location().toString();
+                ChunkPos current = new ChunkPos(villager.blockPosition());
+                ChunkPos nearest = null;
+                long nearestDistance = Long.MAX_VALUE;
+                boolean inside = false;
+
+                for (PrototypeData.ClaimLink link : settlement.getClaimLinks()) {
+                    if (!dimension.equals(link.dimension()) || link.id() == null) continue;
+                    RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(link.id());
+                    if (claim == null) continue;
+                    if (claim.containsChunk(current)) { inside = true; break; }
+                    for (ChunkPos chunk : claim.getClaimedChunks()) {
+                        long dx = (long) chunk.x - current.x;
+                        long dz = (long) chunk.z - current.z;
+                        long distance = dx * dx + dz * dz;
+                        if (distance < nearestDistance) {
+                            nearestDistance = distance;
+                            nearest = chunk;
+                        }
+                    }
+                }
+
+                if (inside || nearest == null) continue;
+                int x = nearest.x * 16 + 8;
+                int z = nearest.z * 16 + 8;
+                int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+                villager.getNavigation().stop();
+                villager.teleportTo(x + 0.5D, y, z + 0.5D);
+            }
+        }
+    }
+
+    private static Villager findLoadedResident(MinecraftServer server, UUID villagerId) {
+        for (ServerLevel level : server.getAllLevels()) {
+            Entity entity = level.getEntity(villagerId);
+            if (entity instanceof Villager villager) return villager;
+        }
+        return null;
+    }
+
     private static String rankedName(Player player, ServerLevel level, PrototypeData.CharacterRecord character) {
         if (player.getTeam() == null) return character.getDisplayName();
         String factionId = player.getTeam().getName();
@@ -248,6 +313,7 @@ public final class PrototypeEvents {
 
     public static void onServerStopped(ServerStoppedEvent event) {
         checkerTicks = 0;
+        residentBoundaryTicks = 0;
         PENDING_CHARACTER_SCREENS.clear();
     }
 }

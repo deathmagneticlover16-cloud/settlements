@@ -33,6 +33,7 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue SILVER_DONATION_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_WEALTH;
     public static final ForgeConfigSpec.IntValue TAX_MIN_COLLECTION_EFFICIENCY_PERCENT;
+    public static final ForgeConfigSpec.IntValue RESIDENT_BOUNDARY_CHECK_TICKS;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -106,6 +107,11 @@ public final class SettlementConfig {
                 .defineInRange("populationPerWealth", 10, 1, 1000);
         TAX_MIN_COLLECTION_EFFICIENCY_PERCENT = builder.comment("Minimum tax collection efficiency at 0 Prosperity. Efficiency scales linearly to 100% at 100 Prosperity.")
                 .defineInRange("minimumCollectionEfficiencyPercent", 50, 0, 100);
+        builder.pop();
+
+        builder.push("residents");
+        RESIDENT_BOUNDARY_CHECK_TICKS = builder.comment("How often loaded registered villagers are checked against their settlement's linked Recruits claims. 100 ticks = 5 seconds.")
+                .defineInRange("boundaryCheckIntervalTicks", 100, 20, 1200);
         builder.pop();
         SPEC = builder.build();
     }

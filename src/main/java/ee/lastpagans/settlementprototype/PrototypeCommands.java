@@ -827,6 +827,11 @@ public final class PrototypeCommands {
             source.sendFailure(Component.literal("You may only choose a settlement you own."));
             return 0;
         }
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        if (!source.hasPermission(2) && (extra.settlementProtected(settlement.getId()) || extra.factionProtected(settlement.getFactionTeam()))) {
+            source.sendFailure(Component.literal("Protected admin settlements cannot be selected as a normal player's Main Seat."));
+            return 0;
+        }
         character.setPrimarySeat(settlement.getId());
         data.setDirty();
         source.sendSuccess(() -> Component.literal(settlement.getName() + " is now your primary seat."), false);
