@@ -98,17 +98,28 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     }
 
     private void treasuryButtons() {
+        if (snapshot.canManage()) {
+            Button low = addRenderableWidget(Button.builder(Component.literal("Low"), button -> send(PrototypeManager.SettlementAction.SET_TAX_POLICY, "LOW"))
+                    .bounds(left + 20, top + 218, 100, 18).build());
+            Button normal = addRenderableWidget(Button.builder(Component.literal("Normal"), button -> send(PrototypeManager.SettlementAction.SET_TAX_POLICY, "NORMAL"))
+                    .bounds(left + 126, top + 218, 100, 18).build());
+            Button high = addRenderableWidget(Button.builder(Component.literal("High"), button -> send(PrototypeManager.SettlementAction.SET_TAX_POLICY, "HIGH"))
+                    .bounds(left + 232, top + 218, 100, 18).build());
+            low.active = !"Low".equalsIgnoreCase(snapshot.taxPolicy());
+            normal.active = !"Normal".equalsIgnoreCase(snapshot.taxPolicy());
+            high.active = !"High".equalsIgnoreCase(snapshot.taxPolicy());
+        }
         if (snapshot.canContribute()) {
             addRenderableWidget(Button.builder(Component.literal("Deposit Held Food"), button -> send(PrototypeManager.SettlementAction.DEPOSIT_FOOD))
-                    .bounds(left + 20, top + 232, 154, 20).build());
+                    .bounds(left + 20, top + 242, 154, 20).build());
             addRenderableWidget(Button.builder(Component.literal("Deposit Held Silver"), button -> send(PrototypeManager.SettlementAction.DEPOSIT_SILVER))
-                    .bounds(left + 180, top + 232, 154, 20).build());
+                    .bounds(left + 180, top + 242, 154, 20).build());
         }
         if (snapshot.canManage()) {
             addRenderableWidget(Button.builder(Component.literal("Withdraw 1 Silver"), button -> send(PrototypeManager.SettlementAction.WITHDRAW_SILVER_ONE))
-                    .bounds(left + 20, top + 260, 154, 20).build());
+                    .bounds(left + 20, top + 266, 154, 20).build());
             addRenderableWidget(Button.builder(Component.literal("Withdraw 10 Silver"), button -> send(PrototypeManager.SettlementAction.WITHDRAW_SILVER_TEN))
-                    .bounds(left + 180, top + 260, 154, 20).build());
+                    .bounds(left + 180, top + 266, 154, 20).build());
         }
     }
 
@@ -357,11 +368,26 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
         if (isLimitedView()) { renderPrivateTabNotice(graphics, "Treasury"); return; }
         stat(graphics, "Food stockpile", snapshot.food(), 22, 110);
         stat(graphics, "Settlement wealth", snapshot.wealth(), 22, 132);
-        stat(graphics, "Mercenary wage cycle", snapshot.mercenaryWages(), 22, 154);
-        graphics.drawString(font, "RECENT CONTRIBUTIONS", left + 274, top + 110, 0xFFE7D8B0, false);
-        for (int i = 0; i < Math.min(8, snapshot.contributions().size()); i++) {
-            graphics.drawString(font, fit(snapshot.contributions().get(i), 238), left + 274, top + 130 + i * 15, 0xFFBBBBBB, false);
+        stat(graphics, "Prosperity", snapshot.prosperity() + "/100", 22, 154);
+        stat(graphics, "Mercenary wage cycle", snapshot.mercenaryWages(), 22, 176);
+
+        graphics.drawString(font, "TAXATION", left + 22, top + 194, 0xFFE7D8B0, false);
+        String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " wealth/day · Last +" + snapshot.lastTaxIncome()
+                + " · Stability " + signed(snapshot.taxStabilityPerDay()) + "/day · Prosperity " + signed(snapshot.taxProsperityModifier());
+        graphics.drawString(font, fit(snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, 0xFFAAAAAA, false);
+        renderTaxBar(graphics, left + 20, top + 211, 312, snapshot.taxPolicy());
+
+        graphics.drawString(font, "RECENT CONTRIBUTIONS", left + 356, top + 110, 0xFFE7D8B0, false);
+        for (int i = 0; i < Math.min(9, snapshot.contributions().size()); i++) {
+            graphics.drawString(font, fit(snapshot.contributions().get(i), 164), left + 356, top + 130 + i * 15, 0xFFBBBBBB, false);
         }
+    }
+
+    private void renderTaxBar(GuiGraphics graphics, int x, int y, int width, String policy) {
+        graphics.fill(x, y, x + width, y + 5, 0xFF111111);
+        graphics.fill(x + 1, y + 1, x + width - 1, y + 4, 0xFF6E5A38);
+        int position = "Low".equalsIgnoreCase(policy) ? x + 2 : "High".equalsIgnoreCase(policy) ? x + width - 3 : x + width / 2;
+        graphics.fill(position - 2, y - 2, position + 3, y + 7, 0xFFFFD27A);
     }
 
     private void renderEffects(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -478,6 +504,8 @@ public final class PrototypeScreen extends ScaledCampaignScreen {
     private void stat(GuiGraphics graphics, String label, Object value, int x, int y) {
         graphics.drawString(font, label + ": " + value, left + x, top + y, 0xFFFFFFFF, false);
     }
+
+    private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
 
     private void status(GuiGraphics graphics, String label, boolean set, int x, int y) {
         graphics.drawString(font, label + ": " + (set ? "set" : "missing"), left + x, top + y,

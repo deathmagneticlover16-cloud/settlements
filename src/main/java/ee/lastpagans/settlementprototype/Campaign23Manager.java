@@ -98,6 +98,8 @@ public final class Campaign23Manager {
             extra.expireModifiers(settlement.getId());
             updateReligiousUnrest(server, settlement, extra, settlements);
             updateRulerDevotionBenefit(settlement, extra, settlements);
+            refreshTaxPolicyModifier(settlement, extra);
+            processTaxes(settlement, extra, day);
             int prosperity = recalculateProsperity(settlement, extra, day);
             applyDailyModifierEffects(settlement, extra, day);
             updateSettlementTier(server.overworld(), settlement, prosperity, extra);
@@ -123,10 +125,62 @@ public final class Campaign23Manager {
         extra.expireModifiers(settlement.getId());
         updateReligiousUnrest(server, settlement, extra, settlements);
         updateRulerDevotionBenefit(settlement, extra, settlements);
+        refreshTaxPolicyModifier(settlement, extra);
+        processTaxes(settlement, extra, simulatedDay);
         int prosperity = recalculateProsperity(settlement, extra, simulatedDay);
         applyDailyModifierEffects(settlement, extra, simulatedDay);
         updateSettlementTier(server.overworld(), settlement, prosperity, extra);
         updateLevyServicePenaltyForSettlement(server, extra, settlement);
+    }
+
+    public static void refreshTaxPolicyModifier(PrototypeData.SettlementRecord settlement, Campaign23Data extra) {
+        Campaign23Data.TaxPolicy policy = extra.taxPolicy(settlement.getId());
+        String modifierId = "tax_policy";
+        if (policy == Campaign23Data.TaxPolicy.NORMAL) {
+            extra.removeModifier(settlement.getId(), modifierId);
+            return;
+        }
+        String tone = policy == Campaign23Data.TaxPolicy.LOW ? "POSITIVE" : "NEGATIVE";
+        String icon = policy == Campaign23Data.TaxPolicy.LOW ? "minecraft:emerald" : "minecraft:gold_ingot";
+        String detail = policy == Campaign23Data.TaxPolicy.LOW
+                ? "Low taxes leave more wealth in private hands, improving stability and local economic activity at the cost of treasury income."
+                : "High taxes increase treasury income but strain household wealth, reducing stability and prosperity.";
+        extra.addModifier(settlement.getId(), new Campaign23Data.ModifierRecord(
+                modifierId, policy.displayName() + " Taxation", icon, tone, "Tax policy", detail,
+                policy.stabilityPerDay(), policy.prosperityModifier(), 0, 0L));
+    }
+
+    private static void processTaxes(PrototypeData.SettlementRecord settlement, Campaign23Data extra, long day) {
+        if (!extra.beginTaxDay(settlement.getId(), day)) return;
+        int population = Math.max(0, settlement.getCivilianPopulation());
+        if (population <= 0) {
+            extra.setLastTaxIncome(settlement.getId(), 0);
+            return;
+        }
+        Campaign23Data.TaxPolicy policy = extra.taxPolicy(settlement.getId());
+        int populationPerWealth = Math.max(1, SettlementConfig.TAX_POPULATION_PER_WEALTH.get());
+        int base = Math.max(1, (population + populationPerWealth - 1) / populationPerWealth);
+        int prosperity = extra.prosperity(settlement.getId());
+        int minimumEfficiency = SettlementConfig.TAX_MIN_COLLECTION_EFFICIENCY_PERCENT.get();
+        int efficiency = minimumEfficiency + (int)Math.round((100 - minimumEfficiency) * (prosperity / 100.0D));
+        int income = (int)Math.round(base * (policy.ratePercent() / 100.0D) * (efficiency / 100.0D));
+        income = Math.max(0, income);
+        if (income > 0) {
+            settlement.addWealth(income, "");
+            extra.recordWealthDeposit(settlement.getId(), income, day);
+        }
+        extra.setLastTaxIncome(settlement.getId(), income);
+    }
+
+    public static int projectedTaxIncome(PrototypeData.SettlementRecord settlement, Campaign23Data extra) {
+        if (settlement == null || extra == null || settlement.getCivilianPopulation() <= 0) return 0;
+        Campaign23Data.TaxPolicy policy = extra.taxPolicy(settlement.getId());
+        int populationPerWealth = Math.max(1, SettlementConfig.TAX_POPULATION_PER_WEALTH.get());
+        int base = Math.max(1, (settlement.getCivilianPopulation() + populationPerWealth - 1) / populationPerWealth);
+        int prosperity = extra.prosperity(settlement.getId());
+        int minimumEfficiency = SettlementConfig.TAX_MIN_COLLECTION_EFFICIENCY_PERCENT.get();
+        int efficiency = minimumEfficiency + (int)Math.round((100 - minimumEfficiency) * (prosperity / 100.0D));
+        return Math.max(0, (int)Math.round(base * (policy.ratePercent() / 100.0D) * (efficiency / 100.0D)));
     }
 
     private static void updateRulerDevotionBenefit(PrototypeData.SettlementRecord settlement, Campaign23Data extra, PrototypeData settlements) {

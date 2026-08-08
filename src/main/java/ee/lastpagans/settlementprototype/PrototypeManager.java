@@ -192,6 +192,7 @@ public final class PrototypeManager {
             case DEPOSIT_SILVER -> requireContributor(player, settlement, () -> depositSilver(player, settlement));
             case WITHDRAW_SILVER_ONE -> requireManager(player, settlement, () -> withdrawSilver(player, settlement, 1));
             case WITHDRAW_SILVER_TEN -> requireManager(player, settlement, () -> withdrawSilver(player, settlement, 10));
+            case SET_TAX_POLICY -> requireManager(player, settlement, () -> setTaxPolicy(player, settlement, argument));
             case CLAIM_CONTRACT -> requireContributor(player, settlement, () -> claimSettlerContract(player, settlement));
             case SET_CUSTOM_BANNER -> requireManager(player, settlement, () -> setSettlementBanner(player, settlement));
             case USE_FACTION_BANNER -> requireManager(player, settlement, () -> useFactionBanner(player, settlement));
@@ -578,6 +579,23 @@ public final class PrototypeManager {
         }
         return ModItems.SILVER_COIN.get();
     }
+
+    private static String setTaxPolicy(ServerPlayer player, PrototypeData.SettlementRecord settlement, String rawPolicy) {
+        Campaign23Data.TaxPolicy policy;
+        try { policy = Campaign23Data.TaxPolicy.valueOf((rawPolicy == null ? "" : rawPolicy.trim()).toUpperCase(java.util.Locale.ROOT)); }
+        catch (IllegalArgumentException exception) { return "Unknown tax policy. Choose Low, Normal, or High."; }
+        Campaign23Data extra = Campaign23Data.get(player.serverLevel());
+        Campaign23Data.TaxPolicy previous = extra.taxPolicy(settlement.getId());
+        if (previous == policy) return policy.displayName() + " taxation is already active.";
+        extra.setTaxPolicy(settlement.getId(), policy);
+        Campaign23Manager.refreshTaxPolicyModifier(settlement, extra);
+        settlement.addChronicle("Tax policy changed from " + previous.displayName() + " to " + policy.displayName() + ".");
+        int projected = Campaign23Manager.projectedTaxIncome(settlement, extra);
+        return "Taxation set to " + policy.displayName() + ". Projected revenue: " + projected + " wealth/day; stability "
+                + signed(policy.stabilityPerDay()) + "/day; prosperity " + signed(policy.prosperityModifier()) + ".";
+    }
+
+    private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
 
     private static String claimSettlerContract(ServerPlayer player, PrototypeData.SettlementRecord settlement) {
         if (!settlement.claimContract()) return "No Settler Contract is currently available.";
@@ -1109,7 +1127,7 @@ public final class PrototypeManager {
     public enum SettlementAction {
         RECRUIT_ONE, RECRUIT_FIVE, RECRUIT_TEN, RECRUIT_TWENTY_FIVE, RECRUIT_UNIT,
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_SILVER,
-        WITHDRAW_SILVER_ONE, WITHDRAW_SILVER_TEN, CLAIM_CONTRACT,
+        WITHDRAW_SILVER_ONE, WITHDRAW_SILVER_TEN, SET_TAX_POLICY, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
         RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
         SET_TOWN_SQUARE, SET_BARRACKS, HOUSING_POS1, HOUSING_POS2, MUSTER_POS1, MUSTER_POS2,

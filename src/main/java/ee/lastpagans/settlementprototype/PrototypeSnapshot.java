@@ -22,7 +22,8 @@ public record PrototypeSnapshot(
         String factionId, String factionName, CompoundTag factionBanner,
         String bannerMode, CompoundTag settlementBannerStack, String rosterName, List<UnitTemplateEntry> unitTemplates,
         int villagerCount, double populationMultiplier, int civilianPopulation, int militaryPopulation, int totalPopulation,
-        int housingCapacity, int freeHousing, int stability, int food, int wealth,
+        int housingCapacity, int freeHousing, int stability, int food, int wealth, int prosperity,
+        String taxPolicy, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay, int taxProsperityModifier,
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
         int professionals, int levymen, int pendingContracts,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet,
@@ -67,7 +68,12 @@ public record PrototypeSnapshot(
                 factionId, factionName, factionBanner, visual.getBannerMode().name(), settlementBanner,
                 limitedView ? "Hidden" : campaign.assignedRosterName(settlement), limitedView ? List.of() : templates,
                 limitedView ? 0 : settlement.getVillagerCount(), limitedView ? 0.0D : settlement.getPopulationMultiplier(), limitedView ? 0 : settlement.getCivilianPopulation(), limitedView ? 0 : settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
-                limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : settlement.getWealth(),
+                limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : settlement.getWealth(), limitedView ? 0 : Campaign23Data.get(player.serverLevel()).prosperity(settlement.getId()),
+                limitedView ? "Hidden" : Campaign23Data.get(player.serverLevel()).taxPolicy(settlement.getId()).displayName(),
+                limitedView ? 0 : Campaign23Manager.projectedTaxIncome(settlement, Campaign23Data.get(player.serverLevel())),
+                limitedView ? 0 : Campaign23Data.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
+                limitedView ? 0 : Campaign23Data.get(player.serverLevel()).taxPolicy(settlement.getId()).stabilityPerDay(),
+                limitedView ? 0 : Campaign23Data.get(player.serverLevel()).taxPolicy(settlement.getId()).prosperityModifier(),
                 limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : Campaign23Data.get(player.serverLevel()).foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
                 limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(),
                 !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null,
@@ -304,7 +310,8 @@ public record PrototypeSnapshot(
         buffer.writeUtf(bannerMode, 16); buffer.writeNbt(settlementBannerStack); buffer.writeUtf(rosterName, 64);
         writeList(buffer, unitTemplates, UnitTemplateEntry::encode);
         buffer.writeVarInt(villagerCount); buffer.writeDouble(populationMultiplier); buffer.writeVarInt(civilianPopulation); buffer.writeVarInt(militaryPopulation); buffer.writeVarInt(totalPopulation);
-        buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(wealth);
+        buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(wealth); buffer.writeVarInt(prosperity);
+        buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay); buffer.writeInt(taxProsperityModifier);
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
         buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet);
@@ -320,7 +327,9 @@ public record PrototypeSnapshot(
                 buffer.readUtf(64), buffer.readUtf(64), safe(buffer.readNbt()), buffer.readUtf(16), safe(buffer.readNbt()), buffer.readUtf(64),
                 readList(buffer, UnitTemplateEntry::decode, 16),
                 buffer.readVarInt(), buffer.readDouble(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+                buffer.readUtf(16), buffer.readVarInt(), buffer.readVarInt(), buffer.readInt(), buffer.readInt(),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),

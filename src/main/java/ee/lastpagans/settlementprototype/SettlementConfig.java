@@ -31,6 +31,8 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue LATER_SPOUSE_EFFECT_PERCENT;
     public static final ForgeConfigSpec.IntValue PRAYER_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue SILVER_DONATION_DEVOTION_GAIN;
+    public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_WEALTH;
+    public static final ForgeConfigSpec.IntValue TAX_MIN_COLLECTION_EFFICIENCY_PERCENT;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -97,6 +99,13 @@ public final class SettlementConfig {
                 .defineInRange("prayerDevotionGain", 3, 0, 100);
         SILVER_DONATION_DEVOTION_GAIN = builder.comment("Devotion gained when donating one tagged silver currency item to the character's faith.")
                 .defineInRange("silverDonationDevotionGain", 2, 0, 100);
+        builder.pop();
+
+        builder.push("taxation");
+        TAX_POPULATION_PER_WEALTH = builder.comment("Civilian population represented by one point of base daily tax revenue before policy and prosperity scaling.")
+                .defineInRange("populationPerWealth", 10, 1, 1000);
+        TAX_MIN_COLLECTION_EFFICIENCY_PERCENT = builder.comment("Minimum tax collection efficiency at 0 Prosperity. Efficiency scales linearly to 100% at 100 Prosperity.")
+                .defineInRange("minimumCollectionEfficiencyPercent", 50, 0, 100);
         builder.pop();
         SPEC = builder.build();
     }

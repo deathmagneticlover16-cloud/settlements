@@ -32,6 +32,10 @@ public final class Campaign23Data extends SavedData {
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<UUID, Integer> divorceCount = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
+    /** Settlement tax policy and daily collection history. Defaults to NORMAL for old saves. */
+    private final Map<String, Integer> taxPolicies = new HashMap<>();
+    private final Map<String, Long> lastTaxDay = new HashMap<>();
+    private final Map<String, Integer> lastTaxIncome = new HashMap<>();
     /** Capped settlement memory of repeated real levy service. It grants only modest starting XP. */
     private final Map<String, Integer> levyTradition = new HashMap<>();
     /** Rolling settlement wealth deposits used to calculate Prosperity from actual economic activity. */
@@ -76,6 +80,9 @@ public final class Campaign23Data extends SavedData {
         readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
         readUuidIntMap(tag, "DivorceCount", data.divorceCount);
         readStringIntMap(tag, "Prosperity", data.prosperity);
+        readStringIntMap(tag, "TaxPolicies", data.taxPolicies);
+        readStringLongMap(tag, "LastTaxDay", data.lastTaxDay);
+        readStringIntMap(tag, "LastTaxIncome", data.lastTaxIncome);
         readStringIntMap(tag, "LevyTradition", data.levyTradition);
         for (Tag raw : tag.getList("WealthDeposits", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
@@ -194,6 +201,9 @@ public final class Campaign23Data extends SavedData {
         writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
         writeUuidIntMap(tag, "DivorceCount", divorceCount);
         writeStringIntMap(tag, "Prosperity", prosperity);
+        writeStringIntMap(tag, "TaxPolicies", taxPolicies);
+        writeStringLongMap(tag, "LastTaxDay", lastTaxDay);
+        writeStringIntMap(tag, "LastTaxIncome", lastTaxIncome);
         writeStringIntMap(tag, "LevyTradition", levyTradition);
         ListTag wealthDepositTag = new ListTag();
         wealthDeposits.forEach((settlement, samples) -> {
@@ -268,6 +278,32 @@ public final class Campaign23Data extends SavedData {
 
     public int prosperity(String settlement) { return prosperity.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setProsperity(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
+
+    public TaxPolicy taxPolicy(String settlement) {
+        String id = PrototypeData.normalizeId(settlement);
+        return TaxPolicy.fromOrdinal(taxPolicies.getOrDefault(id, TaxPolicy.NORMAL.ordinal()));
+    }
+    public void setTaxPolicy(String settlement, TaxPolicy policy) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (id.isBlank()) return;
+        TaxPolicy safe = policy == null ? TaxPolicy.NORMAL : policy;
+        if (safe == TaxPolicy.NORMAL) taxPolicies.remove(id); else taxPolicies.put(id, safe.ordinal());
+        setDirty();
+    }
+    public boolean beginTaxDay(String settlement, long day) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (id.isBlank() || lastTaxDay.getOrDefault(id, Long.MIN_VALUE) == day) return false;
+        lastTaxDay.put(id, day);
+        setDirty();
+        return true;
+    }
+    public int lastTaxIncome(String settlement) { return lastTaxIncome.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
+    public void setLastTaxIncome(String settlement, int income) {
+        String id = PrototypeData.normalizeId(settlement);
+        if (id.isBlank()) return;
+        lastTaxIncome.put(id, Math.max(0, income));
+        setDirty();
+    }
     public int levyTradition(String settlement) { return levyTradition.getOrDefault(PrototypeData.normalizeId(settlement), 0); }
     public void setLevyTradition(String settlement, int value) { String id = PrototypeData.normalizeId(settlement); if (id.isBlank()) return; levyTradition.put(id, clamp(value, 0, 50)); setDirty(); }
     public int changeLevyTradition(String settlement, int delta) { setLevyTradition(settlement, levyTradition(settlement) + delta); return levyTradition(settlement); }
@@ -368,6 +404,9 @@ public final class Campaign23Data extends SavedData {
         String id = PrototypeData.normalizeId(settlement);
         if (id.isBlank()) return;
         prosperity.remove(id);
+        taxPolicies.remove(id);
+        lastTaxDay.remove(id);
+        lastTaxIncome.remove(id);
         levyTradition.remove(id);
         wealthDeposits.remove(id);
         foreignManpower.remove(id);
@@ -544,6 +583,38 @@ public final class Campaign23Data extends SavedData {
         public WealthDepositRecord { amount = Math.max(0, amount); }
         private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putLong("Day", day); tag.putInt("Amount", amount); return tag; }
         private static WealthDepositRecord fromNBT(CompoundTag tag) { return new WealthDepositRecord(tag.getLong("Day"), tag.getInt("Amount")); }
+    }
+
+    public enum TaxPolicy {
+        LOW("Low", 50, 1, 3),
+        NORMAL("Normal", 100, 0, 0),
+        HIGH("High", 150, -2, -5);
+
+        private final String displayName;
+        private final int ratePercent;
+        private final int stabilityPerDay;
+        private final int prosperityModifier;
+
+        TaxPolicy(String displayName, int ratePercent, int stabilityPerDay, int prosperityModifier) {
+            this.displayName = displayName;
+            this.ratePercent = ratePercent;
+            this.stabilityPerDay = stabilityPerDay;
+            this.prosperityModifier = prosperityModifier;
+        }
+
+        public String displayName() { return displayName; }
+        public int ratePercent() { return ratePercent; }
+        public int stabilityPerDay() { return stabilityPerDay; }
+        public int prosperityModifier() { return prosperityModifier; }
+        public static TaxPolicy parse(String raw) {
+            if (raw == null) return NORMAL;
+            try { return valueOf(raw.trim().toUpperCase(Locale.ROOT)); }
+            catch (IllegalArgumentException ignored) { return NORMAL; }
+        }
+        public static TaxPolicy fromOrdinal(int ordinal) {
+            TaxPolicy[] values = values();
+            return ordinal < 0 || ordinal >= values.length ? NORMAL : values[ordinal];
+        }
     }
 
     public record RegionRecord(String dimension, BlockPos min, BlockPos max) {
