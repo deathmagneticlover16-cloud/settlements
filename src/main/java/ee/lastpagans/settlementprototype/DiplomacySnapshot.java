@@ -30,7 +30,6 @@ public record DiplomacySnapshot(
         String ownName = CampaignManager.factionName(own);
         CampaignData campaign = CampaignData.get(player.serverLevel());
         Campaign23Data campaign23 = Campaign23Data.get(player.serverLevel());
-        boolean adminViewer = player.createCommandSourceStack().hasPermission(2);
         RecruitsFaction ownFaction = own.isBlank() || FactionEvents.recruitsFactionManager == null ? null
                 : FactionEvents.recruitsFactionManager.getFactionByStringID(own);
         boolean leader = ownFaction != null && player.getUUID().equals(ownFaction.getTeamLeaderUUID());
@@ -42,9 +41,9 @@ public record DiplomacySnapshot(
         if (FactionEvents.recruitsFactionManager != null) {
             for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
                 if (faction == null || faction.getStringID() == null || faction.getStringID().equals(own)) continue;
-                // Protected admin polities are intentionally absent from ordinary player diplomacy. Operators can
-                // still see them for diagnostics, but every mutating action remains server-authoritative.
-                if (!adminViewer && campaign23.factionProtected(faction.getStringID())) continue;
+                // Protected admin polities belong in admin/recovery tools, never in ordinary diplomacy.
+                // This also avoids showing operators buttons that the server will correctly reject.
+                if (campaign23.factionProtected(faction.getStringID())) continue;
                 CampaignData.DiplomacyRecord relation = own.isBlank() ? null : campaign.relation(own, faction.getStringID());
                 PrototypeData.CharacterRecord ownCharacter = factionLeaderCharacter(player, ownFaction);
                 PrototypeData.CharacterRecord otherCharacter = factionLeaderCharacter(player, faction);
@@ -65,8 +64,8 @@ public record DiplomacySnapshot(
 
         PrototypeData settlementsData = PrototypeData.get(player.serverLevel());
         List<SettlementTarget> settlements = settlementsData.getSettlements().stream()
-                .filter(value -> adminViewer || (!campaign23.settlementProtected(value.getId())
-                        && !campaign23.factionProtected(value.getFactionTeam())))
+                .filter(value -> !campaign23.settlementProtected(value.getId())
+                        && !campaign23.factionProtected(value.getFactionTeam()))
                 .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
                         CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(),
                         CampaignManager.canRepresentSettlement(player, value), value.getClaimLinks().stream()
@@ -111,8 +110,12 @@ public record DiplomacySnapshot(
         List<WarEntry> wars = visibleWars.stream().map(value -> {
             PrototypeData.SettlementRecord attackerSettlement = value.attackerSettlement().isBlank() ? null : settlementsData.getSettlement(value.attackerSettlement());
             PrototypeData.SettlementRecord target = value.targetSettlement().isBlank() ? null : settlementsData.getSettlement(value.targetSettlement());
-            boolean attackerParent = !own.isBlank() && own.equals(value.attackerFaction());
-            boolean defenderParent = !own.isBlank() && own.equals(value.defenderFaction());
+            boolean sharedParent = value.type() == CampaignData.WarType.SETTLEMENT_WAR
+                    && !value.attackerFaction().isBlank() && value.attackerFaction().equals(value.defenderFaction());
+            // A faction cannot "join" both sides of an internal settlement conflict. Same-parent
+            // wars remain local settlement-v-settlement wars until peace is negotiated by the settlements.
+            boolean attackerParent = !sharedParent && !own.isBlank() && own.equals(value.attackerFaction());
+            boolean defenderParent = !sharedParent && !own.isBlank() && own.equals(value.defenderFaction());
             return new WarEntry(value.id(), value.type().name(), value.escalationName(), value.goal().name(), value.casusBelliName(),
                     value.attackerFaction(), CampaignManager.factionName(value.attackerFaction()),
                     value.defenderFaction(), CampaignManager.factionName(value.defenderFaction()),

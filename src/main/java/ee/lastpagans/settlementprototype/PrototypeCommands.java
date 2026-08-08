@@ -9,6 +9,7 @@ import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.world.RecruitsClaim;
 import ee.lastpagans.settlementprototype.item.ModItems;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -221,9 +222,12 @@ public final class PrototypeCommands {
                         .then(Commands.literal("faction")
                                 .then(Commands.literal("create")
                                         .then(Commands.argument("player", EntityArgument.player())
-                                                .then(Commands.argument("name", StringArgumentType.greedyString())
-                                                        .executes(context -> adminCreateFaction(context.getSource(), EntityArgument.getPlayer(context, "player"),
-                                                                StringArgumentType.getString(context, "name"))))))
+                                                .then(Commands.argument("team_color", StringArgumentType.word())
+                                                        .then(Commands.argument("unit_color", IntegerArgumentType.integer(0, 24))
+                                                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                                                        .executes(context -> adminCreateFaction(context.getSource(), EntityArgument.getPlayer(context, "player"),
+                                                                                StringArgumentType.getString(context, "team_color"), IntegerArgumentType.getInteger(context, "unit_color"),
+                                                                                StringArgumentType.getString(context, "name"))))))))
                                 .then(Commands.literal("wealth")
                                         .then(Commands.literal("set").then(Commands.argument("faction", StringArgumentType.word())
                                                 .then(Commands.argument("value", IntegerArgumentType.integer(0, 100000000))
@@ -1039,8 +1043,19 @@ public final class PrototypeCommands {
         return 1;
     }
 
-    private static int adminCreateFaction(CommandSourceStack source, ServerPlayer target, String name) {
-        String result = CampaignManager.createFaction(target, name);
+    private static int adminCreateFaction(CommandSourceStack source, ServerPlayer target, String teamColorRaw, int unitColor, String name) {
+        ChatFormatting teamColor;
+        try {
+            teamColor = ChatFormatting.valueOf(teamColorRaw.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            source.sendFailure(Component.literal("Unknown Team Color. Use a Minecraft color name such as BLUE, DARK_BLUE, RED, GOLD, or WHITE."));
+            return 0;
+        }
+        if (!teamColor.isColor()) {
+            source.sendFailure(Component.literal("That formatting value is not a color."));
+            return 0;
+        }
+        String result = CampaignManager.createFaction(target, name, teamColor, (byte)Math.max(0, Math.min(24, unitColor)));
         if (target.getTeam() == null) source.sendFailure(Component.literal(result));
         else source.sendSuccess(() -> Component.literal(result), true);
         return target.getTeam() == null ? 0 : 1;

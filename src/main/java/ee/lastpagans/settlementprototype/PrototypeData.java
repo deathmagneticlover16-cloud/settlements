@@ -680,7 +680,13 @@ public final class PrototypeData extends SavedData {
         }
 
         public void setOwner(UUID newOwner) {
-            if (ownerId != null) members.put(ownerId, SettlementRole.CO_OWNER);
+            if (newOwner == null || newOwner.equals(ownerId)) return;
+            UUID previousOwner = ownerId;
+            if (previousOwner != null) {
+                members.put(previousOwner, SettlementRole.CO_OWNER);
+                CharacterRecord previousCharacter = owner.characters.get(previousOwner);
+                if (previousCharacter != null && id.equals(previousCharacter.primarySeat)) previousCharacter.primarySeat = "";
+            }
             ownerId = newOwner;
             members.put(newOwner, SettlementRole.OWNER);
             addChronicle("Ownership transferred.");

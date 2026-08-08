@@ -595,6 +595,8 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot commit the faction to a war.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.SETTLEMENT_WAR) return "Select an active Settlement War.";
+        if (!war.attackerFaction().isBlank() && war.attackerFaction().equals(war.defenderFaction()))
+            return "This is an internal settlement conflict. The shared parent faction cannot formally join either side.";
         boolean attackerSide;
         if (own.equals(war.attackerFaction())) attackerSide = true;
         else if (own.equals(war.defenderFaction())) attackerSide = false;
@@ -637,6 +639,8 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot answer this settlement war.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.SETTLEMENT_WAR) return "Select an active Settlement War.";
+        if (!war.attackerFaction().isBlank() && war.attackerFaction().equals(war.defenderFaction()))
+            return "This is an internal settlement conflict; there is no separate parent-faction intervention decision.";
         if (!own.equals(war.defenderFaction())) return "Only the defending settlement's parent faction may formally ignore the conflict.";
         if (war.defenderFactionJoined()) return "Your faction has already joined this war.";
         Campaign23Data.get(player.serverLevel()).setIgnoredWarIntervention(war.id(), own, true);
@@ -652,6 +656,9 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 2)) return "Your faction rank cannot authorize war aid.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "Select an active war.";
+        if (war.type() == CampaignData.WarType.SETTLEMENT_WAR && !war.attackerFaction().isBlank()
+                && war.attackerFaction().equals(war.defenderFaction()))
+            return "The shared parent faction cannot use faction war aid to choose a side in its own internal settlement conflict.";
         if (!own.equals(war.attackerFaction()) && !own.equals(war.defenderFaction())) return "Only a parent faction may send settlement aid through this panel.";
         String targetSettlement = own.equals(war.attackerFaction()) ? war.attackerSettlement() : war.defenderSettlement();
         if (targetSettlement.isBlank()) return "This war has no settlement aid target.";
@@ -1552,10 +1559,6 @@ public final class CampaignManager {
         } else openFamily(player, result);
     }
 
-
-    public static String createFaction(ServerPlayer player, String rawName) {
-        return createFaction(player, rawName, ChatFormatting.WHITE, (byte)0);
-    }
 
     private static String createSettlementFromGui(ServerPlayer player, String id, String name) {
         PrototypeData data = PrototypeData.get(player.serverLevel());
