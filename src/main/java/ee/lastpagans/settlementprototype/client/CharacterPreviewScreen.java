@@ -50,9 +50,9 @@ public final class CharacterPreviewScreen extends ScaledCampaignScreen {
         int y = top + 60;
         line(graphics, "Faith", draft.faith(), x, y);
         line(graphics, "Form of address", draft.address(), x, y + 25);
-        line(graphics, "Dynasty", draft.dynasty().isBlank() ? "None" : draft.dynasty(), x, y + 50);
+        line(graphics, "Title", draft.title(), x, y + 50);
         graphics.drawWordWrap(font, Component.literal(
-                "After this preview you will choose three starting traits from three random cards per round."
+                "After this preview you will choose three starting traits from three random cards per round. Main House and Main Seat can be set later."
         ), x, y + 83, 195, 0xFFAAAAAA);
         graphics.drawWordWrap(font, Component.literal(
                 "This is the one-time correction screen. Use Go Back before confirming."

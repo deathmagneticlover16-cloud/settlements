@@ -15,20 +15,22 @@ public record CharacterSnapshot(
         String faith,
         int devotion,
         String devotionTier,
+        boolean reliabilityTracked,
+        int reliability,
+        String reliabilityTier,
         String address,
-        String dynasty,
         String house,
         String faction,
         String factionRank,
         String primarySeat,
         String spouse,
-        List<String> holdings,
+        List<HoldingEntry> holdings,
         List<TraitEntry> traits
 ) {
     public static CharacterSnapshot from(PrototypeData data, ServerPlayer player) {
         PrototypeData.CharacterRecord character = data.getCharacter(player.getUUID());
         if (character == null) {
-            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", 0, "Uncommitted", "", "", "",
+            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", 0, "Uncommitted", false, 0, "Independent", "", "",
                     "Independent", "", "", "", List.of(), List.of());
         }
 
@@ -49,6 +51,9 @@ public record CharacterSnapshot(
             }
         }
         String factionRank = factionId.isBlank() ? "Independent" : campaign.factionRankTitle(factionId, player.getUUID(), factionLeader);
+        boolean reliabilityTracked = !factionId.isBlank();
+        int reliability = reliabilityTracked ? campaign.getFactionReliability(factionId) : 0;
+        String reliabilityTier = reliabilityTracked ? reliabilityTier(reliability) : "Independent";
 
         String seatName = "";
         PrototypeData.SettlementRecord seat = data.getSettlement(character.getPrimarySeat());
@@ -70,8 +75,8 @@ public record CharacterSnapshot(
             }
         }
 
-        List<String> holdings = data.getOwnedSettlements(player.getUUID()).stream()
-                .map(settlement -> settlement.getName() + " — " + settlement.getRank().displayName())
+        List<HoldingEntry> holdings = data.getOwnedSettlements(player.getUUID()).stream()
+                .map(settlement -> new HoldingEntry(settlement.getId(), settlement.getName(), settlement.getRank().displayName()))
                 .toList();
 
         List<TraitEntry> traits = character.getTraits().stream().map(id -> {
@@ -90,8 +95,10 @@ public record CharacterSnapshot(
                 character.getFaith(),
                 devotion,
                 devotionTier,
+                reliabilityTracked,
+                reliability,
+                reliabilityTier,
                 character.getAddress(),
-                character.getDynasty(),
                 character.getHouse(),
                 factionName,
                 factionRank,
@@ -109,15 +116,17 @@ public record CharacterSnapshot(
         buffer.writeUtf(faith, 48);
         buffer.writeInt(devotion);
         buffer.writeUtf(devotionTier, 24);
+        buffer.writeBoolean(reliabilityTracked);
+        buffer.writeInt(reliability);
+        buffer.writeUtf(reliabilityTier, 24);
         buffer.writeUtf(address, 16);
-        buffer.writeUtf(dynasty, 32);
         buffer.writeUtf(house, 32);
         buffer.writeUtf(faction, 64);
         buffer.writeUtf(factionRank, 32);
         buffer.writeUtf(primarySeat, 64);
         buffer.writeUtf(spouse, 80);
         buffer.writeVarInt(holdings.size());
-        holdings.forEach(value -> buffer.writeUtf(value, 100));
+        holdings.forEach(value -> value.encode(buffer));
         buffer.writeVarInt(traits.size());
         traits.forEach(value -> value.encode(buffer));
     }
@@ -129,21 +138,43 @@ public record CharacterSnapshot(
         String faith = buffer.readUtf(48);
         int devotion = buffer.readInt();
         String devotionTier = buffer.readUtf(24);
+        boolean reliabilityTracked = buffer.readBoolean();
+        int reliability = buffer.readInt();
+        String reliabilityTier = buffer.readUtf(24);
         String address = buffer.readUtf(16);
-        String dynasty = buffer.readUtf(32);
         String house = buffer.readUtf(32);
         String faction = buffer.readUtf(64);
         String factionRank = buffer.readUtf(32);
         String primarySeat = buffer.readUtf(64);
         String spouse = buffer.readUtf(80);
         int size = Math.min(32, buffer.readVarInt());
-        List<String> holdings = new ArrayList<>(size);
-        for (int i = 0; i < size; i++) holdings.add(buffer.readUtf(100));
+        List<HoldingEntry> holdings = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) holdings.add(HoldingEntry.decode(buffer));
         int traitCount = Math.min(32, buffer.readVarInt());
         List<TraitEntry> traits = new ArrayList<>(traitCount);
         for (int i = 0; i < traitCount; i++) traits.add(TraitEntry.decode(buffer));
-        return new CharacterSnapshot(accountName, displayName, titleLine, faith, devotion, devotionTier, address, dynasty, house,
+        return new CharacterSnapshot(accountName, displayName, titleLine, faith, devotion, devotionTier, reliabilityTracked, reliability, reliabilityTier, address, house,
                 faction, factionRank, primarySeat, spouse, holdings, traits);
+    }
+
+    private static String reliabilityTier(int value) {
+        if (value >= 60) return "Trusted";
+        if (value >= 20) return "Reliable";
+        if (value > -20) return "Unproven";
+        if (value > -60) return "Dubious";
+        return "Treacherous";
+    }
+
+    public record HoldingEntry(String settlementId, String settlementName, String rank) {
+        public String display() { return settlementName + " — " + rank; }
+        private void encode(FriendlyByteBuf buffer) {
+            buffer.writeUtf(settlementId, 64);
+            buffer.writeUtf(settlementName, 64);
+            buffer.writeUtf(rank, 32);
+        }
+        private static HoldingEntry decode(FriendlyByteBuf buffer) {
+            return new HoldingEntry(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32));
+        }
     }
 
     public record TraitEntry(String id, String name, String iconItem, String tone, String description, List<String> effects) {

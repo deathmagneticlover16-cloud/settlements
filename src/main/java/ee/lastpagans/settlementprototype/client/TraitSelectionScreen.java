@@ -81,7 +81,7 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen {
         selected.add(choices.get(index));
         if (selected.size() >= 3) {
             PrototypeNetwork.CHANNEL.sendToServer(new SubmitCharacterPacket(
-                    draft.first(), draft.middle(), draft.last(), draft.faith(), draft.address(), draft.title(), draft.dynasty(),
+                    draft.first(), draft.middle(), draft.last(), draft.faith(), draft.address(), draft.title(),
                     selected, rerollRound));
             return;
         }

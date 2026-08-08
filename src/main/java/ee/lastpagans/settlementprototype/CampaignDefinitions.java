@@ -61,7 +61,7 @@ public final class CampaignDefinitions {
                 "Poor health and limited ability to withstand long campaigns.",
                 List.of(new TraitEffect("Recruit morale", "-3", -3, EffectKind.MORALE))));
         register(new TraitDefinition("fertile", "Fertile", "minecraft:wheat_seeds", TraitTone.POSITIVE,
-                "A healthy dynastic match, valuable for future inheritance systems.", List.of()));
+                "Legacy compatibility trait retained only for old saves; it is not rolled for new characters.", List.of()));
         register(new TraitDefinition("reliable", "Reliable", "minecraft:chain", TraitTone.POSITIVE,
                 "Known for keeping promises and honouring agreements.",
                 List.of(new TraitEffect("Diplomatic reliability", "+8", 8, EffectKind.RELIABILITY))));

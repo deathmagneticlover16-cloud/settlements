@@ -18,7 +18,6 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen {
     private EditBox first;
     private EditBox middle;
     private EditBox last;
-    private EditBox dynasty;
     private DropdownWidget faith;
     private DropdownWidget address;
     private DropdownWidget title;
@@ -40,27 +39,24 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen {
         first = field(left + 170, top + 55, 112, "First name");
         middle = field(left + 288, top + 55, 132, "Middle (optional)");
         last = field(left + 170, top + 83, 250, "Last name");
-        dynasty = field(left + 170, top + 111, 250, "Dynasty (optional)");
-        dynasty.setMaxLength(32);
 
         if (initial != null) {
             first.setValue(initial.first());
             middle.setValue(initial.middle());
             last.setValue(initial.last());
-            dynasty.setValue(initial.dynasty());
         }
 
         addRenderableWidget(Button.builder(Component.literal("Preview Character"), button -> preview())
                 .bounds(left + 260, top + 252, 160, 20).build());
 
         // Lower lists are added first so expanded upper lists render above them.
-        title = addRenderableWidget(new DropdownWidget(left + 170, top + 219, 250, 20,
+        title = addRenderableWidget(new DropdownWidget(left + 170, top + 199, 250, 20,
                 CampaignDefinitions.PERSONAL_TITLES,
                 index(CampaignDefinitions.PERSONAL_TITLES, initial == null ? "" : initial.title()), value -> {}));
-        address = addRenderableWidget(new DropdownWidget(left + 170, top + 191, 250, 20,
+        address = addRenderableWidget(new DropdownWidget(left + 170, top + 171, 250, 20,
                 CampaignDefinitions.ADDRESSES,
                 index(CampaignDefinitions.ADDRESSES, initial == null ? "" : initial.address()), value -> {}));
-        faith = addRenderableWidget(new DropdownWidget(left + 170, top + 163, 250, 20,
+        faith = addRenderableWidget(new DropdownWidget(left + 170, top + 143, 250, 20,
                 CampaignDefinitions.RELIGIONS,
                 index(CampaignDefinitions.RELIGIONS, initial == null ? "" : initial.faith()), value -> {}));
         setInitialFocus(first);
@@ -85,7 +81,7 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen {
             return;
         }
         minecraft.setScreen(new CharacterPreviewScreen(new CharacterDraft(
-                first.getValue(), middle.getValue(), last.getValue(), faith.value(), address.value(), title.value(), dynasty.getValue()
+                first.getValue(), middle.getValue(), last.getValue(), faith.value(), address.value(), title.value()
         )));
     }
 
@@ -123,7 +119,7 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen {
             PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 70, 122, 157, uiMouseX, uiMouseY);
         }
         graphics.drawString(font, "Name", left + 170, top + 44, 0xFFDDDDDD, false);
-        graphics.drawString(font, "Identity", left + 170, top + 147, 0xFFDDDDDD, false);
+        graphics.drawString(font, "Identity", left + 170, top + 127, 0xFFDDDDDD, false);
         if (!warning.isBlank()) graphics.drawCenteredString(font, warning, left + PANEL_WIDTH / 2, top + PANEL_HEIGHT + 5, 0xFFFFC86B);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
@@ -132,7 +128,7 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen {
     @Override public boolean shouldCloseOnEsc() { return false; }
     @Override public boolean isPauseScreen() { return false; }
 
-    public record CharacterDraft(String first, String middle, String last, String faith, String address, String title, String dynasty) {
+    public record CharacterDraft(String first, String middle, String last, String faith, String address, String title) {
         public String displayName() {
             return (first + " " + middle + " " + last).replaceAll("\\s+", " ").trim();
         }

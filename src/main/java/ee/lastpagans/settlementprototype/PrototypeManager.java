@@ -619,7 +619,6 @@ public final class PrototypeManager {
             String faith,
             String address,
             String title,
-            String dynasty,
             List<String> selectedTraits,
             int rerollRound
     ) {
@@ -640,7 +639,6 @@ public final class PrototypeManager {
         String cleanFirst = PrototypeData.cleanText(first, "", 24);
         String cleanMiddle = PrototypeData.cleanText(middle, "", 24);
         String cleanLast = PrototypeData.cleanText(last, "", 24);
-        String cleanDynasty = PrototypeData.cleanText(dynasty, "", 32);
         String proposed = (cleanFirst + " " + cleanMiddle + " " + cleanLast).replaceAll("\\s+", " ").trim();
         if (cleanFirst.isBlank() || cleanLast.isBlank()) {
             player.sendSystemMessage(Component.literal("A first and last name are required."));
@@ -663,7 +661,7 @@ public final class PrototypeManager {
         }
 
         PrototypeData.CharacterRecord character = data.getOrCreateCharacter(player.getUUID());
-        character.create(cleanFirst, cleanMiddle, cleanLast, faith, address, title, cleanDynasty);
+        character.create(cleanFirst, cleanMiddle, cleanLast, faith, address, title);
         character.setTraits(selectedTraits);
         data.setDirty();
         player.refreshDisplayName();
@@ -677,16 +675,35 @@ public final class PrototypeManager {
         return allowed.stream().anyMatch(option -> option.equalsIgnoreCase(value.trim()));
     }
 
-    public static void updateCharacterIdentity(ServerPlayer player, String dynasty, String house, boolean returnToMain) {
+    public static void updateCharacterIdentity(ServerPlayer player, String house, boolean returnToMain) {
         PrototypeData data = PrototypeData.get(player.serverLevel());
         PrototypeData.CharacterRecord character = data.getCharacter(player.getUUID());
         if (character == null || !character.isCreated()) {
             promptCharacterCreation(player);
             return;
         }
-        character.setDynastyAndHouse(dynasty, house);
+        character.setHouse(house);
         data.setDirty();
-        player.sendSystemMessage(Component.literal("Character dynasty and main house updated."));
+        player.sendSystemMessage(Component.literal("Character main house updated."));
+        openCharacterSheet(player, returnToMain);
+    }
+
+    public static void setMainSeatFromGui(ServerPlayer player, String settlementId, boolean returnToMain) {
+        PrototypeData data = PrototypeData.get(player.serverLevel());
+        PrototypeData.CharacterRecord character = data.getCharacter(player.getUUID());
+        PrototypeData.SettlementRecord settlement = data.getSettlement(settlementId);
+        if (character == null || !character.isCreated()) {
+            promptCharacterCreation(player);
+            return;
+        }
+        if (settlement == null || !player.getUUID().equals(settlement.getOwnerId())) {
+            player.sendSystemMessage(Component.literal("You may only choose a settlement you personally own as your Main Seat."));
+            openCharacterSheet(player, returnToMain);
+            return;
+        }
+        character.setPrimarySeat(settlement.getId());
+        data.setDirty();
+        player.sendSystemMessage(Component.literal(settlement.getName() + " is now your Main Seat."));
         openCharacterSheet(player, returnToMain);
     }
 

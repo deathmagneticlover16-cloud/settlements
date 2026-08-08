@@ -16,7 +16,6 @@ public record SubmitCharacterPacket(
         String faith,
         String address,
         String title,
-        String dynasty,
         List<String> traits,
         int rerollRound
 ) {
@@ -31,7 +30,6 @@ public record SubmitCharacterPacket(
         buffer.writeUtf(packet.faith, 32);
         buffer.writeUtf(packet.address, 16);
         buffer.writeUtf(packet.title, 32);
-        buffer.writeUtf(packet.dynasty, 32);
         buffer.writeVarInt(Math.min(3, packet.traits.size()));
         for (int i = 0; i < Math.min(3, packet.traits.size()); i++) buffer.writeUtf(packet.traits.get(i), 32);
         buffer.writeVarInt(packet.rerollRound + 1);
@@ -44,11 +42,10 @@ public record SubmitCharacterPacket(
         String faith = buffer.readUtf(32);
         String address = buffer.readUtf(16);
         String title = buffer.readUtf(32);
-        String dynasty = buffer.readUtf(32);
         int count = Math.min(3, Math.max(0, buffer.readVarInt()));
         List<String> traits = new ArrayList<>(count);
         for (int i = 0; i < count; i++) traits.add(buffer.readUtf(32));
-        return new SubmitCharacterPacket(first, middle, last, faith, address, title, dynasty, traits, buffer.readVarInt() - 1);
+        return new SubmitCharacterPacket(first, middle, last, faith, address, title, traits, buffer.readVarInt() - 1);
     }
 
     public static void handle(SubmitCharacterPacket packet, Supplier<NetworkEvent.Context> supplier) {
@@ -63,7 +60,6 @@ public record SubmitCharacterPacket(
                     packet.faith,
                     packet.address,
                     packet.title,
-                    packet.dynasty,
                     packet.traits,
                     packet.rerollRound
             ));

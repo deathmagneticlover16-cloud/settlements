@@ -1123,7 +1123,6 @@ public final class PrototypeData extends SavedData {
         private String faith = "Finnic Paganism";
         private String address = "Neutral";
         private String title = "Lord";
-        private String dynasty = "";
         private String house = "";
         private String primarySeat = "";
         private final List<String> traits = new ArrayList<>();
@@ -1139,7 +1138,6 @@ public final class PrototypeData extends SavedData {
             record.faith = normalizeLegacyFaith(cleanText(tag.getString("Faith"), "Finnic Paganism", 32));
             record.address = cleanText(tag.getString("Address"), "Neutral", 16);
             record.title = cleanText(tag.getString("Title"), "Lord", 32);
-            record.dynasty = cleanText(tag.getString("Dynasty"), "", 32);
             record.house = cleanText(tag.getString("House"), "", 32);
             record.primarySeat = normalizeId(tag.getString("PrimarySeat"));
             readStringList(tag, "Traits", record.traits);
@@ -1156,7 +1154,6 @@ public final class PrototypeData extends SavedData {
             tag.putString("Faith", faith);
             tag.putString("Address", address);
             tag.putString("Title", title);
-            tag.putString("Dynasty", dynasty);
             tag.putString("House", house);
             tag.putString("PrimarySeat", primarySeat);
             writeStringList(tag, "Traits", traits);
@@ -1171,7 +1168,6 @@ public final class PrototypeData extends SavedData {
         public String getFaith() { return faith; }
         public String getAddress() { return address; }
         public String getTitle() { return title; }
-        public String getDynasty() { return dynasty; }
         public String getHouse() { return house; }
         public String getPrimarySeat() { return primarySeat; }
         public List<String> getTraits() { return List.copyOf(traits); }
@@ -1180,22 +1176,18 @@ public final class PrototypeData extends SavedData {
             return String.join(" ", List.of(firstName, middleName, lastName).stream().filter(value -> !value.isBlank()).toList()).trim();
         }
 
-        public void create(String first, String middle, String last, String faith, String address, String title, String dynasty) {
+        public void create(String first, String middle, String last, String faith, String address, String title) {
             this.firstName = cleanText(first, "", 24);
             this.middleName = cleanText(middle, "", 24);
             this.lastName = cleanText(last, "", 24);
             this.faith = normalizeLegacyFaith(cleanText(faith, "Finnic Paganism", 32));
             this.address = cleanText(address, "Neutral", 16);
             this.title = cleanText(title, "Lord", 32);
-            this.dynasty = cleanText(dynasty, "", 32);
             this.created = !this.firstName.isBlank() && !this.lastName.isBlank();
             // Starting traits are selected explicitly in the 2.3 three-card creation flow. Legacy saves retain their existing traits.
         }
 
-        public void setDynastyAndHouse(String dynasty, String house) {
-            this.dynasty = cleanText(dynasty, "", 32);
-            this.house = cleanText(house, "", 32);
-        }
+        public void setHouse(String house) { this.house = cleanText(house, "", 32); }
 
         public void setPrimarySeat(String value) { primarySeat = normalizeId(value); }
         public void setFaith(String value) { this.faith = normalizeLegacyFaith(cleanText(value, "Finnic Paganism", 32)); }
