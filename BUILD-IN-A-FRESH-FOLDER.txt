@@ -1,13 +1,16 @@
-LAST PAGANS SETTLEMENTS 2.0.2 — BUILD NOTE
+SETTLEMENTS 2.4.1 — BUILD NOTE
 
-Extract this archive into a completely empty folder.
-Do not merge it into an older V1 or V2 source workspace.
+Extract this source archive into a completely empty folder.
+Do not merge it into an older Settlements source workspace.
 
-Windows: run BUILD-V2.0.2.bat
+Windows: run BUILD-V2.4.1.bat
 Manual:  gradlew.bat clean build
 
 Expected output:
-build\libs\settlementprototype-2.0.2.jar
+build\libs\settlements-2.4.1.jar
 
 Keep libs\recruits-1.20.1-1.15.2.jar in place while building.
 Use Java 17.
+
+2.4.1 intentionally uses the canonical mod id `settlements` and new SavedData identifiers.
+Old prototype/test-world compatibility is not a release requirement; use a fresh test world.

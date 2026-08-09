@@ -1,0 +1,90 @@
+SETTLEMENTS — GUI ART / PNG REPLACEMENT GUIDE
+
+GOAL
+Settlements GUI artwork should be replaceable as normal resource assets instead of requiring gameplay-code edits. The canonical resource namespace is:
+
+assets/settlements/textures/gui/
+
+CURRENT STATE
+The campaign logic and screen layout are independent from save/network logic, but a number of screens still use programmer-art GuiGraphics.fill rectangles and vanilla widgets. This means the data architecture is safe to reskin, but not every visual element is PNG-driven yet.
+
+TARGET ASSET TREE
+assets/settlements/textures/gui/
+  common/
+    panel.png
+    panel_dark.png
+    header.png
+    divider_horizontal.png
+    small_button.png
+    small_button_hover.png
+    big_button.png
+    big_button_hover.png
+    dropdown.png
+    dropdown_hover.png
+    tooltip.png
+    stat_bar_frame.png
+    stat_bar_fill.png
+    stat_bar_marker.png
+  campaign/
+    main.png
+    character.png
+    settlement.png
+    faction.png
+    military.png
+    diplomacy.png
+    family.png
+    world_news.png
+    peace_treaty.png
+  icons/
+    stability.png
+    prosperity.png
+    population.png
+    housing.png
+    food.png
+    wealth.png
+    manpower.png
+    morale.png
+    devotion.png
+    reliability.png
+    taxation.png
+    religion.png
+    war.png
+    peace.png
+    levy.png
+    mercenary.png
+    positive.png
+    negative.png
+    mixed.png
+
+RECOMMENDED MASTER SIZES
+- Small button source: 80x20 or 96x20
+- Large button source: 160x24 or 192x24
+- Dropdown row: 160x20
+- Trait/modifier/stat icon: 16x16 master, rendered at 16–24 logical pixels as appropriate
+- Stat-bar pieces: design for a 9–12 px internal bar height; keep the frame horizontally scalable
+- Header/panel borders: make them nine-slice friendly rather than one screen-width bitmap
+
+HOW THE RELEASE ART WORKFLOW SHOULD WORK
+1. The mod ships default PNGs in assets/settlements/textures/gui/.
+2. A designer replaces those PNGs while keeping the same resource paths and intended dimensions/borders.
+3. The replacement can be shipped inside the mod or as a normal Minecraft resource pack.
+4. Java continues to control placement, text, input and server actions. The PNGs control presentation.
+5. Missing custom art should fall back to the bundled default assets.
+
+For scalable frames/buttons, use nine-slice rendering or separate corners/edges/center. Do not stretch ornate borders across arbitrary widths.
+
+IMPORTANT
+Do not encode gameplay values into image names or coordinates. Tax values, Devotion, Reliability, Stability, effects, traits, etc. stay data-driven. The GUI merely renders them.
+
+STAT BARS
+The reusable bar idea discussed for Devotion, Taxation, Reliability and similar values should use common PNG pieces (frame/fill/marker) rather than each screen owning a completely different bar texture. This allows one visual theme to be reskinned consistently.
+
+JAVA LOCATION
+Client screens live under:
+src/main/java/ee/lastpagans/settlements/client/
+
+Typical resource reference:
+new ResourceLocation("settlements", "textures/gui/common/panel.png")
+
+RELEASE DIRECTION
+As screens are visually polished, replace remaining hard-coded panel/button fills with these shared assets. This is a visual migration only; it should not require rewriting settlement, diplomacy, economy or networking systems.

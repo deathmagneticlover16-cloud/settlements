@@ -1,0 +1,9 @@
+{
+  "settlements.screen.title": "Settlement Management",
+  "item.settlements.settler_contract": "Settler Contract",
+  "item.settlements.silver_coin": "Silver Coin",
+  "key.categories.settlements": "Settlements",
+  "key.settlements.campaign": "Open Campaign Menu",
+  "key.settlements.character": "Open Character Sheet",
+  "key.settlements.settlement": "Open Selected Settlement"
+}

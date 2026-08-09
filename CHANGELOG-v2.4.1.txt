@@ -1,0 +1,90 @@
+SETTLEMENTS 2.4.1 — CONSOLIDATION / RELEASE CLEANUP
+
+2.4.1 is the follow-up to the oversized 2.3 campaign overhaul. It folds in user feedback, fixes scope items that 2.3 only partially implemented, and hardens multiplayer/admin behavior discovered during real testing.
+
+DIPLOMACY
+- Gradual relationship recovery: peaceful relations slowly recover toward Neutral; long-standing NAPs/alliances can gradually build positive relations to state-specific caps. War blocks passive improvement.
+- Relationship-category toasts fire when numerical relations cross Hostile / Neutral / Friendly boundaries.
+- Character RELATIONS trait effects now actually feed political relationship displays/calculation; Zealous only grants its relation bonus to compatible same-faith leadership.
+- Dynamic Reliability now reacts to additional real behavior, including sending war aid, maintaining mercenary payrolls, missed mercenary wages, and breaking a Marriage Alliance through divorce.
+- War aid now has independent One-time / Daily controls for Manpower, Wealth and Food, matching the original aid GUI design.
+- Recurring aid ledger is scrollable and can be cancelled from the war interface.
+- Peace treaties support multiple linked claims and a distinct Renounce Claim term as well as claim transfer.
+- Peace/war authority checks were hardened so supporting factions cannot sign peace for principal belligerents and settlement managers cannot bind joined parent factions without faction authority.
+- Capitulation only forces terms within the dominant side's available war-score budget.
+
+GUI / UX
+- Expanded dropdown menus render in a top overlay layer and receive input before controls underneath them.
+- Settlement Manage remains split into Locations / Identity / Claims and now also includes Members.
+- Settlement member management is available in the GUI: add Citizen, add Co-owner, remove non-owner member.
+- Same-faction outsiders receive only a limited public settlement summary; private treasury, residents, claims, effects and military data are not sent to them.
+- Settlement Effects list scrolls instead of silently hiding effect #8 and beyond.
+- Recurring war-aid ledger scrolls when many commitments exist.
+
+MERCENARIES
+- Military snapshot/UI exposes mercenary status and next payment information in addition to count and wage obligation.
+- Contract payment success/failure contributes to faction Reliability.
+
+RELIGION / FAMILY
+- Prayer Devotion gain is configurable.
+- Players can donate an item from #settlements:currency to their faith from the Character Sheet for configurable Devotion gain.
+- Devotion tiers now have real ruler-settlement effects instead of being labels only; higher tiers grant increasing prosperity/morale and, at high devotion, daily stability support.
+- Religion spouse limits and extra-spouse effect scaling are configurable instead of hardcoded.
+- Character reset now clears devotion/divorce/candidate/cooldown state promised by the campaign reset design.
+
+SETTLEMENTS
+- City-State progression now retains the housing requirement.
+- Settlement member management moved into the campaign GUI.
+- Population cleanup is hardened so dead/discarded registered villagers are removed without treating chunk unload/dimension changes as deaths.
+- Faction Unit Color selection now uses Villager Recruits' real 25-color palette instead of Minecraft dye ordinals.
+
+PROTECTED ADMIN POLITIES
+- Protected settlements/factions are rejected server-side by diplomacy paths, not merely hidden from normal GUI choices.
+- Non-admin players cannot manage protected settlements even if an old save still gives them a settlement role.
+
+ADMIN / RECOVERY / DEBUG
+- Destructive character reset requires explicit confirmation and matches the documented reset scope.
+- Added confirmed settlement reset/delete while preserving Recruits world entities/claims.
+- Added admin setowner / addcoowner / removecoowner / settier repair commands.
+- Added admin clearclaims / clearhousing / cleararmydata / clearmodifiers repair commands.
+- Added debug forced-capitulation helper.
+- Added first concrete campaign-event debug hook: Plague can be triggered/ended as a timed settlement modifier.
+- Existing inspect/recalculate/modifier/time/levy/mercenary/devotion/war-score tools remain available.
+
+NETWORK
+- Campaign protocol is now 29. Every client and server must use the same 2.4.1 build.
+
+INTENTIONAL BOUNDARIES
+- Children/heirs/fertility remain out of scope.
+- Tactical freecam, formations, testudo/phalanx, Total War unit overview and commander-combat systems remain in the separate Recruits addon line.
+- Direct Independence War declaration remains reserved for a future sovereignty/vassal system; 2.4.1 retains independent diplomacy and Recognize Independence peace terms.
+
+RELEASE-HARDENING PASS (post initial 2.4 test release)
+- Fixed the operator-authority diplomacy bug: OP permission no longer counts as settlement political ownership for declaration/peace-side resolution.
+- Removed the remaining implicit "OP = faction leader" behavior from ordinary faction and diplomacy screens/actions; administrator powers now stay in explicit admin/recovery tooling.
+- Fixed Settlement War source/target lists when the viewer is an operator.
+- Replaced the cryptic false "connected to both sides" peace failure with real role-based side detection and a clearer message for genuine conflicting settlement roles.
+- Protected admin factions/settlements are no longer shown as ordinary diplomacy targets even to operators.
+- Protected admin factions reject ordinary faction-management actions from stale/non-admin members; leaving remains possible.
+- Internal Settlement Wars between settlements of the same parent faction remain local; the shared parent cannot Join War, Ignore intervention, or use parent-faction war aid to ambiguously choose both sides.
+- Implemented settlement taxation: Low/Normal/High policy, persisted daily collection, population/prosperity-scaled income, Stability/Prosperity consequences, Treasury UI and Effects integration.
+- Added Character Sheet Reliability display using the character's current faction Dynamic Reliability.
+- Added GUI Main Seat selection for personally owned settlements with server-side ownership validation.
+- Main Seat is cleared automatically if ownership of that settlement is transferred away.
+- Registered civilian villagers are now periodically confined to any of their settlement's linked Recruits claims; residents that wander outside all linked claims are returned to the nearest linked claim.
+- Removed Dynasty from character creation, persistence, packets and UI. Main House remains editable.
+- Legacy Fertile/Dynasty wording is no longer presented as an active future inheritance feature.
+- Admin faction creation now requires explicit Team Color and Recruits Unit Color instead of silently creating white/default-color factions.
+- Campaign protocol raised to 29 for the new snapshot/character packet formats and Main Seat packet.
+
+
+2.4.1 CANONICALIZATION / ECONOMY FOLLOW-UP
+- Fixed release version ambiguity: this cleaned branch reports 2.4.1 instead of sharing the 2.4.0 version with the earlier 1973819 test checkpoint.
+- Canonicalized the active mod identity to Settlements: mod id `settlements`, Java package `ee.lastpagans.settlements`, resource namespaces `assets/settlements` / `data/settlements`, and `settlements.mixins.json`.
+- Renamed remaining Prototype* and Campaign23* active implementation classes to release-facing Settlements/Campaign Systems names.
+- Old prototype/test-world save compatibility is intentionally not preserved; cleaned SavedData keys are used going forward.
+- Removed compatibility-only Fertile/Reliable trait remnants; Reliability remains a dynamic reputation stat.
+- Currency is now defined by `#settlements:currency`. The bundled `settlements:silver_coin` remains the default but datapacks may add/replace accepted currency items.
+- Added configurable `currencyItemWealthValue`; Treasury deposit/withdraw and religious donation logic use the generic currency tag.
+- Added configurable first-settlers arrival: by default two villagers spawn safely near the Town Square 10–60 seconds after a settlement is founded, auto-register as residents, join the settlement Recruits team when applicable, and notify the owner: “The first settlers have reached your village.”
+- Removed the obsolete old war-aid packet compatibility shim now that protocol/mod identity has intentionally changed.

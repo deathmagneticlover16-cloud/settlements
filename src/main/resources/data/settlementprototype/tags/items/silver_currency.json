@@ -1,8 +1,0 @@
-{
-  "replace": false,
-  "values": [
-    "settlementprototype:silver_coin",
-    { "id": "#forge:ingots/silver", "required": false },
-    { "id": "#forge:coins/silver", "required": false }
-  ]
-}

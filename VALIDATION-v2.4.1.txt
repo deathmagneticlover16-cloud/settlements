@@ -1,0 +1,21 @@
+SETTLEMENTS 2.4.1 — SOURCE VALIDATION
+
+Static checks completed in the development workspace:
+- Active source/resource grep: no Settlement Prototype namespace/class names.
+- Active source/resource grep: no Campaign23 class names.
+- Active source/resource grep: no Dynasty field/code.
+- Active source/resource grep: no old silver_currency tag.
+- Canonical mod id/version: settlements / 2.4.1.
+- Network protocol: 29.
+- Currency tag: #settlements:currency.
+- All resource JSON files parse successfully.
+- All public Java top-level type names match their filenames.
+- All ee.lastpagans.settlements imports resolve to local source types where applicable.
+- Basic Java delimiter balance check passes across the source tree.
+- git diff --check passes.
+
+Forge compile status:
+The local Gradle wrapper attempt cannot begin dependency/bootstrap compilation in this environment because services.gradle.org cannot be resolved (java.net.UnknownHostException). This is an environment/network limitation, not a successful compile result.
+
+Required release gate:
+Run BUILD-V2.4.1.bat locally with Java 17. Treat the resulting compiler/runtime output as authoritative before calling 2.4.1 final.
