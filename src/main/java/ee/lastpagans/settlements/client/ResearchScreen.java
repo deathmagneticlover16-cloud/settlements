@@ -6,7 +6,12 @@ import ee.lastpagans.settlements.network.ResearchActionPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 
 import java.util.List;
 
@@ -71,7 +76,8 @@ public final class ResearchScreen extends ScaledCampaignScreen {
             graphics.fill(left + 20, y - 2, left + 278, y + 18, chosen ? 0xFF5A4B35 : 0xFF333333);
             int color = entry.completed() ? 0xFF8FD694 : entry.available() ? 0xFFFFFFFF : 0xFF999999;
             String prefix = entry.completed() ? "✓ " : (!entry.available() ? "× " : "");
-            graphics.drawString(font, prefix + trim(entry.name(), 34), left + 26, y + 4, color, false);
+            graphics.renderItem(icon(entry.icon()), left + 24, y);
+            graphics.drawString(font, prefix + trim(entry.name(), 31), left + 44, y + 4, color, false);
         }
         renderDetails(graphics);
         if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, snapshot.message(), left + W / 2, top + 309, 0xFFFFD27A);
@@ -94,7 +100,8 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         ResearchSnapshot.TechnologyEntry selectedEntry = selected >= 0 && selected < snapshot.technologies().size() ? snapshot.technologies().get(selected) : null;
         graphics.drawString(font, "Selected technology", left + 306, top + 166, 0xFFFFFFFF, false);
         if (selectedEntry != null) {
-            graphics.drawString(font, trim(selectedEntry.name(), 28), left + 306, top + 184, selectedEntry.completed() ? 0xFF8FD694 : 0xFFFFE2A3, false);
+            graphics.renderItem(icon(selectedEntry.icon()), left + 306, top + 181);
+            graphics.drawString(font, trim(selectedEntry.name(), 24), left + 326, top + 184, selectedEntry.completed() ? 0xFF8FD694 : 0xFFFFE2A3, false);
             graphics.drawString(font, "Base time: " + duration(selectedEntry.durationSeconds()), left + 306, top + 201, 0xFFCCCCCC, false);
             graphics.drawString(font, selectedEntry.completed() ? "Completed" : selectedEntry.available() ? "Available" : "Locked", left + 306, top + 217,
                     selectedEntry.completed() ? 0xFF8FD694 : selectedEntry.available() ? 0xFFFFFFFF : 0xFFFF8A8A, false);
@@ -116,6 +123,13 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         int max = Math.max(0, snapshot.technologies().size() - ROWS);
         if (delta < 0) scroll = Math.min(max, scroll + 1); else if (delta > 0) scroll = Math.max(0, scroll - 1);
         return true;
+    }
+
+    private ItemStack icon(String raw) {
+        ResourceLocation id = ResourceLocation.tryParse(raw == null ? "" : raw);
+        Item item = id == null ? Items.BOOK : BuiltInRegistries.ITEM.get(id);
+        if (item == Items.AIR) item = Items.BOOK;
+        return new ItemStack(item);
     }
 
     private static String duration(long seconds) {

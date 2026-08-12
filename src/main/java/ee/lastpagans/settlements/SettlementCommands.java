@@ -414,6 +414,8 @@ public final class SettlementCommands {
                                 .then(Commands.argument("name", StringArgumentType.greedyString())
                                         .executes(context -> createFaction(context.getSource(), StringArgumentType.getString(context, "name"))))))
                 .then(Commands.literal("military").executes(context -> openMilitary(context.getSource())))
+                .then(Commands.literal("mercenaries").executes(context -> openMercenaries(context.getSource())))
+                .then(Commands.literal("research").executes(context -> openResearch(context.getSource())))
                 .then(Commands.literal("diplomacy").executes(context -> openDiplomacy(context.getSource())))
                 .then(Commands.literal("family").executes(context -> openFamily(context.getSource())))
                 .then(Commands.literal("news").executes(context -> openWorldNews(context.getSource()))));
@@ -917,6 +919,14 @@ public final class SettlementCommands {
 
     private static int openMilitary(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         CampaignManager.openMilitary(player(source), ""); return 1;
+    }
+
+    private static int openMercenaries(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        MercenaryRosterManager.open(player(source), ""); return 1;
+    }
+
+    private static int openResearch(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ResearchManager.open(player(source), ""); return 1;
     }
 
     private static int openDiplomacy(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {

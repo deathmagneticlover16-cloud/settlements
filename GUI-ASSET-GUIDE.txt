@@ -35,6 +35,8 @@ assets/settlements/textures/gui/
     family.png
     world_news.png
     peace_treaty.png
+    research.png
+    mercenary_rosters.png
   icons/
     stability.png
     prosperity.png
@@ -52,6 +54,8 @@ assets/settlements/textures/gui/
     peace.png
     levy.png
     mercenary.png
+    research.png
+    scholarly.png
     positive.png
     negative.png
     mixed.png

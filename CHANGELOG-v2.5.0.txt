@@ -1,0 +1,44 @@
+SETTLEMENTS 2.5.0 — CHANGELOG
+
+RESEARCH / HISTORY STAGES
+- Added Campaign > Research screen.
+- Added one-active-project-per-polity technology research.
+- Added optional reflection-only History Stages 5.4.0+ integration.
+- Added dynamic History Stages technology list, prerequisites, icons/metadata, durations and unlock synchronization.
+- Research uses active server ticks rather than Minecraft day length.
+- Added persistent research progress/completion SavedData.
+- Added independent-polity research shared across an independent ruler's holdings.
+- Added research migration into a newly founded/joined political faction.
+- Added Scholarly trait, default +15% research speed.
+- Added configurable Prosperity research-speed bonus.
+- Added /campaign research fallback command.
+
+INDEPENDENT SETTLEMENT ARCHITECTURE
+- Added hidden technical Recruits backing factions for independent rulers.
+- Independent settlements can now own/use Recruits claims and military teams without pretending to be full political factions in Settlements diplomacy.
+- Backing factions are filtered from normal political faction/diplomacy interfaces.
+- Claims and loaded managed units migrate from the technical backing faction to a real faction when appropriate.
+- Added safe transition logic around Recruits' faction-leader membership checks.
+- Full faction creation is now configurable progression requiring a developed independent settlement and settlement Wealth.
+- Added clearer faction-creation screen explanation of development requirements.
+
+MERCENARY COMPANIES
+- Added dedicated Military > Mercenary Rosters GUI.
+- Added config/settlements-mercenary-rosters.json generated defaults and live timestamp reload.
+- Added /settlements admin mercenary reload_rosters.
+- Added named global companies with custom item icons, troop compositions, template rosters, hire costs, upkeep intervals and starting loyalty.
+- Added persistent employer trust/loyalty.
+- Added paid-company refusal to defect at high effective loyalty.
+- Added loyalty-based buyout premiums and bidder Reliability price modifiers.
+- Added company-level upkeep, missed-payment states and desertion.
+- Company states: Paid, Discontented, Unpaid, Deserting.
+- Paying wages improves trust and faction Reliability; missed wages reduce both.
+- Honorable paid contract termination improves company trust.
+- Added safe retirement of unloaded stale company entities after buyout/desertion.
+- Added company unit death tracking.
+- Added company totals/status into the normal Military summary.
+- Added /campaign mercenaries fallback command.
+
+FOUNDATION CARRIED FORWARD FROM 2.4.1
+- Canonical Settlements identity; no active Prototype naming.
+- Taxation, #settlements:currency, first settlers, Reliability display, Main Seat, no Dynasty, independent aid frequencies, protected-polity security, villager population cleanup/confinement, faction palette correction, dropdown top layering and Manage GUI restructuring.

@@ -1,0 +1,16 @@
+SETTLEMENTS 2.5.0 — SOURCE VALIDATION NOTES
+
+This source package is a TEST RELEASE until it has been compiled in a normal networked Forge development environment and runtime-tested.
+
+Checks performed before packaging should include:
+- git diff --check
+- git fsck --full
+- all JSON resources parse
+- no merge-conflict markers
+- no active Prototype/Campaign23 identity strings
+- Java public top-level type names match filenames
+- source ZIP passes unzip -t
+- Recruits methods used by new company spawning verified against the bundled Recruits 1.15.2 JAR with javap
+
+Known environment limitation:
+The assistant/container environment cannot currently bootstrap the ForgeGradle distribution from services.gradle.org, so a successful local BUILD-V2.5.0.bat run is required before calling 2.5.0 compiled or final.
