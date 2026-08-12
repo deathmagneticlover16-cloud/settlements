@@ -30,6 +30,11 @@ public final class SettlementClientHandler {
     public static void openFaction(FactionSnapshot snapshot) { Minecraft.getInstance().setScreen(new FactionScreen(snapshot)); }
     public static void openWorldNews(WorldNewsSnapshot snapshot) { Minecraft.getInstance().setScreen(new WorldNewsScreen(snapshot)); }
     public static void openMilitary(SettlementSnapshot snapshot) { Minecraft.getInstance().setScreen(new MilitaryScreen(snapshot)); }
+    public static void openMercenaryRosters(ee.lastpagans.settlements.MercenaryRosterSnapshot snapshot) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof MercenaryRosterScreen screen) screen.updateSnapshot(snapshot);
+        else minecraft.setScreen(new MercenaryRosterScreen(snapshot));
+    }
     public static void openResearch(ResearchSnapshot snapshot) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof ResearchScreen screen) screen.updateSnapshot(snapshot);

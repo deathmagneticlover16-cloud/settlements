@@ -64,6 +64,9 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
             addRenderableWidget(Button.builder(Component.literal("Recruit " + amount), button -> recruit(amount))
                     .bounds(left + 254 + i * 66, top + 140, 62, 20).build());
         }
+        addRenderableWidget(Button.builder(Component.literal("Mercenary Rosters"), button ->
+                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MERCENARIES)))
+                .bounds(left + 24, top + 206, 150, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Raise Levy"), button -> send(SettlementManager.SettlementAction.RAISE_LEVY))
                 .bounds(left + 24, top + 274, 106, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Return Levy"), button -> send(SettlementManager.SettlementAction.RETURN_LEVY))

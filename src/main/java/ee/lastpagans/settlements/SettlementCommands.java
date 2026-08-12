@@ -382,7 +382,9 @@ public final class SettlementCommands {
                                                 .then(Commands.argument("interval_days", IntegerArgumentType.integer(1, 365))
                                                         .executes(context -> setMercenaryHand(context.getSource(), IntegerArgumentType.getInteger(context, "wage"), IntegerArgumentType.getInteger(context, "interval_days"))))))
                                 .then(Commands.literal("clearhand")
-                                        .executes(context -> clearMercenaryHand(context.getSource()))))
+                                        .executes(context -> clearMercenaryHand(context.getSource())))
+                                .then(Commands.literal("reload_rosters")
+                                        .executes(context -> reloadMercenaryRosters(context.getSource()))))
         )));
 
         dispatcher.register(Commands.literal("character")
@@ -1368,6 +1370,13 @@ public final class SettlementCommands {
         return 1;
     }
     private static int adminDebugSpouseRefresh(CommandSourceStack source, ServerPlayer target) { CampaignData data = CampaignData.get(target.serverLevel()); long day = target.serverLevel().getDayTime()/24000L; data.forceRefreshCandidates(target.getUUID(), day); source.sendSuccess(() -> Component.literal("Spouse candidates force-refreshed for " + target.getGameProfile().getName() + "."), true); return 1; }
+    private static int reloadMercenaryRosters(CommandSourceStack source) {
+        MercenaryRosterRegistry.forceReload();
+        int count = MercenaryRosterRegistry.definitions().size();
+        source.sendSuccess(() -> Component.literal("Reloaded " + count + " Settlements mercenary roster definition(s)."), true);
+        return count;
+    }
+
     private static int adminDebugMercenaryPayment(CommandSourceStack source, String faction) { int count = SettlementManager.forceMercenaryPaymentCheck(source.getServer(), faction); source.sendSuccess(() -> Component.literal("Forced mercenary payment check for " + faction + " across " + count + " tracked mercenary(ies)."), true); return 1; }
 
     private static int regionPos1(CommandSourceStack source, String id, String type) throws com.mojang.brigadier.exceptions.CommandSyntaxException {

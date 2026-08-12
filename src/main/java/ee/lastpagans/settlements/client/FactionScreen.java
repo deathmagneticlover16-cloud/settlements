@@ -350,6 +350,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
             graphics.drawString(font, "Faction name", left + 132, top + 104, 0xFFE7D8B0, false);
             graphics.drawString(font, "Team color", left + 132, top + 140, 0xFFE7D8B0, false);
             graphics.drawString(font, "Unit color", left + 286, top + 140, 0xFFE7D8B0, false);
+            graphics.drawCenteredString(font, "A full faction requires an established independent Town with sufficient", left + W / 2, top + 177, 0xFFAA9D7F);
+            graphics.drawCenteredString(font, "population, Stability, Prosperity and settlement Wealth.", left + W / 2, top + 188, 0xFFAA9D7F);
             graphics.drawCenteredString(font, "JOIN AN EXISTING FACTION", left + W / 2, top + 248, 0xFFE7D8B0);
             if (snapshot.availableFactions().isEmpty()) {
                 graphics.drawCenteredString(font, "No public factions are currently available.", left + W / 2, top + 278, 0xFFAAAAAA);

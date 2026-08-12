@@ -57,6 +57,7 @@ public final class SettlementEvents {
         if (settlement == null) return;
         CampaignSystemsData extra = CampaignSystemsData.get(level);
         extra.removeMercenaryContract(entity.getUUID());
+        MercenaryRosterManager.onUnitDeath(level, entity.getUUID());
         extra.consumeRetiredLevy(entity.getUUID());
         CampaignSystemsManager.onMilitaryDeath(level, entity, settlement);
         CampaignSystemsManager.onLevyDeath(level, entity);
@@ -111,6 +112,7 @@ public final class SettlementEvents {
     public static void onEntityJoin(EntityJoinLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
         Entity entity = event.getEntity();
+        if (MercenaryRosterManager.handleRetiredEntityJoin(level, entity)) return;
         CampaignSystemsData extra = CampaignSystemsData.get(level);
         if (extra.isRetiredLevy(entity.getUUID())
                 && "levy".equals(entity.getPersistentData().getString(SettlementManager.TAG_KIND))) {
@@ -130,6 +132,7 @@ public final class SettlementEvents {
             settlement.addProfessional(entity.getUUID());
             if (entity instanceof com.talhanation.recruits.entities.AbstractRecruitEntity recruit
                     && entity.getPersistentData().getBoolean(SettlementManager.TAG_MERCENARY)
+                    && entity.getPersistentData().getString(SettlementManager.TAG_MERCENARY_COMPANY).isBlank()
                     && CampaignSystemsData.get(level).mercenaryContract(entity.getUUID()) == null) {
                 SettlementManager.registerMercenaryContract(level, recruit, settlement, null);
             }

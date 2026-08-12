@@ -75,6 +75,7 @@ public final class SettlementManager {
     public static final String TAG_MERCENARY_INTERVAL_DAYS = "SettlementsMercenaryIntervalDays";
     public static final String TAG_MERCENARY_NEXT_PAYMENT_DAY = "SettlementsMercenaryNextPaymentDay";
     public static final String TAG_MERCENARY_MISSED_PAYMENTS = "SettlementsMercenaryMissedPayments";
+    public static final String TAG_MERCENARY_COMPANY = "SettlementsMercenaryCompany";
     public static final String TAG_UNIT_TYPE = "SettlementsUnitType";
     public static final int MERCENARY_DEFAULT_WAGE = 20;
     public static final int MERCENARY_DEFAULT_INTERVAL_DAYS = 7;
@@ -330,6 +331,13 @@ public final class SettlementManager {
     static AbstractRecruitEntity spawnRecruit(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,
                                                        CampaignData.UnitType unitType, int index, PlayerTeam team, boolean levy, UUID batchId) {
         ItemStack template = CampaignData.get(level).resolveUnitTemplate(settlement, unitType);
+        return spawnRecruitFromTemplate(level, actor, settlement, unitType, index, team, levy, batchId, template);
+    }
+
+    static AbstractRecruitEntity spawnRecruitFromTemplate(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,
+                                                            CampaignData.UnitType unitType, int index, PlayerTeam team, boolean levy,
+                                                            UUID batchId, ItemStack template) {
+        if (template == null) template = ItemStack.EMPTY;
         EntityType<?> entityType = null;
         CompoundTag templateTag = null;
         if (!template.isEmpty() && template.getItem() instanceof SpawnEggItem egg) {
@@ -881,7 +889,7 @@ public final class SettlementManager {
                 && level.getBlockState(pos.below()).isFaceSturdy(level, pos.below(), Direction.UP);
     }
 
-    private static String validateMilitarySpawnSetup(MinecraftServer server, SettlementData.SettlementRecord settlement) {
+    static String validateMilitarySpawnSetup(MinecraftServer server, SettlementData.SettlementRecord settlement) {
         if (!settlement.hasMusterGround()) return "Set this settlement's Muster Ground before recruiting troops.";
         ServerLevel level = resolveMusterGroundLevel(server, settlement);
         if (level == null) return "The saved Muster Ground dimension is unavailable.";
@@ -958,6 +966,7 @@ public final class SettlementManager {
         SettlementData settlements = SettlementData.get(server.overworld());
         CampaignData campaign = CampaignData.get(server.overworld());
         processMercenaryContracts(server, settlements, campaign, day);
+        MercenaryRosterManager.process(server, day);
         for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
             for (UUID uuid : Set.copyOf(settlement.getAllMilitaryUnits())) {
                 AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);

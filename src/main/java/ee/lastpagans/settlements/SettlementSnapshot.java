@@ -128,6 +128,17 @@ public record SettlementSnapshot(
         long nextPayment = contracts.stream().mapToLong(CampaignSystemsData.MercenaryContractRecord::nextPaymentDay).min().orElse(-1L);
         int worstMissed = contracts.stream().mapToInt(CampaignSystemsData.MercenaryContractRecord::missedPayments).max().orElse(0);
         boolean deserting = contracts.stream().anyMatch(CampaignSystemsData.MercenaryContractRecord::desertPending);
+
+        MercenaryCompanyData companies = MercenaryCompanyData.get(player.serverLevel());
+        for (MercenaryCompanyData.CompanyContract company : companies.contracts()) {
+            if (!settlement.getId().equals(company.settlementId())) continue;
+            MercenaryRosterRegistry.Definition definition = MercenaryRosterRegistry.get(company.companyId());
+            mercenaries += company.unitIds().size();
+            if (definition != null) wages += definition.upkeep();
+            if (nextPayment < 0L || company.nextPaymentDay() < nextPayment) nextPayment = company.nextPaymentDay();
+            worstMissed = Math.max(worstMissed, company.missedPayments());
+            deserting |= company.missedPayments() >= 3;
+        }
         String status = mercenaries == 0 ? "None" : deserting || worstMissed >= 3 ? "Deserting"
                 : worstMissed == 2 ? "Unpaid" : worstMissed == 1 ? "Discontented" : "Paid";
         for (UUID uuid : settlement.getAllMilitaryUnits()) {
