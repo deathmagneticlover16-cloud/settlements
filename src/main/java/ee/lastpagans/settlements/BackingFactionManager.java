@@ -127,6 +127,7 @@ public final class BackingFactionManager {
     public static void migrateOwnedSettlementsToPoliticalFaction(ServerPlayer player, String factionId) {
         if (player == null || factionId == null || factionId.isBlank() || isBackingFaction(factionId)) return;
         SettlementData data = SettlementData.get(player.serverLevel());
+        ResearchData.get(player.serverLevel()).mergePolity("independent:" + player.getUUID(), "faction:" + factionId);
         Set<String> oldBacking = new HashSet<>();
         for (SettlementData.SettlementRecord settlement : data.getOwnedSettlements(player.getUUID())) {
             if (!settlement.getFactionTeam().isBlank()) continue;

@@ -50,27 +50,20 @@ public final class ResearchManager {
     public static Polity polityFor(ServerPlayer player) {
         if (player == null) return null;
         String faction = CampaignManager.factionId(player);
-        if (!faction.isBlank()) return new Polity("faction:" + faction, faction, "faction", faction);
+        if (!faction.isBlank()) return new Polity("faction:" + faction, CampaignManager.factionName(faction), "faction", faction);
         SettlementData data = SettlementData.get(player.serverLevel());
-        SettlementData.SettlementRecord selected = data.getSelectedSettlement(player.getUUID());
-        if (selected != null && player.getUUID().equals(selected.getOwnerId()) && selected.getFactionTeam().isBlank()) {
-            return new Polity("settlement:" + selected.getId(), selected.getName(), "settlement", selected.getId());
-        }
         List<SettlementData.SettlementRecord> owned = data.getOwnedSettlements(player.getUUID()).stream()
                 .filter(value -> value.getFactionTeam().isBlank()).toList();
-        if (!owned.isEmpty()) {
-            SettlementData.SettlementRecord first = owned.get(0);
-            return new Polity("settlement:" + first.getId(), first.getName(), "settlement", first.getId());
-        }
-        return null;
+        if (owned.isEmpty()) return null;
+        SettlementData.SettlementRecord selected = data.getSelectedSettlement(player.getUUID());
+        String name = selected != null && player.getUUID().equals(selected.getOwnerId()) && selected.getFactionTeam().isBlank()
+                ? selected.getName() : owned.get(0).getName();
+        return new Polity("independent:" + player.getUUID(), name + " Independent Polity", "independent", player.getUUID().toString());
     }
 
     public static boolean canManage(ServerPlayer player, Polity polity) {
         if (player == null || polity == null) return false;
-        if ("settlement".equals(polity.kind())) {
-            SettlementData.SettlementRecord settlement = SettlementData.get(player.serverLevel()).getSettlement(polity.id());
-            return settlement != null && player.getUUID().equals(settlement.getOwnerId());
-        }
+        if ("independent".equals(polity.kind())) return player.getUUID().toString().equals(polity.id());
         if (CampaignManager.isFactionLeader(player, polity.id())) return true;
         return CampaignData.get(player.serverLevel()).factionRankTier(polity.id(), player.getUUID(), false) >= 3;
     }
@@ -101,12 +94,16 @@ public final class ResearchManager {
         String faction = CampaignManager.factionId(player);
         if (!faction.isBlank()) {
             for (String stage : data.completed("faction:" + faction)) HistoryStagesCompat.unlock(player, stage);
+            return;
         }
         SettlementData settlements = SettlementData.get(player.serverLevel());
+        Set<UUID> independentRulers = new java.util.HashSet<>();
         for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
-            if (settlement.getFactionTeam().isBlank() && settlement.getRole(player.getUUID()) != SettlementData.SettlementRole.OUTSIDER) {
-                for (String stage : data.completed("settlement:" + settlement.getId())) HistoryStagesCompat.unlock(player, stage);
-            }
+            if (!settlement.getFactionTeam().isBlank() || settlement.getOwnerId() == null) continue;
+            if (settlement.getRole(player.getUUID()) != SettlementData.SettlementRole.OUTSIDER) independentRulers.add(settlement.getOwnerId());
+        }
+        for (UUID ruler : independentRulers) {
+            for (String stage : data.completed("independent:" + ruler)) HistoryStagesCompat.unlock(player, stage);
         }
     }
 
@@ -116,9 +113,13 @@ public final class ResearchManager {
         CampaignSystemsData extra = CampaignSystemsData.get(server.overworld());
         UUID rulerId = null;
         int prosperity = 0;
-        if ("settlement".equals(polity.kind())) {
-            SettlementData.SettlementRecord settlement = settlements.getSettlement(polity.id());
-            if (settlement != null) { rulerId = settlement.getOwnerId(); prosperity = extra.prosperity(settlement.getId()); }
+        if ("independent".equals(polity.kind())) {
+            try { rulerId = UUID.fromString(polity.id()); } catch (IllegalArgumentException ignored) { rulerId = null; }
+            if (rulerId != null) {
+                List<SettlementData.SettlementRecord> holdings = settlements.getOwnedSettlements(rulerId).stream()
+                        .filter(value -> value.getFactionTeam().isBlank()).toList();
+                if (!holdings.isEmpty()) prosperity = (int)Math.round(holdings.stream().mapToInt(value -> extra.prosperity(value.getId())).average().orElse(0.0D));
+            }
         } else if (FactionEvents.recruitsFactionManager != null) {
             RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(polity.id());
             if (faction != null) rulerId = faction.getTeamLeaderUUID();
@@ -149,11 +150,14 @@ public final class ResearchManager {
             if (id.isBlank() || FactionEvents.recruitsFactionManager == null || FactionEvents.recruitsFactionManager.getFactionByStringID(id) == null) return null;
             return new Polity(key, CampaignManager.factionName(id), "faction", id);
         }
-        if (key.startsWith("settlement:")) {
-            String id = key.substring("settlement:".length());
-            SettlementData.SettlementRecord settlement = SettlementData.get(server.overworld()).getSettlement(id);
-            if (settlement == null || !settlement.getFactionTeam().isBlank()) return null;
-            return new Polity(key, settlement.getName(), "settlement", settlement.getId());
+        if (key.startsWith("independent:")) {
+            String id = key.substring("independent:".length());
+            UUID ruler;
+            try { ruler = UUID.fromString(id); } catch (IllegalArgumentException exception) { return null; }
+            List<SettlementData.SettlementRecord> holdings = SettlementData.get(server.overworld()).getOwnedSettlements(ruler).stream()
+                    .filter(value -> value.getFactionTeam().isBlank()).toList();
+            if (holdings.isEmpty()) return null;
+            return new Polity(key, holdings.get(0).getName() + " Independent Polity", "independent", id);
         }
         return null;
     }
@@ -171,8 +175,12 @@ public final class ResearchManager {
 
     private static boolean belongs(ServerPlayer player, Polity polity) {
         if ("faction".equals(polity.kind())) return polity.id().equals(CampaignManager.factionId(player));
-        SettlementData.SettlementRecord settlement = SettlementData.get(player.serverLevel()).getSettlement(polity.id());
-        return settlement != null && settlement.getRole(player.getUUID()) != SettlementData.SettlementRole.OUTSIDER;
+        if (!"independent".equals(polity.kind())) return false;
+        UUID ruler;
+        try { ruler = UUID.fromString(polity.id()); } catch (IllegalArgumentException exception) { return false; }
+        return SettlementData.get(player.serverLevel()).getOwnedSettlements(ruler).stream()
+                .filter(value -> value.getFactionTeam().isBlank())
+                .anyMatch(value -> value.getRole(player.getUUID()) != SettlementData.SettlementRole.OUTSIDER);
     }
 
     public record Polity(String key, String name, String kind, String id) {}

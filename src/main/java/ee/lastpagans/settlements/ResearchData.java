@@ -117,6 +117,18 @@ public final class ResearchData extends SavedData {
         return Set.copyOf(completed.getOrDefault(polity == null ? "" : polity, Set.of()));
     }
 
+    /** Merge an independent polity into a political faction without duplicating concurrent research. */
+    public void mergePolity(String fromPolity, String toPolity) {
+        if (fromPolity == null || toPolity == null || fromPolity.isBlank() || toPolity.isBlank() || fromPolity.equals(toPolity)) return;
+        Set<String> sourceCompleted = completed.remove(fromPolity);
+        if (sourceCompleted != null && !sourceCompleted.isEmpty()) completed.computeIfAbsent(toPolity, ignored -> new HashSet<>()).addAll(sourceCompleted);
+        ActiveResearch sourceActive = active.remove(fromPolity);
+        if (sourceActive != null && !active.containsKey(toPolity) && !isCompleted(toPolity, sourceActive.stageId())) {
+            active.put(toPolity, new ActiveResearch(toPolity, sourceActive.stageId(), sourceActive.stageName(), sourceActive.baseTicks(), sourceActive.progressScaledTicks()));
+        }
+        if (sourceCompleted != null || sourceActive != null) setDirty();
+    }
+
     public Set<String> politiesWithActiveResearch() { return Set.copyOf(active.keySet()); }
 
     public record ActiveResearch(String polityKey, String stageId, String stageName, long baseTicks, long progressScaledTicks) {
