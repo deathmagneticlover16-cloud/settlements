@@ -2,15 +2,21 @@ SETTLEMENTS 2.5.0 — SOURCE VALIDATION NOTES
 
 This source package is a TEST RELEASE until it has been compiled in a normal networked Forge development environment and runtime-tested.
 
-Checks performed before packaging should include:
-- git diff --check
-- git fsck --full
-- all JSON resources parse
+PRE-PACKAGE CHECKS COMPLETED
+- git diff --check: clean
+- git fsck --full: clean
+- Java parser pass: 88 Java files, 0 syntax errors
+- JSON validation: 5 resource JSON files, 0 parse errors
+- Java public top-level type names match filenames: 0 issues
 - no merge-conflict markers
-- no active Prototype/Campaign23 identity strings
-- Java public top-level type names match filenames
-- source ZIP passes unzip -t
-- Recruits methods used by new company spawning verified against the bundled Recruits 1.15.2 JAR with javap
+- no active Prototype / settlementprototype / Campaign23 source identity strings
+- no active 2.4.0 / 2.4.1 version strings under src
+- Recruits methods used by backing-faction/company code verified against bundled Recruits 1.15.2 JAR with javap
+- History Stages 5.4.0 reflection targets used by the optional compatibility bridge verified against the supplied JAR with javap
 
-Known environment limitation:
-The assistant/container environment cannot currently bootstrap the ForgeGradle distribution from services.gradle.org, so a successful local BUILD-V2.5.0.bat run is required before calling 2.5.0 compiled or final.
+FORGEGRADLE LIMITATION
+A real ./gradlew clean compileJava attempt was made. Gradle failed before project compilation while attempting to download:
+https://services.gradle.org/distributions/gradle-8.1.1-bin.zip
+Reason: java.net.UnknownHostException: services.gradle.org
+
+This is an environment/network bootstrap failure, not Java compiler output from Settlements. A successful local BUILD-V2.5.0.bat run is therefore required before calling 2.5.0 compiled or final.
