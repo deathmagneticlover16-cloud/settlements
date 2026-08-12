@@ -69,7 +69,7 @@ public final class ResearchManager {
     }
 
     public static void processResearch(MinecraftServer server) {
-        if (server == null) return;
+        if (server == null || !HistoryStagesCompat.installed()) return;
         ResearchData data = ResearchData.get(server.overworld());
         for (String polityKey : new ArrayList<>(data.politiesWithActiveResearch())) {
             Polity polity = resolve(server, polityKey);

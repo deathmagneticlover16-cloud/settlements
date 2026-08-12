@@ -406,6 +406,8 @@ public final class SettlementData extends SavedData {
 
         private final Set<UUID> villagerResidents = new HashSet<>();
         private final Set<UUID> professionalUnits = new HashSet<>();
+        /** Named-company mercenaries are military residents but do not consume settlement manpower. */
+        private final Set<UUID> mercenaryCompanyUnits = new HashSet<>();
         private final Map<UUID, UUID> levyUnitToBatch = new HashMap<>();
         private final Map<UUID, LevyBatch> levyBatches = new HashMap<>();
         private final List<String> chronicle = new ArrayList<>();
@@ -472,6 +474,7 @@ public final class SettlementData extends SavedData {
 
             readUuidSet(tag, "Villagers", villagerResidents);
             readUuidSet(tag, "Professionals", professionalUnits);
+            readUuidSet(tag, "MercenaryCompanyUnits", mercenaryCompanyUnits);
 
             for (Tag raw : tag.getList("Members", Tag.TAG_COMPOUND)) {
                 CompoundTag member = (CompoundTag) raw;
@@ -546,6 +549,7 @@ public final class SettlementData extends SavedData {
 
             writeUuidSet(tag, "Villagers", villagerResidents);
             writeUuidSet(tag, "Professionals", professionalUnits);
+            writeUuidSet(tag, "MercenaryCompanyUnits", mercenaryCompanyUnits);
 
             ListTag memberList = new ListTag();
             members.forEach((player, role) -> {
@@ -625,15 +629,18 @@ public final class SettlementData extends SavedData {
         public int getVillagerCount() { return villagerResidents.size(); }
         public Set<UUID> getVillagerIds() { return Set.copyOf(villagerResidents); }
         public int getProfessionalCount() { return professionalUnits.size(); }
+        public int getMercenaryCompanyCount() { return mercenaryCompanyUnits.size(); }
         public int getLivingLevymen() { return levyUnitToBatch.size(); }
         public int getLevyReservedManpower() { return levyBatches.values().stream().mapToInt(batch -> batch.manpowerSpent).sum(); }
         public List<String> getChronicle() { return List.copyOf(chronicle); }
         public List<String> getContributions() { return List.copyOf(contributions); }
         public Map<UUID, SettlementRole> getMembers() { return Map.copyOf(members); }
         public java.util.Set<UUID> getProfessionalUnits() { return java.util.Set.copyOf(professionalUnits); }
+        public java.util.Set<UUID> getMercenaryCompanyUnits() { return java.util.Set.copyOf(mercenaryCompanyUnits); }
         public java.util.Set<UUID> getLevyUnits() { return java.util.Set.copyOf(levyUnitToBatch.keySet()); }
         public java.util.Set<UUID> getAllMilitaryUnits() {
             java.util.Set<UUID> values = new java.util.HashSet<>(professionalUnits);
+            values.addAll(mercenaryCompanyUnits);
             values.addAll(levyUnitToBatch.keySet());
             return java.util.Set.copyOf(values);
         }
@@ -649,7 +656,7 @@ public final class SettlementData extends SavedData {
         }
 
         public int getMilitaryPopulation() {
-            return getProfessionalCount() + getLivingLevymen();
+            return getProfessionalCount() + getMercenaryCompanyCount() + getLivingLevymen();
         }
 
         public int getDisplayedPopulation() {
@@ -900,6 +907,8 @@ public final class SettlementData extends SavedData {
         public boolean removeVillager(UUID villager) { boolean removed = villagerResidents.remove(villager); if (removed) dirty(); return removed; }
         public void addProfessional(UUID unit) { professionalUnits.add(unit); dirty(); }
         public boolean removeProfessional(UUID unit) { boolean removed = professionalUnits.remove(unit); if (removed) dirty(); return removed; }
+        public void addMercenaryCompanyUnit(UUID unit) { if (unit != null && mercenaryCompanyUnits.add(unit)) dirty(); }
+        public boolean removeMercenaryCompanyUnit(UUID unit) { boolean removed = unit != null && mercenaryCompanyUnits.remove(unit); if (removed) dirty(); return removed; }
 
         public UUID addLevyBatch(int manpowerSpent, Collection<UUID> units) {
             UUID id = UUID.randomUUID();
@@ -953,12 +962,13 @@ public final class SettlementData extends SavedData {
         }
 
         public boolean isTrackedUnit(UUID unit) {
-            return professionalUnits.contains(unit) || levyUnitToBatch.containsKey(unit);
+            return professionalUnits.contains(unit) || mercenaryCompanyUnits.contains(unit) || levyUnitToBatch.containsKey(unit);
         }
 
         /** Clears Settlements-owned military tracking. This intentionally does not delete external Recruits entities. */
         public void clearMilitaryTracking() {
             professionalUnits.clear();
+            mercenaryCompanyUnits.clear();
             levyUnitToBatch.clear();
             levyBatches.clear();
             availableManpower = Math.min(availableManpower, maximumManpower);
@@ -1006,7 +1016,7 @@ public final class SettlementData extends SavedData {
             if (lastFoodDay == day) return;
             lastFoodDay = day;
 
-            int mouths = Math.max(0, getVillagerCount() + getProfessionalCount());
+            int mouths = Math.max(0, getVillagerCount() + getProfessionalCount() + getMercenaryCompanyCount());
             if (mouths == 0) {
                 changeStability(-1);
             } else if (food >= mouths) {

@@ -191,7 +191,7 @@ public record SettlementSnapshot(
     private static List<EffectEntry> buildEffects(ServerPlayer player, SettlementData.SettlementRecord settlement,
                                                    CampaignData campaign, int morale) {
         List<EffectEntry> values = new ArrayList<>();
-        int mouths = settlement.getVillagerCount() + settlement.getProfessionalCount();
+        int mouths = settlement.getVillagerCount() + settlement.getProfessionalCount() + settlement.getMercenaryCompanyCount();
         if (mouths > 0 && settlement.getFood() >= mouths) {
             values.add(new EffectEntry("Well supplied", "Food stockpile", "minecraft:bread", "POSITIVE",
                     "+2 daily stability while food covers civilian and professional upkeep.", "Daily"));

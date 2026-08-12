@@ -117,6 +117,15 @@ public final class ResearchData extends SavedData {
         return Set.copyOf(completed.getOrDefault(polity == null ? "" : polity, Set.of()));
     }
 
+    /** Clears all active and completed research owned by one polity. */
+    public boolean clearPolity(String polity) {
+        if (polity == null || polity.isBlank()) return false;
+        boolean changed = active.remove(polity) != null;
+        changed |= completed.remove(polity) != null;
+        if (changed) setDirty();
+        return changed;
+    }
+
     /** Merge an independent polity into a political faction without duplicating concurrent research. */
     public void mergePolity(String fromPolity, String toPolity) {
         if (fromPolity == null || toPolity == null || fromPolity.isBlank() || toPolity.isBlank() || fromPolity.equals(toPolity)) return;

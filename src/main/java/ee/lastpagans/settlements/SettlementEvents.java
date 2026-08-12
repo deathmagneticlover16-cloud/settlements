@@ -61,6 +61,10 @@ public final class SettlementEvents {
         extra.consumeRetiredLevy(entity.getUUID());
         CampaignSystemsManager.onMilitaryDeath(level, entity, settlement);
         CampaignSystemsManager.onLevyDeath(level, entity);
+        if (settlement.removeMercenaryCompanyUnit(entity.getUUID())) {
+            settlement.addChronicle("A mercenary company soldier died.");
+            return;
+        }
         if (settlement.removeProfessional(entity.getUUID())) {
             settlement.addChronicle("A professional soldier died; one MP became vacant.");
             return;
@@ -129,10 +133,12 @@ public final class SettlementEvents {
             SettlementManager.reconcileResidentVillager(level, villager);
         } else if (entity.getPersistentData().getBoolean(SettlementManager.TAG_MANAGED)
                 && "professional".equals(entity.getPersistentData().getString(SettlementManager.TAG_KIND))) {
-            settlement.addProfessional(entity.getUUID());
+            String companyId = entity.getPersistentData().getString(SettlementManager.TAG_MERCENARY_COMPANY);
+            if (!companyId.isBlank()) settlement.addMercenaryCompanyUnit(entity.getUUID());
+            else settlement.addProfessional(entity.getUUID());
             if (entity instanceof com.talhanation.recruits.entities.AbstractRecruitEntity recruit
                     && entity.getPersistentData().getBoolean(SettlementManager.TAG_MERCENARY)
-                    && entity.getPersistentData().getString(SettlementManager.TAG_MERCENARY_COMPANY).isBlank()
+                    && companyId.isBlank()
                     && CampaignSystemsData.get(level).mercenaryContract(entity.getUUID()) == null) {
                 SettlementManager.registerMercenaryContract(level, recruit, settlement, null);
             }

@@ -138,7 +138,7 @@ public final class MercenaryRosterManager {
 
         if (existing != null) terminateContract(player.getServer(), existing, false, "The company accepted a rival contract.");
         Set<UUID> units = new HashSet<>();
-        for (AbstractRecruitEntity recruit : spawned) { units.add(recruit.getUUID()); settlement.addProfessional(recruit.getUUID()); }
+        for (AbstractRecruitEntity recruit : spawned) { units.add(recruit.getUUID()); settlement.addMercenaryCompanyUnit(recruit.getUUID()); }
         long day = level.getDayTime() / 24000L;
         data.put(new MercenaryCompanyData.CompanyContract(definition.id(), settlement.getId(), factionId, player.getUUID(), day,
                 day + definition.paymentIntervalDays(), 0, units));
@@ -172,7 +172,15 @@ public final class MercenaryRosterManager {
         for (MercenaryCompanyData.CompanyContract original : List.copyOf(data.contracts())) {
             MercenaryRosterRegistry.Definition definition = MercenaryRosterRegistry.get(original.companyId());
             SettlementData.SettlementRecord settlement = settlements.getSettlement(original.settlementId());
-            if (definition == null || settlement == null || original.unitIds().isEmpty()) { data.remove(original.companyId()); continue; }
+            if (original.unitIds().isEmpty()) { data.remove(original.companyId()); continue; }
+            if (definition == null) {
+                terminateContract(server, original, true, "The mercenary company was removed from the roster configuration; its contract ended.");
+                continue;
+            }
+            if (settlement == null) {
+                terminateContract(server, original, true, definition.name() + " departed because its contracted settlement no longer exists.");
+                continue;
+            }
             MercenaryCompanyData.CompanyContract contract = original;
             String currentFaction = settlement.getFactionTeam();
             if (!currentFaction.equals(contract.factionId())) {
@@ -217,6 +225,30 @@ public final class MercenaryRosterManager {
         }
     }
 
+    /** Releases independent contracts personally hired by a player. Faction contracts belong to the faction and survive a personal reset. */
+    public static int clearIndependentContractsHiredBy(MinecraftServer server, UUID playerId) {
+        if (server == null || playerId == null) return 0;
+        MercenaryCompanyData data = MercenaryCompanyData.get(server.overworld());
+        List<MercenaryCompanyData.CompanyContract> matching = data.contracts().stream()
+                .filter(value -> value.factionId().isBlank() && playerId.equals(value.hiringPlayer())).toList();
+        for (MercenaryCompanyData.CompanyContract contract : matching) {
+            terminateContract(server, contract, true, "The independent employer's Settlements data was reset; the company departed.");
+        }
+        return matching.size();
+    }
+
+    /** Releases all named company contracts based from one settlement. Used by destructive admin recovery. */
+    public static int clearSettlementContracts(MinecraftServer server, String settlementId) {
+        if (server == null || settlementId == null || settlementId.isBlank()) return 0;
+        MercenaryCompanyData data = MercenaryCompanyData.get(server.overworld());
+        List<MercenaryCompanyData.CompanyContract> matching = data.contracts().stream()
+                .filter(value -> settlementId.equals(value.settlementId())).toList();
+        for (MercenaryCompanyData.CompanyContract contract : matching) {
+            terminateContract(server, contract, true, "The mercenary contract was cleared administratively.");
+        }
+        return matching.size();
+    }
+
     public static void onUnitDeath(ServerLevel level, UUID unitId) {
         if (level == null || unitId == null) return;
         MercenaryCompanyData data = MercenaryCompanyData.get(level);
@@ -244,7 +276,7 @@ public final class MercenaryRosterManager {
         SettlementData.SettlementRecord settlement = SettlementData.get(server.overworld()).getSettlement(contract.settlementId());
         Set<UUID> unavailable = new HashSet<>();
         for (UUID unit : contract.unitIds()) {
-            if (settlement != null) settlement.removeProfessional(unit);
+            if (settlement != null) settlement.removeMercenaryCompanyUnit(unit);
             AbstractRecruitEntity recruit = findLoaded(server, unit);
             if (recruit == null) { unavailable.add(unit); continue; }
             recruit.setIsOwned(false); recruit.setOwnerUUID(Optional.empty()); recruit.clearUpkeepPos(); recruit.setShouldRest(false);

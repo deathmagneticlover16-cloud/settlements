@@ -1123,13 +1123,20 @@ public final class SettlementCommands {
 
     private static int adminResetPlayer(CommandSourceStack source, ServerPlayer target) {
         SettlementData settlements = SettlementData.get(target.serverLevel());
-        int retiredLevies = CampaignSystemsManager.forceRetirePlayerLevies(target.serverLevel(), target.getUUID());
-        int affectedSettlements = settlements.resetPlayerData(target.getUUID());
-        CampaignData.get(target.serverLevel()).resetPlayerData(target.getUUID());
-        CampaignSystemsData.get(target.serverLevel()).resetPlayerData(target.getUUID());
+        UUID playerId = target.getUUID();
+        int retiredLevies = CampaignSystemsManager.forceRetirePlayerLevies(target.serverLevel(), playerId);
+        int releasedCompanies = MercenaryRosterManager.clearIndependentContractsHiredBy(target.getServer(), playerId);
+        boolean clearedResearch = ResearchData.get(target.serverLevel()).clearPolity("independent:" + playerId);
+        int affectedSettlements = settlements.resetPlayerData(playerId);
+        CampaignData.get(target.serverLevel()).resetPlayerData(playerId);
+        CampaignSystemsData.get(target.serverLevel()).resetPlayerData(playerId);
         SettlementManager.broadcastProfiles(target.getServer());
         SettlementManager.promptCharacterCreation(target);
-        source.sendSuccess(() -> Component.literal("FULL Settlements data reset for " + target.getGameProfile().getName() + ". Affected settlement memberships/ownership references: " + affectedSettlements + ". Retired levy entities: " + retiredLevies + "."), true);
+        source.sendSuccess(() -> Component.literal("FULL Settlements data reset for " + target.getGameProfile().getName()
+                + ". Affected settlement memberships/ownership references: " + affectedSettlements
+                + ". Retired levy entities: " + retiredLevies
+                + ". Released independent mercenary companies: " + releasedCompanies
+                + ". Independent research cleared: " + (clearedResearch ? "yes" : "none") + "."), true);
         return 1;
     }
 
@@ -1189,6 +1196,7 @@ public final class SettlementCommands {
             }
             ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(source.getLevel());
         }
+        MercenaryRosterManager.clearSettlementContracts(source.getServer(), settlementId);
         extra.clearSettlementData(settlementId);
         data.deleteSettlement(settlementId);
         source.sendSuccess(() -> Component.literal("Settlement " + name + " was reset/deleted. Recruits claims and world entities were preserved."), true);
@@ -1253,10 +1261,12 @@ public final class SettlementCommands {
     private static int adminClearArmyData(CommandSourceStack source, String id) {
         SettlementData.SettlementRecord settlement = SettlementData.get(source.getLevel()).getSettlement(id);
         if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
+        int companies = MercenaryRosterManager.clearSettlementContracts(source.getServer(), settlement.getId());
         settlement.clearMilitaryTracking();
         CampaignSystemsData.get(source.getLevel()).clearSettlementArmyData(settlement.getId());
         settlement.runManpowerChecker();
-        source.sendSuccess(() -> Component.literal("Cleared Settlements military/levy/mercenary tracking for " + settlement.getName() + ". Existing external Recruits entities were not deleted."), true);
+        source.sendSuccess(() -> Component.literal("Cleared Settlements military/levy/mercenary tracking for " + settlement.getName()
+                + ". Released " + companies + " named mercenary compan" + (companies == 1 ? "y" : "ies") + ". Existing unrelated Recruits entities were not deleted."), true);
         return 1;
     }
 

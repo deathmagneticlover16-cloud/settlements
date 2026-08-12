@@ -6,6 +6,7 @@ RESEARCH / HISTORY STAGES
 - Added optional reflection-only History Stages 5.4.0+ integration.
 - Added dynamic History Stages technology list, prerequisites, icons/metadata, durations and unlock synchronization.
 - Research uses active server ticks rather than Minecraft day length.
+- Active research pauses safely while History Stages is absent instead of completing an unavailable stage.
 - Added persistent research progress/completion SavedData.
 - Added independent-polity research shared across an independent ruler's holdings.
 - Added research migration into a newly founded/joined political faction.
@@ -36,8 +37,11 @@ MERCENARY COMPANIES
 - Honorable paid contract termination improves company trust.
 - Added safe retirement of unloaded stale company entities after buyout/desertion.
 - Added company unit death tracking.
+- Named company soldiers have a dedicated military tracking pool: they count as military residents/food mouths but do not consume settlement manpower.
+- Removing an active company definition from the roster config now ends that contract cleanly instead of leaving orphaned mercenaries.
 - Added company totals/status into the normal Military summary.
 - Added /campaign mercenaries fallback command.
+- Full player reset now clears the player's independent research and releases personally hired independent company contracts; faction-owned research/contracts remain faction property.
 
 FOUNDATION CARRIED FORWARD FROM 2.4.1
 - Canonical Settlements identity; no active Prototype naming.

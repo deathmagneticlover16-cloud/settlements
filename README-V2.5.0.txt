@@ -23,7 +23,7 @@ IDENTITY
 - History Stages is optional. Without it, Settlements still loads; the Research screen explains that technology research is unavailable.
 - With History Stages installed, its individual technologies/stages are discovered dynamically.
 - Only one technology can be actively researched by a polity at a time.
-- Research progresses using active server ticks, not Minecraft day length. Sleeping, /time set and seasonal daylight changes therefore do not shortcut research.
+- Research progresses using active server ticks, not Minecraft day length. Sleeping, /time set and seasonal daylight changes therefore do not shortcut research. Active projects pause if History Stages is absent.
 - History Stages prerequisites are respected.
 - Completion is persisted by Settlements and synchronized to eligible online members; completed stages are re-synchronized on login.
 - Independent rulers share one research polity across all of their independent holdings. Founding/joining a proper faction merges completed research into the political faction and carries an active project if the receiving faction has no active project.
@@ -49,7 +49,7 @@ IDENTITY
 - Paid service improves company trust and can improve faction Reliability.
 - Ending a paid contract honorably improves company trust toward that employer.
 - Bidder Reliability affects hiring price.
-- Mercenary companies are polity-level contracted forces and do not consume settlement manpower.
+- Mercenary companies are polity-level contracted forces and do not consume settlement manpower. They still count as military population and food mouths.
 - Mercenary company configuration reload: /settlements admin mercenary reload_rosters
 
 INHERITED IMPORTANT SYSTEMS
