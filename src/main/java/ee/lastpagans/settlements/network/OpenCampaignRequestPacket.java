@@ -2,6 +2,7 @@ package ee.lastpagans.settlements.network;
 
 import ee.lastpagans.settlements.CampaignManager;
 import ee.lastpagans.settlements.SettlementManager;
+import ee.lastpagans.settlements.ResearchManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -9,7 +10,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 public record OpenCampaignRequestPacket(ScreenTarget target) {
-    public enum ScreenTarget { MAIN, CHARACTER, SETTLEMENT, FACTION, MILITARY, DIPLOMACY, FAMILY, WORLD_NEWS }
+    public enum ScreenTarget { MAIN, CHARACTER, SETTLEMENT, FACTION, MILITARY, DIPLOMACY, FAMILY, WORLD_NEWS, RESEARCH }
 
     public static void encode(OpenCampaignRequestPacket packet, FriendlyByteBuf buffer) { buffer.writeEnum(packet.target); }
     public static OpenCampaignRequestPacket decode(FriendlyByteBuf buffer) { return new OpenCampaignRequestPacket(buffer.readEnum(ScreenTarget.class)); }
@@ -26,6 +27,7 @@ public record OpenCampaignRequestPacket(ScreenTarget target) {
                 case DIPLOMACY -> CampaignManager.openDiplomacy(player, "");
                 case FAMILY -> CampaignManager.openFamily(player, "");
                 case WORLD_NEWS -> CampaignManager.openWorldNews(player);
+                case RESEARCH -> ResearchManager.open(player, "");
             }
         });
         context.setPacketHandled(true);

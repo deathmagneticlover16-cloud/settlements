@@ -11,7 +11,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 public final class CampaignMainScreen extends ScaledCampaignScreen {
-    private static final int W = 480, H = 310;
+    private static final int W = 480, H = 350;
     private final CampaignSnapshot snapshot;
     private int left, top;
     private BannerRenderer banner;
@@ -39,7 +39,8 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
                 .bounds(left + 246, top + 134, 108, 34).build());
         addRenderableWidget(Button.builder(Component.literal("NEW SETTLEMENT"), button -> minecraft.setScreen(new SettlementCreationScreen()))
                 .bounds(left + 360, top + 134, 108, 34).build());
-        addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose()).bounds(left + 404, top + 282, 60, 18).build());
+        addButton("RESEARCH", 18, 176, OpenCampaignRequestPacket.ScreenTarget.RESEARCH);
+        addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose()).bounds(left + 404, top + 322, 60, 18).build());
     }
 
     private void addButton(String label, int x, int y, OpenCampaignRequestPacket.ScreenTarget target) {
@@ -58,7 +59,7 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 82, 0xFF3B3023);
         graphics.fill(left + 10, top + 86, left + W - 10, top + 176, 0xFF242424);
-        graphics.fill(left + 10, top + 184, left + W - 10, top + 245, 0xFF242424);
+        graphics.fill(left + 10, top + 216, left + W - 10, top + 285, 0xFF242424);
         if (minecraft != null && minecraft.player != null) PortraitRenderer.render(graphics, minecraft.player, left + 16, top + 9, 64, 66, uiMouseX, uiMouseY);
         if (banner != null) banner.renderBanner(graphics, left + W - 58, top + 7, 20, 40, CAMPAIGN_BANNER_SCALE);
 
@@ -67,17 +68,17 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Faith: " + snapshot.faith(), left + 94, top + 47, 0xFFCCCCCC, false);
         graphics.drawString(font, "Faction: " + snapshot.factionName(), left + 94, top + 63, 0xFFCCCCCC, false);
 
-        stat(graphics, "Settlements", snapshot.settlementCount(), 22, 193);
-        stat(graphics, "Population", snapshot.totalPopulation(), 170, 193);
-        stat(graphics, "Wealth", snapshot.totalWealth(), 330, 193);
-        stat(graphics, "Manpower", snapshot.availableManpower() + "/" + snapshot.maximumManpower(), 22, 215);
-        stat(graphics, "Stability", snapshot.averageStability() + "%", 170, 215);
-        stat(graphics, "Food", snapshot.totalFood(), 330, 215);
-        graphics.drawString(font, "Selected settlement: " + snapshot.selectedSettlementName(), left + 22, top + 235, 0xFFB8B0A0, false);
+        stat(graphics, "Settlements", snapshot.settlementCount(), 22, 225);
+        stat(graphics, "Population", snapshot.totalPopulation(), 170, 225);
+        stat(graphics, "Wealth", snapshot.totalWealth(), 330, 225);
+        stat(graphics, "Manpower", snapshot.availableManpower() + "/" + snapshot.maximumManpower(), 22, 247);
+        stat(graphics, "Stability", snapshot.averageStability() + "%", 170, 247);
+        stat(graphics, "Food", snapshot.totalFood(), 330, 247);
+        graphics.drawString(font, "Selected settlement: " + snapshot.selectedSettlementName(), left + 22, top + 267, 0xFFB8B0A0, false);
 
         if (snapshot.pendingDiplomacy() + snapshot.pendingMarriage() + snapshot.activeWars() > 0) {
             graphics.drawString(font, "Notices: treaties " + snapshot.pendingDiplomacy() + " · marriage " + snapshot.pendingMarriage()
-                    + " · wars " + snapshot.activeWars(), left + 16, top + 263, 0xFFFFD27A, false);
+                    + " · wars " + snapshot.activeWars(), left + 16, top + 303, 0xFFFFD27A, false);
         }
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);

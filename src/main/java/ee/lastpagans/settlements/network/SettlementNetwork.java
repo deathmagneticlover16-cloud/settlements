@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SettlementNetwork {
-    private static final String PROTOCOL = "29";
+    private static final String PROTOCOL = "30";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Settlements.MOD_ID, "main"),
@@ -37,6 +37,8 @@ public final class SettlementNetwork {
         CHANNEL.messageBuilder(WorldNewsSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(WorldNewsSnapshotPacket::encode).decoder(WorldNewsSnapshotPacket::decode).consumerMainThread(WorldNewsSnapshotPacket::handle).add();
         CHANNEL.messageBuilder(MapMarkersPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(MapMarkersPacket::encode).decoder(MapMarkersPacket::decode).consumerMainThread(MapMarkersPacket::handle).add();
         CHANNEL.messageBuilder(CampaignToastPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(CampaignToastPacket::encode).decoder(CampaignToastPacket::decode).consumerMainThread(CampaignToastPacket::handle).add();
-        CHANNEL.messageBuilder(SetMainSeatPacket.class, id, NetworkDirection.PLAY_TO_SERVER).encoder(SetMainSeatPacket::encode).decoder(SetMainSeatPacket::decode).consumerMainThread(SetMainSeatPacket::handle).add();
+        CHANNEL.messageBuilder(SetMainSeatPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(SetMainSeatPacket::encode).decoder(SetMainSeatPacket::decode).consumerMainThread(SetMainSeatPacket::handle).add();
+        CHANNEL.messageBuilder(ResearchSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(ResearchSnapshotPacket::encode).decoder(ResearchSnapshotPacket::decode).consumerMainThread(ResearchSnapshotPacket::handle).add();
+        CHANNEL.messageBuilder(ResearchActionPacket.class, id, NetworkDirection.PLAY_TO_SERVER).encoder(ResearchActionPacket::encode).decoder(ResearchActionPacket::decode).consumerMainThread(ResearchActionPacket::handle).add();
     }
 }

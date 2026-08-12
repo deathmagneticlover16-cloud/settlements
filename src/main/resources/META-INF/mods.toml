@@ -28,3 +28,10 @@ mandatory=true
 versionRange="[1.15.2,)"
 ordering="AFTER"
 side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="historystages"
+mandatory=false
+versionRange="[5.4.0,)"
+ordering="AFTER"
+side="BOTH"

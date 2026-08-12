@@ -33,6 +33,7 @@ public final class SettlementEvents {
     private static int checkerTicks;
     private static int residentBoundaryTicks;
     private static int firstSettlerTicks;
+    private static int researchTicks;
 
     private SettlementEvents() {
     }
@@ -179,6 +180,7 @@ public final class SettlementEvents {
         if (character == null || !character.isCreated()) {
             PENDING_CHARACTER_SCREENS.put(player.getUUID(), 40);
         }
+        ResearchManager.syncCompletedResearch(player);
     }
 
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
@@ -230,6 +232,12 @@ public final class SettlementEvents {
         if (firstSettlerTicks >= 20) {
             firstSettlerTicks = 0;
             SettlementManager.processFirstSettlerArrivals(server);
+        }
+
+        researchTicks++;
+        if (researchTicks >= 20) {
+            researchTicks = 0;
+            ResearchManager.processResearch(server);
         }
 
         residentBoundaryTicks++;
@@ -322,6 +330,7 @@ public final class SettlementEvents {
         checkerTicks = 0;
         residentBoundaryTicks = 0;
         firstSettlerTicks = 0;
+        researchTicks = 0;
         PENDING_CHARACTER_SCREENS.clear();
     }
 }

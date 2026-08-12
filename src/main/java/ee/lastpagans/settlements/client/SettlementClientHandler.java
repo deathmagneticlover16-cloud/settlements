@@ -6,6 +6,7 @@ import ee.lastpagans.settlements.DiplomacySnapshot;
 import ee.lastpagans.settlements.FamilySnapshot;
 import ee.lastpagans.settlements.FactionSnapshot;
 import ee.lastpagans.settlements.WorldNewsSnapshot;
+import ee.lastpagans.settlements.ResearchSnapshot;
 import ee.lastpagans.settlements.SettlementSnapshot;
 import ee.lastpagans.settlements.MapMarkerSnapshot;
 import ee.lastpagans.settlements.network.SnapshotPacket;
@@ -29,6 +30,11 @@ public final class SettlementClientHandler {
     public static void openFaction(FactionSnapshot snapshot) { Minecraft.getInstance().setScreen(new FactionScreen(snapshot)); }
     public static void openWorldNews(WorldNewsSnapshot snapshot) { Minecraft.getInstance().setScreen(new WorldNewsScreen(snapshot)); }
     public static void openMilitary(SettlementSnapshot snapshot) { Minecraft.getInstance().setScreen(new MilitaryScreen(snapshot)); }
+    public static void openResearch(ResearchSnapshot snapshot) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof ResearchScreen screen) screen.updateSnapshot(snapshot);
+        else minecraft.setScreen(new ResearchScreen(snapshot));
+    }
     public static void cacheMapMarkers(MapMarkerSnapshot snapshot) { mapMarkers = snapshot; }
     public static MapMarkerSnapshot mapMarkers() { return mapMarkers; }
 }

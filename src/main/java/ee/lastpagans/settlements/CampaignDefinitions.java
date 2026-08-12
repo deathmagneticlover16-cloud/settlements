@@ -85,6 +85,10 @@ public final class CampaignDefinitions {
                 "A frightening battlefield presence who drives levies into action quickly.",
                 List.of(new TraitEffect("Recruit morale", "+4", 4, EffectKind.MORALE),
                         new TraitEffect("Levy muster time", "-20%", -20, EffectKind.LEVY_MUSTER))));
+        register(new TraitDefinition("scholarly", "Scholarly", "minecraft:lectern", TraitTone.POSITIVE,
+                "A learned ruler who organizes scribes, study and technical inquiry efficiently.",
+                List.of(new TraitEffect("Research speed", "+15%", 15, EffectKind.RESEARCH_SPEED),
+                        new TraitEffect("Settlement wealth", "+1 per day", 1, EffectKind.WEALTH))));
     }
 
     private CampaignDefinitions() {}
@@ -222,7 +226,7 @@ public final class CampaignDefinitions {
     }
 
     public enum TraitTone { POSITIVE, NEGATIVE, MIXED, NEUTRAL }
-    public enum EffectKind { STABILITY, WEALTH, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER }
+    public enum EffectKind { STABILITY, WEALTH, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER, RESEARCH_SPEED }
 
     public record TraitEffect(String label, String displayValue, int amount, EffectKind kind) {}
 

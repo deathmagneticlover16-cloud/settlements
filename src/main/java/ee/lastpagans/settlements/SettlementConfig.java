@@ -39,6 +39,9 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_COUNT;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MIN_DELAY_SECONDS;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MAX_DELAY_SECONDS;
+    public static final ForgeConfigSpec.IntValue RESEARCH_FALLBACK_HOURS;
+    public static final ForgeConfigSpec.IntValue SCHOLARLY_RESEARCH_BONUS_PERCENT;
+    public static final ForgeConfigSpec.IntValue RESEARCH_MAX_PROSPERITY_BONUS_PERCENT;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -130,6 +133,15 @@ public final class SettlementConfig {
                 .defineInRange("firstSettlerMinDelaySeconds", 10, 0, 300);
         FIRST_SETTLER_MAX_DELAY_SECONDS = builder.comment("Maximum real-time delay after founding before the first settlers can arrive.")
                 .defineInRange("firstSettlerMaxDelaySeconds", 60, 0, 600);
+        builder.pop();
+
+        builder.push("research");
+        RESEARCH_FALLBACK_HOURS = builder.comment("Fallback active-server research duration when History Stages reports no duration for a technology.")
+                .defineInRange("fallbackResearchHours", 6, 1, 24 * 30);
+        SCHOLARLY_RESEARCH_BONUS_PERCENT = builder.comment("Research-speed bonus supplied by the Scholarly ruler trait when History Stages research is active.")
+                .defineInRange("scholarlyResearchBonusPercent", 15, 0, 200);
+        RESEARCH_MAX_PROSPERITY_BONUS_PERCENT = builder.comment("Maximum research-speed bonus supplied by settlement Prosperity at 100 Prosperity.")
+                .defineInRange("maximumProsperityResearchBonusPercent", 10, 0, 100);
         builder.pop();
         SPEC = builder.build();
     }
