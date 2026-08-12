@@ -393,7 +393,10 @@ public final class SettlementData extends SavedData {
         private BlockPos barracksChest;
         private int barracksRadius = 12;
         private int barracksCapacity = 64;
+        /** Political faction. Blank means this settlement is independent in Settlements diplomacy. */
         private String factionTeam = "";
+        /** Hidden Recruits faction used only to make independent claims/units function correctly. */
+        private String backingFactionTeam = "";
         private String claimDimension = "";
         private UUID claimId;
         private String claimName = "";
@@ -435,6 +438,7 @@ public final class SettlementData extends SavedData {
             lastContractDay = tag.getLong("LastContractDay");
             notice = cleanText(tag.getString("Notice"), "", 160);
             factionTeam = tag.getString("FactionTeam");
+            backingFactionTeam = tag.getString("BackingFactionTeam");
             claimDimension = tag.getString("ClaimDimension");
             claimName = tag.getString("ClaimName");
             if (tag.hasUUID("ClaimId")) claimId = tag.getUUID("ClaimId");
@@ -506,6 +510,7 @@ public final class SettlementData extends SavedData {
             tag.putLong("LastContractDay", lastContractDay);
             tag.putString("Notice", notice);
             tag.putString("FactionTeam", factionTeam);
+            tag.putString("BackingFactionTeam", backingFactionTeam);
             tag.putString("ClaimDimension", claimDimension);
             tag.putString("ClaimName", claimName);
             if (claimId != null) tag.putUUID("ClaimId", claimId);
@@ -582,6 +587,9 @@ public final class SettlementData extends SavedData {
         public int getBarracksRadius() { return barracksRadius; }
         public int getBarracksCapacity() { return barracksCapacity; }
         public String getFactionTeam() { return factionTeam; }
+        public String getBackingFactionTeam() { return backingFactionTeam; }
+        /** Recruits-facing team. Political faction wins; independents use their hidden backing faction. */
+        public String getEffectiveRecruitsTeam() { return factionTeam.isBlank() ? backingFactionTeam : factionTeam; }
         public String getClaimName() { return claimName; }
         public UUID getClaimId() { return claimId; }
         public String getClaimDimension() { return claimDimension; }
@@ -734,6 +742,7 @@ public final class SettlementData extends SavedData {
         public void changeHousingCapacity(int delta) { setHousingCapacity(housingCapacity + delta); }
         public void setNotice(String value) { notice = cleanText(value, "", 160); dirty(); }
         public void setFactionTeam(String value) { factionTeam = value == null ? "" : value; dirty(); }
+        public void setBackingFactionTeam(String value) { backingFactionTeam = value == null ? "" : value; dirty(); }
 
         public void setTownSquare(String dimension, BlockPos position) {
             townSquareDimension = dimension == null ? "" : dimension;

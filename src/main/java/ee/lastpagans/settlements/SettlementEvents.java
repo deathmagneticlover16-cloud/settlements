@@ -160,18 +160,19 @@ public final class SettlementEvents {
         );
         if (settlement != null) {
             settlement.updateClaimName(event.getLevel().dimension().location().toString(), claim.getUUID(), claim.getName());
-            // A multi-claim city may temporarily contain claims with different Recruits owners during a war.
-            // Do not let one claim update silently transfer the entire Settlements polity. Whole-settlement
-            // ownership changes are handled explicitly by Settlements diplomacy/admin actions.
-            if (settlement.getClaimCount() == 1 && claim.getOwnerFactionStringID() != null
-                    && !claim.getOwnerFactionStringID().isBlank()) {
-                settlement.setFactionTeam(claim.getOwnerFactionStringID());
-            }
+            // Recruits claim ownership is transport/territory state, not Settlements political identity.
+            // Never let an external claim update silently move the settlement into a faction (or expose
+            // the hidden independent backing faction as a political faction). Explicit Settlements
+            // diplomacy/admin actions own polity transitions.
         }
     }
 
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
+        if (CampaignManager.factionId(player).isBlank() && SettlementData.get(player.serverLevel()).getOwnedSettlements(player.getUUID()).stream()
+                .anyMatch(settlement -> settlement.getFactionTeam().isBlank())) {
+            BackingFactionManager.ensureForIndependent(player);
+        }
         SettlementManager.syncProfiles(player);
         CampaignManager.sendMapMarkers(player);
         player.refreshDisplayName();
@@ -317,8 +318,9 @@ public final class SettlementEvents {
     }
 
     private static String rankedName(Player player, ServerLevel level, SettlementData.CharacterRecord character) {
-        if (player.getTeam() == null) return character.getDisplayName();
-        String factionId = player.getTeam().getName();
+        if (!(player instanceof ServerPlayer serverPlayer)) return character.getDisplayName();
+        String factionId = CampaignManager.factionId(serverPlayer);
+        if (factionId.isBlank()) return character.getDisplayName();
         RecruitsFaction faction = FactionEvents.recruitsFactionManager == null ? null
                 : FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
         boolean leader = faction != null && character.getPlayerId().equals(faction.getTeamLeaderUUID());

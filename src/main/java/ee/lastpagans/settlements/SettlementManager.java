@@ -125,8 +125,7 @@ public final class SettlementManager {
 
         String factionId = settlement.getFactionTeam();
         if (factionId != null && !factionId.isBlank()) {
-            Team team = player.getTeam();
-            return team != null && team.getName().equals(factionId);
+            return factionId.equals(CampaignManager.factionId(player));
         }
 
         return settlement.getRole(player.getUUID()) != SettlementData.SettlementRole.OUTSIDER;
@@ -272,7 +271,7 @@ public final class SettlementManager {
 
         ServerLevel level = resolveMusterGroundLevel(player.getServer(), settlement);
         if (level == null) return "The saved Muster Ground dimension is unavailable.";
-        PlayerTeam team = settlement.getFactionTeam().isBlank() ? null : level.getScoreboard().getPlayerTeam(settlement.getFactionTeam());
+        PlayerTeam team = settlement.getEffectiveRecruitsTeam().isBlank() ? null : level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
         List<UUID> spawned = new ArrayList<>();
         for (int i = 0; i < amount; i++) {
             AbstractRecruitEntity recruit = spawnRecruit(level, player, settlement, unitType, i, team, false, null);
@@ -313,7 +312,7 @@ public final class SettlementManager {
         int count = manpowerSpent * 2;
         ServerLevel level = resolveMusterGroundLevel(player.getServer(), settlement);
         if (level == null) return "The saved Muster Ground dimension is unavailable.";
-        PlayerTeam team = settlement.getFactionTeam().isBlank() ? null : level.getScoreboard().getPlayerTeam(settlement.getFactionTeam());
+        PlayerTeam team = settlement.getEffectiveRecruitsTeam().isBlank() ? null : level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
         UUID temporaryBatch = UUID.randomUUID();
         List<UUID> spawned = new ArrayList<>();
         for (int i = 0; i < count; i++) {
@@ -415,8 +414,16 @@ public final class SettlementManager {
         String dimension = player.serverLevel().dimension().location().toString();
         SettlementData.SettlementRecord existing = SettlementData.get(player.serverLevel()).findSettlementByClaim(dimension, claim.getUUID());
         if (existing != null && existing != settlement) return "That claim is already linked to " + existing.getName() + ".";
+        String expectedOwner = settlement.getEffectiveRecruitsTeam();
+        if (expectedOwner.isBlank() && settlement.getFactionTeam().isBlank()) {
+            settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
+            expectedOwner = settlement.getEffectiveRecruitsTeam();
+        }
+        String claimOwner = claim.getOwnerFactionStringID();
+        if (!expectedOwner.isBlank() && claimOwner != null && !claimOwner.isBlank() && !expectedOwner.equals(claimOwner))
+            return "That Recruits claim belongs to a different polity.";
         boolean added = settlement.linkClaim(dimension, claim.getUUID(), claim.getName());
-        if (claim.getOwnerFactionStringID() != null && settlement.getFactionTeam().isBlank()) settlement.setFactionTeam(claim.getOwnerFactionStringID());
+        if (!expectedOwner.isBlank()) BackingFactionManager.migrateClaimOwnership(player.getServer(), settlement, expectedOwner);
         return added ? "Linked claim " + claim.getName() + ". Total claims: " + settlement.getClaimCount() + "."
                 : "That claim is already linked to this settlement.";
     }
@@ -505,8 +512,8 @@ public final class SettlementManager {
         villager.getPersistentData().putString(TAG_SETTLEMENT, settlement.getId());
         if (!level.addFreshEntity(villager)) return false;
         reconcileResidentVillager(level, villager);
-        if (!settlement.getFactionTeam().isBlank()) {
-            PlayerTeam team = level.getScoreboard().getPlayerTeam(settlement.getFactionTeam());
+        if (!settlement.getEffectiveRecruitsTeam().isBlank()) {
+            PlayerTeam team = level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
             if (team != null) level.getScoreboard().addPlayerToTeam(villager.getScoreboardName(), team);
         }
         return true;
@@ -559,8 +566,8 @@ public final class SettlementManager {
         }
 
         reconcileResidentVillager(level, villager);
-        if (!settlement.getFactionTeam().isBlank()) {
-            PlayerTeam team = level.getScoreboard().getPlayerTeam(settlement.getFactionTeam());
+        if (!settlement.getEffectiveRecruitsTeam().isBlank()) {
+            PlayerTeam team = level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
             if (team != null) level.getScoreboard().addPlayerToTeam(villager.getScoreboardName(), team);
         }
         settlement.addChronicle("A new settler arrived.");
@@ -878,9 +885,9 @@ public final class SettlementManager {
         if (!settlement.hasMusterGround()) return "Set this settlement's Muster Ground before recruiting troops.";
         ServerLevel level = resolveMusterGroundLevel(server, settlement);
         if (level == null) return "The saved Muster Ground dimension is unavailable.";
-        if (!settlement.getFactionTeam().isBlank()
-                && level.getScoreboard().getPlayerTeam(settlement.getFactionTeam()) == null) {
-            return "The saved faction team no longer exists: " + settlement.getFactionTeam();
+        if (!settlement.getEffectiveRecruitsTeam().isBlank()
+                && level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam()) == null) {
+            return "The saved Recruits backing team no longer exists: " + settlement.getEffectiveRecruitsTeam();
         }
         return null;
     }
@@ -1169,9 +1176,10 @@ public final class SettlementManager {
         boolean admin = actor.createCommandSourceStack().hasPermission(2);
         if (!admin) {
             String faction = settlement.getFactionTeam();
+            String targetFaction = CampaignManager.factionId(target);
             if (faction.isBlank()) {
-                if (target.getTeam() != null) return "Independent settlements may only add independent players.";
-            } else if (target.getTeam() == null || !faction.equals(target.getTeam().getName())) {
+                if (!targetFaction.isBlank()) return "Independent settlements may only add independent players.";
+            } else if (!faction.equals(targetFaction)) {
                 return "Faction settlements may only add members of their own faction.";
             }
         }
@@ -1200,7 +1208,7 @@ public final class SettlementManager {
         if (target == null) return "That player must be online to receive settlement ownership.";
         SettlementData data = SettlementData.get(player.serverLevel());
         String settlementFaction = settlement.getFactionTeam() == null ? "" : settlement.getFactionTeam();
-        String targetFaction = target.getTeam() == null ? "" : target.getTeam().getName();
+        String targetFaction = CampaignManager.factionId(target);
         if (!settlementFaction.equals(targetFaction)) {
             return "Settlement ownership can only be transferred within its current polity. Use diplomacy for cross-polity territorial transfers.";
         }
@@ -1209,6 +1217,7 @@ public final class SettlementManager {
             return target.getGameProfile().getName() + " already owns the maximum two independent settlements.";
         }
         settlement.setOwner(target.getUUID());
+        if (targetFaction.isBlank()) BackingFactionManager.assignIndependentSettlement(target, settlement);
         data.selectSettlement(target.getUUID(), settlement.getId());
         settlement.addChronicle("Ownership transferred to " + target.getGameProfile().getName() + ".");
         return "Ownership transferred to " + target.getGameProfile().getName() + ".";
@@ -1217,8 +1226,9 @@ public final class SettlementManager {
     private static String formattedCharacterName(MinecraftServer server, SettlementData.CharacterRecord character) {
         if (server == null || character == null) return character == null ? "" : character.getDisplayName();
         ServerPlayer online = server.getPlayerList().getPlayer(character.getPlayerId());
-        if (online == null || online.getTeam() == null) return character.getDisplayName();
-        String faction = online.getTeam().getName();
+        if (online == null) return character.getDisplayName();
+        String faction = CampaignManager.factionId(online);
+        if (faction.isBlank()) return character.getDisplayName();
         CampaignData campaign = CampaignData.get(server.overworld());
         boolean leader = FactionEvents.recruitsFactionManager != null
                 && FactionEvents.recruitsFactionManager.getFactionByStringID(faction) != null

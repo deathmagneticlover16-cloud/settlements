@@ -42,6 +42,11 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue RESEARCH_FALLBACK_HOURS;
     public static final ForgeConfigSpec.IntValue SCHOLARLY_RESEARCH_BONUS_PERCENT;
     public static final ForgeConfigSpec.IntValue RESEARCH_MAX_PROSPERITY_BONUS_PERCENT;
+    public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_REQUIRE_TOWN;
+    public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_POPULATION;
+    public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_STABILITY;
+    public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_PROSPERITY;
+    public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_WEALTH_COST;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -142,6 +147,19 @@ public final class SettlementConfig {
                 .defineInRange("scholarlyResearchBonusPercent", 15, 0, 200);
         RESEARCH_MAX_PROSPERITY_BONUS_PERCENT = builder.comment("Maximum research-speed bonus supplied by settlement Prosperity at 100 Prosperity.")
                 .defineInRange("maximumProsperityResearchBonusPercent", 10, 0, 100);
+        builder.pop();
+
+        builder.push("faction_founding");
+        FACTION_FOUNDING_REQUIRE_TOWN = builder.comment("Require an established Town/City-State before an independent ruler may form a full political faction.")
+                .define("requireTown", true);
+        FACTION_FOUNDING_MIN_POPULATION = builder.comment("Minimum settlement population required to found a political faction.")
+                .defineInRange("minimumPopulation", 75, 0, 100000);
+        FACTION_FOUNDING_MIN_STABILITY = builder.comment("Minimum stability of the founding settlement.")
+                .defineInRange("minimumStability", 60, 0, 100);
+        FACTION_FOUNDING_MIN_PROSPERITY = builder.comment("Minimum prosperity of the founding settlement.")
+                .defineInRange("minimumProsperity", 40, 0, 100);
+        FACTION_FOUNDING_WEALTH_COST = builder.comment("Settlement Wealth spent when upgrading from an independent polity into a full faction. Recruits' own configured faction-creation item cost still applies too.")
+                .defineInRange("wealthCost", 500, 0, 1000000);
         builder.pop();
         SPEC = builder.build();
     }

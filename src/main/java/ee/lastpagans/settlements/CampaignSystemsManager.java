@@ -259,7 +259,7 @@ public final class CampaignSystemsManager {
                     CampaignSystemsData.RegionRecord site = extra.prayerSite(settlement.getId());
                     if (site == null || !site.contains(dim, pos)) continue;
                     boolean allowed = settlement.getFactionTeam().isBlank() ? settlement.getRole(player.getUUID()) != SettlementData.SettlementRole.OUTSIDER
-                            : player.getTeam() != null && settlement.getFactionTeam().equals(player.getTeam().getName());
+                            : settlement.getFactionTeam().equals(CampaignManager.factionId(player));
                     if (!allowed) continue;
                     int gain = SettlementConfig.PRAYER_DEVOTION_GAIN.get();
                     extra.changeDevotion(player.getUUID(), gain);

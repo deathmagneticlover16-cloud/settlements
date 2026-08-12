@@ -450,7 +450,7 @@ public final class SettlementCommands {
     private static int create(CommandSourceStack source, String id, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
         SettlementData data = SettlementData.get(player.serverLevel());
-        if (player.getTeam() == null && data.getSettlements().stream().filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
+        if (CampaignManager.factionId(player).isBlank() && data.getSettlements().stream().filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
             source.sendFailure(Component.literal("Independent rulers may own at most two settlements. Create a faction before founding another."));
             return 0;
         }
@@ -460,8 +460,9 @@ public final class SettlementCommands {
             return 0;
         }
         settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
-        Team team = player.getTeam();
-        if (team != null) settlement.setFactionTeam(team.getName());
+        String politicalFaction = CampaignManager.factionId(player);
+        if (!politicalFaction.isBlank()) settlement.setFactionTeam(politicalFaction);
+        else settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
         linkClaimAtPlayer(player, settlement, false);
         SettlementManager.scheduleFirstSettlers(player, settlement);
         data.selectSettlement(player.getUUID(), settlement.getId());
@@ -545,13 +546,17 @@ public final class SettlementCommands {
         ServerPlayer player = player(source);
         SettlementData.SettlementRecord settlement = requireManage(player, id);
         if (settlement == null) return 0;
-        Team team = player.getTeam();
-        if (team == null) {
-            source.sendFailure(Component.literal("You are not currently in a Recruits/scoreboard faction."));
+        String factionId = CampaignManager.factionId(player);
+        if (factionId.isBlank()) {
+            source.sendFailure(Component.literal("You are not currently in a political faction."));
             return 0;
         }
-        settlement.setFactionTeam(team.getName());
-        source.sendSuccess(() -> Component.literal("Settlement linked to faction " + team.getName() + "."), true);
+        String previous = settlement.getBackingFactionTeam();
+        settlement.setFactionTeam(factionId);
+        settlement.setBackingFactionTeam("");
+        BackingFactionManager.migrateClaimOwnership(player.getServer(), settlement, factionId);
+        BackingFactionManager.retireIfUnused(player.getServer(), previous);
+        source.sendSuccess(() -> Component.literal("Settlement linked to faction " + factionId + "."), true);
         return 1;
     }
 
@@ -561,6 +566,7 @@ public final class SettlementCommands {
         if (settlement == null) return 0;
         settlement.setFactionTeam("");
         if (settlement.getRank() == SettlementData.SettlementRank.CAPITAL) settlement.setRank(SettlementData.SettlementRank.TOWN);
+        BackingFactionManager.assignIndependentSettlement(player, settlement);
         source.sendSuccess(() -> Component.literal("Settlement is now independent."), true);
         return 1;
     }
@@ -589,10 +595,18 @@ public final class SettlementCommands {
             if (notify) player.sendSystemMessage(Component.literal("That claim is already linked to " + existing.getName() + "."));
             return false;
         }
-        boolean added = settlement.linkClaim(dimension, claim.getUUID(), claim.getName());
-        if (claim.getOwnerFactionStringID() != null && settlement.getFactionTeam().isBlank()) {
-            settlement.setFactionTeam(claim.getOwnerFactionStringID());
+        String expectedOwner = settlement.getEffectiveRecruitsTeam();
+        if (expectedOwner.isBlank() && settlement.getFactionTeam().isBlank()) {
+            settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
+            expectedOwner = settlement.getEffectiveRecruitsTeam();
         }
+        String claimOwner = claim.getOwnerFactionStringID();
+        if (!expectedOwner.isBlank() && claimOwner != null && !claimOwner.isBlank() && !expectedOwner.equals(claimOwner)) {
+            if (notify) player.sendSystemMessage(Component.literal("That Recruits claim belongs to a different polity."));
+            return false;
+        }
+        boolean added = settlement.linkClaim(dimension, claim.getUUID(), claim.getName());
+        if (!expectedOwner.isBlank()) BackingFactionManager.migrateClaimOwnership(player.getServer(), settlement, expectedOwner);
         if (added && CampaignSystemsData.get(player.serverLevel()).settlementProtected(settlement.getId())) {
             // Claims linked after an admin settlement/faction was protected must inherit
             // Recruits' admin-claim flag too, otherwise the new district can still be sieged.
@@ -734,7 +748,7 @@ public final class SettlementCommands {
         if (settlement == null) return 0;
         SettlementData data = SettlementData.get(player.serverLevel());
         String settlementFaction = settlement.getFactionTeam() == null ? "" : settlement.getFactionTeam();
-        String targetFaction = target.getTeam() == null ? "" : target.getTeam().getName();
+        String targetFaction = CampaignManager.factionId(target);
         boolean adminOverride = source.hasPermission(2);
         if (!adminOverride && !settlementFaction.equals(targetFaction)) {
             source.sendFailure(Component.literal("Settlement ownership can only be transferred within its current polity. Use diplomacy for cross-polity territorial transfers."));
@@ -745,6 +759,20 @@ public final class SettlementCommands {
             return 0;
         }
         settlement.setOwner(target.getUUID());
+        if (adminOverride && !settlementFaction.equals(targetFaction)) {
+            if (targetFaction.isBlank()) {
+                settlement.setFactionTeam("");
+                BackingFactionManager.assignIndependentSettlement(target, settlement);
+            } else {
+                String previousBacking = settlement.getBackingFactionTeam();
+                settlement.setFactionTeam(targetFaction);
+                settlement.setBackingFactionTeam("");
+                BackingFactionManager.migrateClaimOwnership(target.getServer(), settlement, targetFaction);
+                BackingFactionManager.retireIfUnused(target.getServer(), previousBacking);
+            }
+        } else if (targetFaction.isBlank()) {
+            BackingFactionManager.assignIndependentSettlement(target, settlement);
+        }
         source.sendSuccess(() -> Component.literal("Ownership transferred to " + target.getGameProfile().getName() + "."), true);
         return 1;
     }
@@ -944,8 +972,9 @@ public final class SettlementCommands {
 
     private static int assignFactionRoster(CommandSourceStack source, String rosterId) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
-        if (player.getTeam() == null) { source.sendFailure(Component.literal("Join a faction first or provide a faction ID.")); return 0; }
-        return assignFactionRoster(source, rosterId, player.getTeam().getName());
+        String factionId = CampaignManager.factionId(player);
+        if (factionId.isBlank()) { source.sendFailure(Component.literal("Join a political faction first or provide a faction ID.")); return 0; }
+        return assignFactionRoster(source, rosterId, factionId);
     }
 
     private static int assignFactionRoster(CommandSourceStack source, String rosterId, String factionId) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
@@ -1062,9 +1091,10 @@ public final class SettlementCommands {
             return 0;
         }
         String result = CampaignManager.createFaction(target, name, teamColor, (byte)Math.max(0, Math.min(24, unitColor)));
-        if (target.getTeam() == null) source.sendFailure(Component.literal(result));
+        boolean created = !CampaignManager.factionId(target).isBlank();
+        if (!created) source.sendFailure(Component.literal(result));
         else source.sendSuccess(() -> Component.literal(result), true);
-        return target.getTeam() == null ? 0 : 1;
+        return created ? 1 : 0;
     }
 
     private static int giveCurrency(CommandSourceStack source, int amount) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
@@ -1235,7 +1265,7 @@ public final class SettlementCommands {
 
     private static int adminInspectPlayer(CommandSourceStack source, ServerPlayer target) {
         SettlementData data = SettlementData.get(target.serverLevel()); SettlementData.CharacterRecord c = data.getCharacter(target.getUUID());
-        CampaignSystemsData extra = CampaignSystemsData.get(target.serverLevel()); String faction = target.getTeam() == null ? "Independent" : target.getTeam().getName();
+        CampaignSystemsData extra = CampaignSystemsData.get(target.serverLevel()); String politicalFaction = CampaignManager.factionId(target); String faction = politicalFaction.isBlank() ? "Independent" : politicalFaction;
         long owned = data.getSettlements().stream().filter(s -> target.getUUID().equals(s.getOwnerId())).count();
         long managed = data.getSettlements().stream().filter(s -> SettlementManager.canManage(target, s)).count();
         source.sendSuccess(() -> Component.literal("[Settlements inspect] " + target.getGameProfile().getName() + " | character=" + (c == null || !c.isCreated() ? "not created" : c.getDisplayName())

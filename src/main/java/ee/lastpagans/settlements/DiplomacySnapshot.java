@@ -40,6 +40,7 @@ public record DiplomacySnapshot(
         if (FactionEvents.recruitsFactionManager != null) {
             for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
                 if (faction == null || faction.getStringID() == null || faction.getStringID().equals(own)) continue;
+                if (BackingFactionManager.isBackingFaction(faction.getStringID())) continue;
                 // Protected admin polities belong in admin/recovery tools, never in ordinary diplomacy.
                 // This also avoids showing operators buttons that the server will correctly reject.
                 if (campaignSystems.factionProtected(faction.getStringID())) continue;

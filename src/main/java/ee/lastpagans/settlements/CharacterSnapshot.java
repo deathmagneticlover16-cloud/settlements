@@ -39,7 +39,7 @@ public record CharacterSnapshot(
         boolean administrator = player.createCommandSourceStack().hasPermission(2);
         int devotion = extra.devotion(player.getUUID());
         String devotionTier = devotion >= 90 ? "Exalted" : devotion >= 70 ? "Devout" : devotion >= 45 ? "Faithful" : devotion >= 20 ? "Observant" : "Uncommitted";
-        String factionId = player.getTeam() == null ? "" : player.getTeam().getName();
+        String factionId = CampaignManager.factionId(player);
         String factionName = "Independent";
         boolean factionLeader = false;
         if (!factionId.isBlank()) {

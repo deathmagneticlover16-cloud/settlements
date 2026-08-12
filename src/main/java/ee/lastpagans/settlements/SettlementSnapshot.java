@@ -106,8 +106,8 @@ public record SettlementSnapshot(
         String faction = settlement.getFactionTeam();
         return viewer.getServer().getPlayerList().getPlayers().stream()
                 .filter(candidate -> settlement.getRole(candidate.getUUID()) == SettlementData.SettlementRole.OUTSIDER)
-                .filter(candidate -> faction.isBlank() ? candidate.getTeam() == null
-                        : candidate.getTeam() != null && faction.equals(candidate.getTeam().getName()))
+                .filter(candidate -> faction.isBlank() ? CampaignManager.factionId(candidate).isBlank()
+                        : faction.equals(CampaignManager.factionId(candidate)))
                 .map(candidate -> {
                     SettlementData.CharacterRecord character = data.getCharacter(candidate.getUUID());
                     String account = candidate.getGameProfile().getName();

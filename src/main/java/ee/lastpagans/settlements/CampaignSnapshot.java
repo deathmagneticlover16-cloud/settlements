@@ -33,7 +33,7 @@ public record CampaignSnapshot(
         SettlementData data = SettlementData.get(player.serverLevel());
         CampaignData campaign = CampaignData.get(player.serverLevel());
         SettlementData.CharacterRecord character = data.getCharacter(player.getUUID());
-        String factionId = player.getTeam() == null ? "" : player.getTeam().getName();
+        String factionId = CampaignManager.factionId(player);
         List<SettlementData.SettlementRecord> holdings = factionId.isBlank()
                 ? data.getOwnedSettlements(player.getUUID())
                 : data.getSettlements().stream().filter(settlement -> factionId.equals(settlement.getFactionTeam())).toList();

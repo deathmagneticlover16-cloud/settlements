@@ -39,7 +39,7 @@ public record FactionSnapshot(
         String message
 ) {
     public static FactionSnapshot from(ServerPlayer player, String message) {
-        String factionId = player.getTeam() == null ? "" : player.getTeam().getName();
+        String factionId = CampaignManager.factionId(player);
         if (factionId.isBlank() || FactionEvents.recruitsFactionManager == null) {
             return independentSnapshot(player, message);
         }
@@ -132,7 +132,7 @@ public record FactionSnapshot(
                         .sorted(Comparator.comparing(RequestEntry::accountName, String.CASE_INSENSITIVE_ORDER)).toList() : List.of(),
                 List.of(),
                 viewerTier >= 3 && player.getServer() != null ? player.getServer().getPlayerList().getPlayers().stream()
-                        .filter(candidate -> candidate.getTeam() == null && !candidate.getUUID().equals(player.getUUID()))
+                        .filter(candidate -> CampaignManager.factionId(candidate).isBlank() && !candidate.getUUID().equals(player.getUUID()))
                         .map(candidate -> {
                             SettlementData.CharacterRecord character = settlementData.getCharacter(candidate.getUUID());
                             String characterName = character != null && character.isCreated() ? character.getDisplayName() : candidate.getGameProfile().getName();
@@ -151,6 +151,7 @@ public record FactionSnapshot(
             CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
             for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
                 if (faction == null || faction.getStringID() == null || faction.getStringID().isBlank()) continue;
+                if (BackingFactionManager.isBackingFaction(faction.getStringID())) continue;
                 if (campaignSystems.factionProtected(faction.getStringID())) continue;
                 boolean pending = faction.getJoinRequests().stream().anyMatch(name -> name.equalsIgnoreCase(requesterName));
                 factions.add(new FactionChoice(faction.getStringID(), faction.getTeamDisplayName(), faction.getPlayers(),

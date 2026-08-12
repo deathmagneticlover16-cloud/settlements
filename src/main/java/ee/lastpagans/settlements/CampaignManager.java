@@ -209,7 +209,7 @@ public final class CampaignManager {
     }
 
     private static String requestFactionJoin(ServerPlayer player, String requestedFactionId) {
-        if (player.getTeam() != null) return "Leave your current faction before requesting to join another one.";
+        if (!factionId(player).isBlank()) return "Leave your current faction before requesting to join another one.";
         if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
         String targetId = requestedFactionId == null ? "" : requestedFactionId.trim();
         RecruitsFaction target = FactionEvents.recruitsFactionManager.getFactionByStringID(targetId);
@@ -236,7 +236,7 @@ public final class CampaignManager {
     }
 
     private static String cancelFactionJoinRequest(ServerPlayer player, String requestedFactionId) {
-        if (player.getTeam() != null) return "You are already a faction member.";
+        if (!factionId(player).isBlank()) return "You are already a faction member.";
         if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
         RecruitsFaction target = FactionEvents.recruitsFactionManager.getFactionByStringID(requestedFactionId == null ? "" : requestedFactionId.trim());
         if (target == null) return "That faction no longer exists.";
@@ -259,17 +259,18 @@ public final class CampaignManager {
         if (stored.isBlank()) return "That membership application no longer exists.";
         ServerPlayer applicant = player.getServer() == null ? null : player.getServer().getPlayerList().getPlayerByName(stored);
         if (applicant == null) return stored + " must be online before their application can be accepted.";
-        if (applicant.getTeam() != null) {
+        if (!factionId(applicant).isBlank()) {
             faction.removeJoinRequest(stored);
             FactionEvents.recruitsFactionManager.save(player.serverLevel());
             return stored + " has already joined another faction.";
         }
         if (!faction.canAddPlayer()) return faction.getTeamDisplayName() + " has reached its member limit.";
 
+        BackingFactionManager.PoliticalTransition transition = BackingFactionManager.beginPoliticalJoin(applicant);
         FactionEvents.addPlayerToTeam(player, player.serverLevel(), factionId, applicant.getGameProfile().getName());
-        if (applicant.getTeam() == null || !factionId.equals(applicant.getTeam().getName())) {
-            return "Recruits did not confirm " + stored + " as a faction member.";
-        }
+        boolean joined = applicant.getTeam() != null && factionId.equals(applicant.getTeam().getName());
+        BackingFactionManager.finishPoliticalJoin(applicant, transition, factionId, joined);
+        if (!joined) return "Recruits did not confirm " + stored + " as a faction member.";
         CampaignData.get(player.serverLevel()).setFactionMemberRank(factionId, applicant.getUUID(), 0);
         CampaignSystemsData.get(player.serverLevel()).clearFactionInvitations(applicant.getUUID());
         clearFactionApplications(player.serverLevel(), applicant.getDisplayName().getString());
@@ -304,7 +305,7 @@ public final class CampaignManager {
         if (!faction.canAddPlayer()) return faction.getTeamDisplayName() + " has reached its member limit.";
         ServerPlayer target = player.getServer() == null ? null : player.getServer().getPlayerList().getPlayer(targetId);
         if (target == null) return "That player is no longer online.";
-        if (target.getTeam() != null) return target.getGameProfile().getName() + " is already a faction member.";
+        if (!factionId(target).isBlank()) return target.getGameProfile().getName() + " is already a faction member.";
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
         if (extra.hasFactionInvitation(factionId, targetId)) return target.getGameProfile().getName() + " already has an invitation from your faction.";
         extra.addFactionInvitation(factionId, targetId, player.getUUID(), System.currentTimeMillis());
@@ -313,7 +314,7 @@ public final class CampaignManager {
     }
 
     private static String acceptFactionInvitation(ServerPlayer player, String factionIdRaw) {
-        if (player.getTeam() != null) return "Leave your current faction before accepting another faction's invitation.";
+        if (!factionId(player).isBlank()) return "Leave your current faction before accepting another faction's invitation.";
         if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
         String factionId = factionIdRaw == null ? "" : factionIdRaw.trim();
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
@@ -323,8 +324,11 @@ public final class CampaignManager {
         if (extra.factionProtected(factionId)) { extra.removeFactionInvitation(factionId, player.getUUID()); return "That faction is now protected from player membership."; }
         if (!faction.canAddPlayer()) return faction.getTeamDisplayName() + " has reached its member limit.";
         ServerPlayer leader = FactionEvents.recruitsFactionManager.getTeamLeader(faction, player.serverLevel());
+        BackingFactionManager.PoliticalTransition transition = BackingFactionManager.beginPoliticalJoin(player);
         FactionEvents.addPlayerToTeam(leader, player.serverLevel(), factionId, player.getGameProfile().getName());
-        if (player.getTeam() == null || !factionId.equals(player.getTeam().getName())) return "Recruits did not confirm the faction invitation.";
+        boolean joined = player.getTeam() != null && factionId.equals(player.getTeam().getName());
+        BackingFactionManager.finishPoliticalJoin(player, transition, factionId, joined);
+        if (!joined) return "Recruits did not confirm the faction invitation.";
         extra.clearFactionInvitations(player.getUUID());
         clearFactionApplications(player.serverLevel(), player.getDisplayName().getString());
         CampaignData.get(player.serverLevel()).setFactionMemberRank(factionId, player.getUUID(), 0);
@@ -1566,15 +1570,16 @@ public final class CampaignManager {
     private static String createSettlementFromGui(ServerPlayer player, String id, String name) {
         SettlementData data = SettlementData.get(player.serverLevel());
         if (id.isBlank()) return "Settlement creation failed: enter a short settlement ID.";
-        if (player.getTeam() == null && data.getSettlements().stream()
+        if (factionId(player).isBlank() && data.getSettlements().stream()
                 .filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
             return "Independent rulers may own at most two settlements. Create a faction before founding another.";
         }
         SettlementData.SettlementRecord settlement = data.createSettlement(id, name, player.getUUID());
         if (settlement == null) return "Settlement creation failed: that ID is invalid or already used.";
         settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
-        Team team = player.getTeam();
-        if (team != null) settlement.setFactionTeam(team.getName());
+        String politicalFaction = factionId(player);
+        if (!politicalFaction.isBlank()) settlement.setFactionTeam(politicalFaction);
+        else settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
         SettlementCommands.linkClaimAtPlayer(player, settlement, false);
         SettlementManager.scheduleFirstSettlers(player, settlement);
         data.selectSettlement(player.getUUID(), settlement.getId());
@@ -1588,10 +1593,35 @@ public final class CampaignManager {
 
     public static String createFaction(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor) {
         if (player == null) return "No player supplied.";
-        if (player.getTeam() != null) return "Leave your current faction before creating another one.";
+        String currentPoliticalFaction = factionId(player);
+        if (!currentPoliticalFaction.isBlank()) return "Leave your current faction before creating another one.";
         if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";
         String displayName = SettlementData.cleanText(rawName, "", 32);
         if (displayName.isBlank()) return "Enter a faction name.";
+
+        SettlementData settlementData = SettlementData.get(player.serverLevel());
+        SettlementData.SettlementRecord foundingSeat = foundingSettlement(player, settlementData);
+        if (foundingSeat == null) return "Found and develop an independent settlement before creating a political faction.";
+        CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
+        int population = foundingSeat.getCivilianPopulation();
+        int prosperity = systems.prosperity(foundingSeat.getId());
+        if (SettlementConfig.FACTION_FOUNDING_REQUIRE_TOWN.get() && foundingSeat.getRank() == SettlementData.SettlementRank.VILLAGE) {
+            return "A full faction requires an established Town or City-State. " + foundingSeat.getName() + " is still a Village.";
+        }
+        if (population < SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get()) {
+            return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get() + " population; " + foundingSeat.getName() + " has " + population + ".";
+        }
+        if (foundingSeat.getStability() < SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get()) {
+            return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get() + " Stability; " + foundingSeat.getName() + " has " + foundingSeat.getStability() + ".";
+        }
+        if (prosperity < SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get()) {
+            return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get() + " Prosperity; " + foundingSeat.getName() + " has " + prosperity + ".";
+        }
+        int wealthCost = SettlementConfig.FACTION_FOUNDING_WEALTH_COST.get();
+        if (foundingSeat.getWealth() < wealthCost) {
+            return "Faction founding costs " + wealthCost + " Wealth from " + foundingSeat.getName() + "; its treasury contains " + foundingSeat.getWealth() + ".";
+        }
+
         ItemStack held = player.getMainHandItem();
         if (!(held.getItem() instanceof BannerItem)) return "Faction creation failed: You are not holding a banner!";
         ItemStack banner = held.copy();
@@ -1626,6 +1656,9 @@ public final class CampaignManager {
         if (created == null) {
             return "Faction creation failed: Recruits did not confirm creation. Check its configured creation requirements/cost and try again.";
         }
+        foundingSeat.spendWealth(wealthCost);
+        foundingSeat.addChronicle("The settlement treasury contributed " + wealthCost + " Wealth to the founding of " + displayName + ".");
+        BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, factionId);
         CampaignData campaign = CampaignData.get(player.serverLevel());
         campaign.factionProfile(factionId);
         CampaignSystemsData.get(player.serverLevel()).setFactionWealth(factionId, 0);
@@ -1636,6 +1669,18 @@ public final class CampaignManager {
         SettlementManager.broadcastProfiles(player.getServer());
         CampaignToastSender.factionFounded(player, displayName);
         return "Created faction " + displayName + " (" + factionId + ").";
+    }
+
+    private static SettlementData.SettlementRecord foundingSettlement(ServerPlayer player, SettlementData data) {
+        SettlementData.SettlementRecord selected = data.getSelectedSettlement(player.getUUID());
+        if (selected != null && player.getUUID().equals(selected.getOwnerId()) && selected.getFactionTeam().isBlank()) return selected;
+        return data.getOwnedSettlements(player.getUUID()).stream()
+                .filter(value -> value.getFactionTeam().isBlank())
+                .max(java.util.Comparator
+                        .comparingInt((SettlementData.SettlementRecord value) -> value.getRank().ordinal())
+                        .thenComparingInt(SettlementData.SettlementRecord::getCivilianPopulation)
+                        .thenComparingInt(SettlementData.SettlementRecord::getStability))
+                .orElse(null);
     }
 
     private static String characterName(ServerLevel level, UUID uuid) {
@@ -1680,10 +1725,13 @@ public final class CampaignManager {
     private static String factionForPlayerId(MinecraftServer server, UUID playerId) {
         if (server == null || playerId == null) return "";
         ServerPlayer online = server.getPlayerList().getPlayer(playerId);
-        if (online != null && online.getTeam() != null) return online.getTeam().getName();
+        if (online != null) {
+            String political = factionId(online);
+            if (!political.isBlank()) return political;
+        }
         if (FactionEvents.recruitsFactionManager != null) {
             for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
-                if (faction == null) continue;
+                if (faction == null || BackingFactionManager.isBackingFaction(faction.getStringID())) continue;
                 if (playerId.equals(faction.getTeamLeaderUUID())) return faction.getStringID();
                 if (faction.getMembers().stream().anyMatch(info -> info != null && playerId.equals(info.getUUID()))) return faction.getStringID();
             }
@@ -1691,7 +1739,10 @@ public final class CampaignManager {
         return "";
     }
 
-    public static String factionId(ServerPlayer player) { return player.getTeam() == null ? "" : player.getTeam().getName(); }
+    public static String factionId(ServerPlayer player) {
+        String raw = BackingFactionManager.rawTeam(player);
+        return BackingFactionManager.isBackingFaction(raw) ? "" : raw;
+    }
 
     private static String factionFaith(ServerLevel level, String factionId) {
         if (level == null || factionId == null || factionId.isBlank() || FactionEvents.recruitsFactionManager == null) return "";
@@ -1702,7 +1753,7 @@ public final class CampaignManager {
     }
 
     public static String factionName(String id) {
-        if (id == null || id.isBlank()) return "Independent";
+        if (id == null || id.isBlank() || BackingFactionManager.isBackingFaction(id)) return "Independent";
         if (FactionEvents.recruitsFactionManager != null) {
             RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(id);
             if (faction != null) return faction.getTeamDisplayName();

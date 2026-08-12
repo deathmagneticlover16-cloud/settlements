@@ -22,7 +22,7 @@ public final class CampaignToastSender {
     public static void faction(MinecraftServer server, String factionId, String title, String body) {
         if (server == null || factionId == null || factionId.isBlank()) return;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (player.getTeam() != null && factionId.equals(player.getTeam().getName())) send(player, title, body);
+            if (factionId.equals(CampaignManager.factionId(player))) send(player, title, body);
         }
     }
 
@@ -61,7 +61,7 @@ public final class CampaignToastSender {
     private static void notifyFaction(MinecraftServer server, String factionId, String title, String body, Set<UUID> notified) {
         if (server == null || factionId == null || factionId.isBlank()) return;
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (player.getTeam() != null && factionId.equals(player.getTeam().getName()) && notified.add(player.getUUID())) {
+            if (factionId.equals(CampaignManager.factionId(player)) && notified.add(player.getUUID())) {
                 send(player, title, body);
             }
         }
