@@ -29,7 +29,6 @@ ROMAN SUPPORT
 - Added Roman Paganism to valid character/spouse religions.
 - Added Roman generated spouse culture/name pool.
 - Roman Pagan rulers preferentially receive Roman spouse candidates.
-- Added Random Roman Name helper to character creation.
 
 RESEARCH / HISTORY STAGES
 - Server now enforces History Stages minimum/exact pedestal tier requirements.
@@ -51,7 +50,6 @@ FACTION FOUNDING
 
 GUI / QUALITY
 - Re-spaced Manage > Locations after adding City Upkeep Chest to prevent label/button overlap.
-- Re-spaced Character Creation around the Roman-name helper.
 - Settlement/Military snapshots now expose upkeep/Bard state.
 - Network protocol bumped to 33 for the changed snapshot formats.
 

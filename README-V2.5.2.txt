@@ -53,7 +53,6 @@ ROMAN CHARACTER SUPPORT
 - Roman Paganism is a valid religion and participates in normal religion compatibility/Holy War/conversion logic as a pagan faith.
 - Generated spouse candidates include a Roman culture/name pool.
 - Roman Pagan characters strongly weight Roman spouse candidates while still allowing cross-cultural marriage candidates.
-- Character creation includes a Random Roman Name helper for editable Roman-style names.
 - Roman spouse names include gender-aware family-name forms.
 
 RESEARCH / HISTORY STAGES FIXES

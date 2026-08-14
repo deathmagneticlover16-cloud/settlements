@@ -67,7 +67,6 @@ RESERVED / RELIABILITY
 
 ROMAN CHARACTERS / SPOUSES
 [ ] Roman Paganism appears in character religion selection.
-[ ] Random Roman Name produces editable male/female-appropriate Roman-style names.
 [ ] Roman Pagan spouse search frequently offers Roman candidates.
 [ ] Roman candidates can be Roman Pagan, Catholic or Orthodox.
 [ ] Roman Paganism participates in religious compatibility/Holy War/conversion without errors.

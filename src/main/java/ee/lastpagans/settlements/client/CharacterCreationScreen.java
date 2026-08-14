@@ -8,14 +8,10 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
 
 public final class CharacterCreationScreen extends ScaledCampaignScreen {
     private static final int PANEL_WIDTH = 440;
     private static final int PANEL_HEIGHT = 286;
-    private static final String[] ROMAN_MALE_FIRST = {"Marcus", "Lucius", "Gaius", "Titus", "Publius", "Quintus", "Aulus", "Sextus", "Decimus"};
-    private static final String[] ROMAN_FEMALE_FIRST = {"Julia", "Aurelia", "Claudia", "Flavia", "Valeria", "Cornelia", "Aemilia", "Livia", "Marcella"};
-    private static final String[] ROMAN_MALE_FAMILY = {"Valerius", "Cassius", "Flavius", "Aemilius", "Aurelius", "Claudius", "Cornelius", "Julius"};
 
     private int left;
     private int top;
@@ -63,26 +59,12 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen {
         faith = addRenderableWidget(new DropdownWidget(left + 170, top + 148, 250, 20,
                 CampaignDefinitions.RELIGIONS,
                 index(CampaignDefinitions.RELIGIONS, initial == null ? "" : initial.faith()), value -> {}));
-        addRenderableWidget(Button.builder(Component.literal("Random Roman Name"), button -> randomRomanName())
-                .bounds(left + 170, top + 109, 132, 18).build());
         setInitialFocus(first);
     }
 
     private int index(List<String> values, String value) {
         int index = values.indexOf(value);
         return index < 0 ? 0 : index;
-    }
-
-    private void randomRomanName() {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        boolean female = "Female".equalsIgnoreCase(address == null ? "" : address.value());
-        if (!female && "Neutral".equalsIgnoreCase(address == null ? "" : address.value())) female = random.nextBoolean();
-        String family = ROMAN_MALE_FAMILY[random.nextInt(ROMAN_MALE_FAMILY.length)];
-        first.setValue(female ? ROMAN_FEMALE_FIRST[random.nextInt(ROMAN_FEMALE_FIRST.length)]
-                : ROMAN_MALE_FIRST[random.nextInt(ROMAN_MALE_FIRST.length)]);
-        middle.setValue("");
-        last.setValue(female && family.endsWith("us") ? family.substring(0, family.length() - 2) + "a" : family);
-        warning = "Roman name generated. You can edit it freely.";
     }
 
     private EditBox field(int x, int y, int width, String hint) {
