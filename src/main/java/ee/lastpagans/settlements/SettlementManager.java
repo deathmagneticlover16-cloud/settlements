@@ -51,6 +51,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -986,14 +987,15 @@ public final class SettlementManager {
         MercenaryRosterManager.process(server, day);
         processPlagueEvents(server, settlements, campaign, day);
         for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
-            BardStatus bard = bardStatus(server, settlement);
+            List<AbstractRecruitEntity> loadedBards = loadedBards(server, settlement);
+            BardStatus bard = bardStatus(settlement, loadedBards);
             if (bard.performing()) settlement.applyBardStability(day, SettlementConfig.BARD_STABILITY_BONUS.get());
             for (UUID uuid : Set.copyOf(settlement.getAllMilitaryUnits())) {
                 AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
                 if (recruit == null) continue;
                 maintainBarracksLink(recruit, settlement);
                 syncMercenaryEntityFromContract(recruit, CampaignSystemsData.get(server.overworld()).mercenaryContract(uuid));
-                applySettlementMorale(recruit, settlement, settlements, campaign, bard.count());
+                applySettlementMorale(recruit, settlement, settlements, campaign, loadedBards);
             }
         }
         if (SettlementConfig.ENABLE_RECRUIT_LEVEL_OVERRIDE.get()) {
@@ -1158,7 +1160,7 @@ public final class SettlementManager {
     }
 
     private static void applySettlementMorale(AbstractRecruitEntity recruit, SettlementData.SettlementRecord settlement,
-                                               SettlementData settlements, CampaignData campaign, int bardCount) {
+                                               SettlementData settlements, CampaignData campaign, List<AbstractRecruitEntity> loadedBards) {
         int target = 50 + Math.round((settlement.getStability() - 50) * 0.30F);
         SettlementData.CharacterRecord ruler = settlement.getOwnerId() == null ? null : settlements.getCharacter(settlement.getOwnerId());
         if (ruler != null) target += CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.MORALE);
@@ -1171,7 +1173,7 @@ public final class SettlementManager {
         }
         if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())
                 && recruit.blockPosition().closerThan(settlement.getBarracks(), settlement.getBarracksRadius())) target += 8;
-        target += Math.min(Math.max(0, bardCount), SettlementConfig.BARD_MAX_MORALE_STACKS.get()) * SettlementConfig.BARD_MORALE_BONUS.get();
+        target += bardMoraleStacks(recruit, settlement, loadedBards) * SettlementConfig.BARD_MORALE_BONUS.get();
         CampaignSystemsData extra = CampaignSystemsData.get((ServerLevel) recruit.level());
         for (CampaignSystemsData.ModifierRecord modifier : extra.modifiers(settlement.getId())) target += modifier.morale;
         if (recruit.getPersistentData().getBoolean(TAG_MERCENARY)) {
@@ -1201,18 +1203,51 @@ public final class SettlementManager {
 
     public static BardStatus bardStatus(MinecraftServer server, SettlementData.SettlementRecord settlement) {
         if (server == null || settlement == null) return new BardStatus(0, false);
-        int count = 0;
-        boolean performing = false;
+        return bardStatus(settlement, loadedBards(server, settlement));
+    }
+
+    private static List<AbstractRecruitEntity> loadedBards(MinecraftServer server, SettlementData.SettlementRecord settlement) {
+        List<AbstractRecruitEntity> result = new ArrayList<>();
+        if (server == null || settlement == null) return result;
         for (UUID uuid : settlement.getAllMilitaryUnits()) {
             AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
-            if (recruit == null || !recruit.getPersistentData().getBoolean(TAG_BARD) || !bardIsInTown(recruit, settlement)) continue;
-            count++;
-            if (!performing && settlement.hasTownSquare()
+            if (recruit != null && recruit.getPersistentData().getBoolean(TAG_BARD)) result.add(recruit);
+        }
+        return result;
+    }
+
+    private static BardStatus bardStatus(SettlementData.SettlementRecord settlement, List<AbstractRecruitEntity> bards) {
+        if (settlement == null || bards == null || bards.isEmpty()) return new BardStatus(0, false);
+        boolean performing = false;
+        for (AbstractRecruitEntity recruit : bards) {
+            if (!bardIsInTown(recruit, settlement)) continue;
+            if (settlement.hasTownSquare()
                     && recruit.level().dimension().location().toString().equals(settlement.getTownSquareDimension())
                     && recruit.blockPosition().closerThan(settlement.getTownSquare(), SettlementConfig.BARD_TOWN_SQUARE_RADIUS.get())
-                    && (recruit.getMainHandItem().is(BARD_INSTRUMENTS) || recruit.getOffhandItem().is(BARD_INSTRUMENTS))) performing = true;
+                    && (recruit.getMainHandItem().is(BARD_INSTRUMENTS) || recruit.getOffhandItem().is(BARD_INSTRUMENTS))) {
+                performing = true;
+                break;
+            }
         }
-        return new BardStatus(count, performing);
+        return new BardStatus(bards.size(), performing);
+    }
+
+    private static int bardMoraleStacks(AbstractRecruitEntity target, SettlementData.SettlementRecord settlement, List<AbstractRecruitEntity> bards) {
+        if (target == null || settlement == null || bards == null || bards.isEmpty()) return 0;
+        Set<UUID> sources = new HashSet<>();
+        double radius = SettlementConfig.BARD_FIELD_RADIUS.get();
+        double radiusSq = radius * radius;
+        for (AbstractRecruitEntity bard : bards) {
+            if (bard == null || !bard.isAlive()) continue;
+            if (bardIsInTown(bard, settlement)) {
+                // A Bard stationed in town represents the settlement's organised musical corps
+                // and supports the polity's whole managed army.
+                sources.add(bard.getUUID());
+                continue;
+            }
+            if (bard.level() == target.level() && bard.distanceToSqr(target) <= radiusSq) sources.add(bard.getUUID());
+        }
+        return Math.min(sources.size(), SettlementConfig.BARD_MAX_MORALE_STACKS.get());
     }
 
     public record BardStatus(int count, boolean performing) {}

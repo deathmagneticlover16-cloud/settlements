@@ -1,0 +1,38 @@
+SETTLEMENTS 2.5.2 — SOURCE VALIDATION NOTES
+
+This package remains a TEST RELEASE until it successfully compiles in a normal Forge environment and passes the runtime checklist.
+
+PRE-PACKAGE CHECKS COMPLETED
+- git diff --check: clean
+- git fsck --full: clean
+- Java syntax-oriented javac scan: 88 Java files; 0 syntax-like, constructor/method-shape, lambda-capture, duplicate-variable, or incompatible-type errors surfaced before external-classpath failures
+- JSON validation: 6 resource JSON files; 0 parse errors
+- Java public top-level type names match filenames: 0 issues
+- no merge-conflict markers
+- no active Prototype / Campaign23 source identity strings
+- no stale 2.5.1 / protocol-32 strings under active src/version files
+- History Stages 5.4.0 reflection targets used by 2.5.2 verified against the supplied JAR with javap
+
+HISTORY STAGES 5.4.0 TARGETS VERIFIED
+- StageEntry.getDisplayName()
+- StageEntry.getIcon()
+- StageEntry.getMinPedestalTier()
+- StageEntry.getPedestalTierMode()
+- StageEntry.getDependencies()
+- IndividualStageData.get(Level)
+- IndividualStageData.addStage(UUID,String)
+- IndividualStageData.refreshCache()
+- IndividualStageData.hasStage(UUID,String)
+- IndividualStageData.getUnlockedStages(UUID)
+- StageEvent.IndividualUnlocked(String,String,UUID)
+- SyncIndividualStagesPacket(Set)
+- PacketHandler.sendIndividualStagesToPlayer(SyncIndividualStagesPacket,ServerPlayer)
+
+FORGEGRADLE ATTEMPT
+A real ./gradlew clean compileJava attempt was made. Gradle failed BEFORE project Java compilation while attempting to download:
+https://services.gradle.org/distributions/gradle-8.1.1-bin.zip
+
+Failure:
+java.net.UnknownHostException: services.gradle.org
+
+This is an environment/network bootstrap failure, not Settlements compiler output. BUILD-V2.5.2.bat must therefore be run locally before calling 2.5.2 compiled or final.

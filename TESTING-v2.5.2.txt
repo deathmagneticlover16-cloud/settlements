@@ -1,0 +1,113 @@
+SETTLEMENTS 2.5.2 — TEST CHECKLIST
+
+FIRST GATE
+[ ] BUILD-V2.5.2.bat completes.
+[ ] Server starts with Settlements 2.5.2 + Recruits 1.15.2 WITHOUT History Stages.
+[ ] Server starts with History Stages 5.4.0 installed.
+[ ] Same 2.5.2 JAR is used on clients and server; protocol mismatch is rejected cleanly.
+[ ] Fresh test world recommended.
+
+POPULATION / SETTLER ATTRACTION
+[ ] First two settlers arrive once after Town Square setup and register correctly.
+[ ] With zero free Housing, Residents says growth is blocked by Housing.
+[ ] Below configured Stability, Residents reports the Stability requirement.
+[ ] Below configured Food reserve, Residents reports the Food requirement.
+[ ] Barely eligible settlement shows a slow interval near the configured maximum.
+[ ] Raising Stability, free Housing and Food visibly raises attraction and shortens the next interval.
+[ ] Excellent settlement approaches the configured fastest interval.
+[ ] Sleeping and /time set do not advance/alter the active-server contract countdown.
+[ ] Villager death reduces population exactly once.
+[ ] Registered villagers stay inside any of the settlement's linked claims.
+
+MILITARY POPULATION REGRESSION
+[ ] Note military population/manpower before hiring a named Mercenary Roster.
+[ ] Hire a company of known size.
+[ ] Military population rises by exactly the company size, not double.
+[ ] Used professional manpower does NOT rise for named company soldiers.
+[ ] Kill one company soldier; military population drops by exactly one.
+[ ] Restart and verify no professional/mercenary double-count returns.
+
+CITY UPKEEP CHEST
+[ ] Manage > Locations > Set Upkeep Chest only accepts a looked-at inventory container within range.
+[ ] Put bread/other edible food in the linked chest with a settlement below target Food.
+[ ] Within the maintenance sweep, edible items are consumed and settlement Food rises by nutrition value.
+[ ] A modded edible item works if Minecraft reports it as edible.
+[ ] Chest does not consume items when settlement has no civilian/professional/company mouths.
+[ ] Chest stops consuming when target stockpile is reached.
+[ ] Treasury shows automatic upkeep linked.
+[ ] Clear Upkeep Chest stops automatic supply.
+[ ] Unloaded/destroyed container causes no crash.
+
+BARDS
+[ ] Stand near a managed recruit and use Military > Toggle Nearby Bard.
+[ ] Bard count reflects loaded designated Bards.
+[ ] Bard stationed inside settlement territory contributes configured settlement-wide morale.
+[ ] Move Bard outside settlement with a field army; nearby managed soldiers inside configured field radius retain the Bard morale aura.
+[ ] Move those soldiers outside Bard field radius; field bonus disappears.
+[ ] Multiple unique Bard sources stack only to configured maximum.
+[ ] Give Bard a goat horn or another #settlements:bard_instruments item and place near Town Square.
+[ ] Military screen reports performing.
+[ ] Performing Bard grants configured Stability no more than once per world day.
+[ ] Removing Bard designation removes the benefit.
+
+HEALTHY / PLAGUE
+[ ] Healthy trait card describes reduced Plague chance.
+[ ] Temporarily raise plagueDailyChancePer10000 for practical testing.
+[ ] Non-Healthy populated settlement can receive natural Plague.
+[ ] With healthyPlagueChancePercent=0, Healthy ruler's settlement never passes the natural plague roll.
+[ ] Plague creates the standard modifier, chronicle, toast and World News entry.
+[ ] Active Plague is not duplicated every check.
+
+RESERVED / RELIABILITY
+[ ] Reserved trait card explains slower Reliability change in both directions.
+[ ] Trigger a positive Reliability action with a non-Reserved leader and note delta.
+[ ] Repeat equivalent test with Reserved leader; magnitude is reduced according to config.
+[ ] Trigger a Reliability penalty (such as treaty break/divorce of Marriage Alliance); Reserved penalty magnitude is also reduced.
+[ ] Reliability remains bounded/functional and UI shows resulting value.
+
+ROMAN CHARACTERS / SPOUSES
+[ ] Roman Paganism appears in character religion selection.
+[ ] Random Roman Name produces editable male/female-appropriate Roman-style names.
+[ ] Roman Pagan spouse search frequently offers Roman candidates.
+[ ] Roman candidates can be Roman Pagan, Catholic or Orthodox.
+[ ] Roman Paganism participates in religious compatibility/Holy War/conversion without errors.
+
+RESEARCH WITHOUT HISTORY STAGES
+[ ] Research GUI opens and explains integration is unavailable.
+[ ] Settlements otherwise loads/plays without any History Stages classloading crash.
+
+RESEARCH WITH HISTORY STAGES
+[ ] Technologies populate with icons/names/prerequisites.
+[ ] Village polity reports Research Tier 1.
+[ ] Technology requiring MIN tier 2 is visibly locked in Village and SERVER refuses START packet.
+[ ] Upgrading/using a Town makes polity tier 2 and eligible MIN-2 technology becomes available when prerequisites permit.
+[ ] EXACT-tier technology only unlocks at the exact matching polity tier.
+[ ] Only one active project may run.
+[ ] Active progress bar and remaining time visibly update about once per second without reopening screen.
+[ ] Complete research while screen remains open; node becomes DONE and newly satisfied dependency becomes READY after refresh.
+[ ] History Stages individual stage is actually present after completion.
+[ ] History Stages IndividualUnlocked event path produces expected dependent behavior.
+[ ] Completion plays sound and Settlements technology toast.
+[ ] Relog re-synchronizes completed stages.
+[ ] Scholarly and Prosperity alter displayed research speed.
+[ ] Independent ruler with two holdings still has one research queue.
+
+FACTION CONFIGURATION
+[ ] factionFounding.enabled=false blocks player faction founding with clear message.
+[ ] enabled=true restores founding.
+[ ] Town, population, Stability, Prosperity and Wealth thresholds each obey server config.
+[ ] Hidden independent backing faction remains absent from ordinary diplomacy.
+
+REGRESSION / RELEASE
+[ ] Taxes Low/Normal/High still collect and apply correct modifiers.
+[ ] #settlements:currency works for deposits/withdrawals/donations.
+[ ] Main Seat works and Dynasty remains absent.
+[ ] Reliability appears on Character Sheet.
+[ ] OP status does not grant political ownership of foreign settlements/factions.
+[ ] Settlement War attacker list contains only legitimately controlled settlements.
+[ ] Peace negotiation does not report one player as controlling both sides unless genuinely true.
+[ ] War aid one-time/daily frequency remains independent per resource.
+[ ] Mercenary Rosters loyalty/payment/desertion still work.
+[ ] Dropdown menus render/input above other GUI elements.
+[ ] Manage > Locations has no text/button overlap at common GUI scales.
+[ ] Protected admin polities remain blocked from normal political actions.

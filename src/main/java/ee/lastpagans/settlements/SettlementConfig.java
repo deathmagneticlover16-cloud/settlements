@@ -56,6 +56,7 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue PLAGUE_DURATION_HOURS;
     public static final ForgeConfigSpec.IntValue BARD_MORALE_BONUS;
     public static final ForgeConfigSpec.IntValue BARD_MAX_MORALE_STACKS;
+    public static final ForgeConfigSpec.IntValue BARD_FIELD_RADIUS;
     public static final ForgeConfigSpec.IntValue BARD_TOWN_SQUARE_RADIUS;
     public static final ForgeConfigSpec.IntValue BARD_STABILITY_BONUS;
     public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_ENABLED;
@@ -181,10 +182,12 @@ public final class SettlementConfig {
         builder.pop();
 
         builder.push("bards");
-        BARD_MORALE_BONUS = builder.comment("Recruit morale bonus supplied per loaded designated Bard in the settlement.")
+        BARD_MORALE_BONUS = builder.comment("Recruit morale bonus supplied by each qualifying town or nearby field Bard source.")
                 .defineInRange("moraleBonusPerBard", 4, 0, 50);
-        BARD_MAX_MORALE_STACKS = builder.comment("Maximum number of Bards whose morale bonus can stack in one settlement.")
+        BARD_MAX_MORALE_STACKS = builder.comment("Maximum number of unique Bard morale sources that can stack for one recruit.")
                 .defineInRange("maximumMoraleStacks", 3, 1, 16);
+        BARD_FIELD_RADIUS = builder.comment("Radius in blocks for a designated field Bard to support nearby managed soldiers while campaigning outside town.")
+                .defineInRange("fieldMoraleRadius", 32, 4, 128);
         BARD_TOWN_SQUARE_RADIUS = builder.comment("Radius around the Town Square within which an instrument-holding Bard counts as performing.")
                 .defineInRange("townSquarePerformanceRadius", 12, 2, 64);
         BARD_STABILITY_BONUS = builder.comment("Daily Stability gained while a designated Bard is performing at the Town Square.")
