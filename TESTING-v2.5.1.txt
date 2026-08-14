@@ -1,8 +1,8 @@
-SETTLEMENTS 2.5.0 — TEST CHECKLIST
+SETTLEMENTS 2.5.1 — TEST CHECKLIST
 
 FIRST GATE
-[ ] BUILD-V2.5.0.bat completes.
-[ ] Server starts with Settlements 2.5.0 + Recruits 1.15.2 and WITHOUT History Stages.
+[ ] BUILD-V2.5.1.bat completes.
+[ ] Server starts with Settlements 2.5.1 + Recruits 1.15.2 and WITHOUT History Stages.
 [ ] Server starts with History Stages 5.4.0 installed.
 [ ] Client/server version mismatch is rejected cleanly.
 
@@ -80,3 +80,14 @@ REGRESSION: 2.4.1
 [ ] War aid has independent one-time/daily toggles per resource.
 [ ] Dropdown menus layer over other GUI elements.
 [ ] Protected admin polities remain inaccessible to ordinary political actions.
+
+
+2.5.1 POPULATION GROWTH
+1. Found a fresh settlement and wait for the first-settlers arrival. Confirm the two residents are registered.
+2. With Housing full/zero free housing, Residents must report that growth is blocked by housing.
+3. Create spare Housing, keep Stability >= 60, and deposit at least 20 Food. Within 30 seconds the first eligible Settler Contract should appear.
+4. Claim/use the contract. Confirm one villager arrives and registers exactly once.
+5. Restore the Food reserve and free housing. Confirm the next contract counts down from approximately 5 active-server minutes by default.
+6. Sleep or use /time set. Confirm the contract timer is not skipped or stretched by world-day changes.
+7. Stop the server for several minutes, restart, and confirm offline time did not advance the active-server timer.
+8. Verify the Residents screen clearly reports housing, Stability, Food, queue-full, ready-now and timed states as applicable.

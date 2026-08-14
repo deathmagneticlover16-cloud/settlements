@@ -1,13 +1,13 @@
-SETTLEMENTS 2.5.0 — TEST RELEASE
+SETTLEMENTS 2.5.1 — TEST RELEASE
 Minecraft 1.20.1 / Forge 47.2.0 / Villager Recruits 1.15.2 / Java 17
 Optional integration: History Stages 5.4.0+
 
-Settlements 2.5.0 deepens the campaign layer with technology research, real independent-polity backing factions, resource-gated faction founding, and named mercenary companies with loyalty and poaching. It inherits the 2.4.1 taxation, first-settler, diplomacy, character, religion, levy, claim, reliability, GUI and release-hardening work.
+Settlements 2.5.1 deepens the campaign layer with technology research, real independent-polity backing factions, resource-gated faction founding, and named mercenary companies with loyalty and poaching. It inherits the 2.4.1 taxation, first-settler, diplomacy, character, religion, levy, claim, reliability, GUI and release-hardening work.
 
 BUILD
 1. Extract into a fresh folder.
-2. Run BUILD-V2.5.0.bat, or run: gradlew clean build
-3. Expected JAR: build/libs/settlements-2.5.0.jar
+2. Run BUILD-V2.5.1.bat, or run: gradlew clean build
+3. Expected JAR: build/libs/settlements-2.5.1.jar
 4. Install the SAME JAR on server and clients.
 5. Remove older Settlements JARs before testing.
 6. Fresh worlds are strongly recommended. Backward compatibility with old development saves is not a goal.
@@ -15,7 +15,7 @@ BUILD
 IDENTITY
 - Mod ID: settlements
 - Package/resource namespace: ee.lastpagans.settlements / assets/settlements / data/settlements
-- Network protocol: 31
+- Network protocol: 32
 - Prototype-era naming is not part of the active source.
 
 2.5 RESEARCH
@@ -52,6 +52,14 @@ IDENTITY
 - Mercenary companies are polity-level contracted forces and do not consume settlement manpower. They still count as military population and food mouths.
 - Mercenary company configuration reload: /settlements admin mercenary reload_rosters
 
+POPULATION GROWTH
+- New settlements still receive the configurable first two settlers.
+- Further residents arrive through Settler Contracts.
+- Contracts now use active server time rather than Minecraft-day count. Default interval: 5 minutes while eligible.
+- Default eligibility: free housing, Stability 60+, and at least 20 Food. A generated contract consumes 10 Food.
+- Residents displays the exact reason growth is currently blocked or the remaining contract timer.
+- All major contract pacing/requirement values are configurable under the residents config section.
+
 INHERITED IMPORTANT SYSTEMS
 - Full Low/Normal/High taxation and Treasury controls.
 - Currency abstraction through #settlements:currency.
@@ -72,4 +80,4 @@ INTENTIONAL BOUNDARIES
 - No children/heirs/fertility/dynasty generation.
 - Tactical freecam, Total War unit controls/formations and commander battlefield mechanics belong to separate Recruits addons.
 
-See CHANGELOG-v2.5.0.txt, COMMANDS-v2.5.0.txt, TESTING-v2.5.0.txt and GUI-ASSET-GUIDE.txt.
+See CHANGELOG-v2.5.1.txt, COMMANDS-v2.5.1.txt, TESTING-v2.5.1.txt and GUI-ASSET-GUIDE.txt.

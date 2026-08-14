@@ -1,4 +1,15 @@
-SETTLEMENTS 2.5.0 — CHANGELOG
+SETTLEMENTS 2.5.1 — CHANGELOG
+
+
+2.5.1 POPULATION-GROWTH HOTFIX
+- Settler Contracts no longer use the old 3-Minecraft-day cooldown.
+- Default contract interval is now 5 active server minutes and is configurable.
+- Contract timing uses persistent server game time, so sleeping, /time set, seasonal daylight length, and day-length mods do not stretch population growth.
+- The first contract is generated immediately on the next settlement-system check once its requirements are met.
+- Defaults: at least 1 free housing, 60 Stability, 20 Food reserve; generating a contract consumes 10 Food.
+- Contract interval, Stability threshold, Food reserve, Food cost, and maximum pending contracts are all server-configurable.
+- Residents now shows a plain-language population-growth status such as no free housing, insufficient Food/Stability, queue full, eligible now, or time remaining.
+- The first-settlers arrival message now tells the ruler how to attract subsequent settlers.
 
 RESEARCH / HISTORY STAGES
 - Added Campaign > Research screen.

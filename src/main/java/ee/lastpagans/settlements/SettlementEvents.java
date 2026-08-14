@@ -263,7 +263,11 @@ public final class SettlementEvents {
         SettlementData data = SettlementData.get(server.overworld());
         CampaignData campaign = CampaignData.get(server.overworld());
         long day = server.overworld().getDayTime() / 24000L;
-        data.getSettlements().forEach(settlement -> settlement.processDaily(day, campaign));
+        long gameTime = server.overworld().getGameTime();
+        data.getSettlements().forEach(settlement -> {
+            settlement.processDaily(day, campaign);
+            settlement.processSettlerContracts(gameTime, day, campaign);
+        });
         data.runAllCheckers();
         SettlementManager.processMilitarySystems(server, day);
         CampaignSystemsManager.processCampaignSystems(server, day);

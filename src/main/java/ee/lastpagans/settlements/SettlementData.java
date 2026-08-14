@@ -381,7 +381,7 @@ public final class SettlementData extends SavedData {
         private int housingCapacity;
         private int pendingContracts;
         private long lastFoodDay = Long.MIN_VALUE;
-        private long lastContractDay = Long.MIN_VALUE;
+        private long lastContractGameTime = Long.MIN_VALUE;
         private String notice = "";
 
         private String townSquareDimension = "";
@@ -437,7 +437,7 @@ public final class SettlementData extends SavedData {
             housingCapacity = Math.max(0, tag.getInt("HousingCapacity"));
             pendingContracts = Math.max(0, tag.getInt("PendingContracts"));
             lastFoodDay = tag.getLong("LastFoodDay");
-            lastContractDay = tag.getLong("LastContractDay");
+            lastContractGameTime = tag.contains("LastContractGameTime", Tag.TAG_LONG) ? tag.getLong("LastContractGameTime") : Long.MIN_VALUE;
             notice = cleanText(tag.getString("Notice"), "", 160);
             factionTeam = tag.getString("FactionTeam");
             backingFactionTeam = tag.getString("BackingFactionTeam");
@@ -510,7 +510,7 @@ public final class SettlementData extends SavedData {
             tag.putInt("HousingCapacity", housingCapacity);
             tag.putInt("PendingContracts", pendingContracts);
             tag.putLong("LastFoodDay", lastFoodDay);
-            tag.putLong("LastContractDay", lastContractDay);
+            if (lastContractGameTime != Long.MIN_VALUE) tag.putLong("LastContractGameTime", lastContractGameTime);
             tag.putString("Notice", notice);
             tag.putString("FactionTeam", factionTeam);
             tag.putString("BackingFactionTeam", backingFactionTeam);
@@ -1060,22 +1060,55 @@ public final class SettlementData extends SavedData {
                 }
             }
 
-            if ((lastContractDay == Long.MIN_VALUE || day - lastContractDay >= SettlementManager.CONTRACT_INTERVAL_DAYS)
-                    && pendingContracts < SettlementManager.MAX_PENDING_CONTRACTS
-                    && getFreeHousing() > 0
-                    && stability >= SettlementManager.CONTRACT_MIN_STABILITY
-                    && food >= SettlementManager.CONTRACT_FOOD_RESERVE) {
-                food -= SettlementManager.CONTRACT_FOOD_COST;
-                pendingContracts++;
-                lastContractDay = day;
-                addChronicle("A Settler Contract became available.");
-                if (campaign != null) {
-                    campaign.addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MINOR,
-                            "New settlers sought", name + " has prepared a Settler Contract.", day,
-                            factionTeam, id, CampaignData.NewsVisibility.FACTION);
-                }
+            dirty();
+        }
+
+        /**
+         * Population growth is intentionally independent from Minecraft day length. Eligible settlements
+         * generate contracts on an active-server timer so seasonal/day-length mods cannot turn one settler
+         * into an hour-long wait. The very first eligible contract is immediate on the next settlement tick.
+         */
+        public void processSettlerContracts(long gameTime, long day, CampaignData campaign) {
+            int maxPending = SettlementConfig.SETTLER_CONTRACT_MAX_PENDING.get();
+            int minimumStability = SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get();
+            int reserve = SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get();
+            int cost = SettlementConfig.SETTLER_CONTRACT_FOOD_COST.get();
+            int requiredFood = Math.max(reserve, cost);
+            if (pendingContracts >= maxPending || getFreeHousing() <= 0 || stability < minimumStability || food < requiredFood) return;
+
+            long intervalTicks = Math.max(20L, SettlementConfig.SETTLER_CONTRACT_INTERVAL_MINUTES.get() * 60L * 20L);
+            if (lastContractGameTime != Long.MIN_VALUE && gameTime - lastContractGameTime < intervalTicks) return;
+
+            food = Math.max(0, food - cost);
+            pendingContracts++;
+            lastContractGameTime = Math.max(0L, gameTime);
+            addChronicle("A Settler Contract became available.");
+            if (campaign != null) {
+                campaign.addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MINOR,
+                        "New settlers sought", name + " has prepared a Settler Contract.", day,
+                        factionTeam, id, CampaignData.NewsVisibility.FACTION);
             }
             dirty();
+        }
+
+        public String getSettlerGrowthStatus(long gameTime) {
+            int maxPending = SettlementConfig.SETTLER_CONTRACT_MAX_PENDING.get();
+            int minimumStability = SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get();
+            int reserve = SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get();
+            int cost = SettlementConfig.SETTLER_CONTRACT_FOOD_COST.get();
+            int requiredFood = Math.max(reserve, cost);
+            if (pendingContracts >= maxPending) return "Paused: contract queue full (" + pendingContracts + "/" + maxPending + ").";
+            if (getFreeHousing() <= 0) return "Blocked: no free housing.";
+            if (stability < minimumStability) return "Blocked: Stability " + stability + "/" + minimumStability + ".";
+            if (food < requiredFood) return "Blocked: Food " + food + "/" + requiredFood + ".";
+            if (lastContractGameTime == Long.MIN_VALUE) return "Eligible now · costs " + cost + " Food.";
+            long intervalTicks = Math.max(20L, SettlementConfig.SETTLER_CONTRACT_INTERVAL_MINUTES.get() * 60L * 20L);
+            long remainingTicks = Math.max(0L, intervalTicks - Math.max(0L, gameTime - lastContractGameTime));
+            if (remainingTicks <= 0L) return "Eligible now · costs " + cost + " Food.";
+            long seconds = (remainingTicks + 19L) / 20L;
+            long minutes = seconds / 60L;
+            long remainder = seconds % 60L;
+            return "Next contract in " + (minutes > 0 ? minutes + "m " : "") + remainder + "s · costs " + cost + " Food.";
         }
 
         public boolean claimContract() {

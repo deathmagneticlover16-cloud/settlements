@@ -39,6 +39,11 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_COUNT;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MIN_DELAY_SECONDS;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MAX_DELAY_SECONDS;
+    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_INTERVAL_MINUTES;
+    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_MIN_STABILITY;
+    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_RESERVE;
+    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_COST;
+    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_MAX_PENDING;
     public static final ForgeConfigSpec.IntValue RESEARCH_FALLBACK_HOURS;
     public static final ForgeConfigSpec.IntValue SCHOLARLY_RESEARCH_BONUS_PERCENT;
     public static final ForgeConfigSpec.IntValue RESEARCH_MAX_PROSPERITY_BONUS_PERCENT;
@@ -138,6 +143,16 @@ public final class SettlementConfig {
                 .defineInRange("firstSettlerMinDelaySeconds", 10, 0, 300);
         FIRST_SETTLER_MAX_DELAY_SECONDS = builder.comment("Maximum real-time delay after founding before the first settlers can arrive.")
                 .defineInRange("firstSettlerMaxDelaySeconds", 60, 0, 600);
+        SETTLER_CONTRACT_INTERVAL_MINUTES = builder.comment("Active server minutes between new Settler Contracts once a settlement remains eligible. This is deliberately real-time/server-tick based rather than Minecraft-day based.")
+                .defineInRange("settlerContractIntervalMinutes", 5, 1, 1440);
+        SETTLER_CONTRACT_MIN_STABILITY = builder.comment("Minimum settlement Stability required to attract a new Settler Contract.")
+                .defineInRange("settlerContractMinimumStability", 60, 0, 100);
+        SETTLER_CONTRACT_FOOD_RESERVE = builder.comment("Minimum Food stockpile required before a new Settler Contract can be generated.")
+                .defineInRange("settlerContractFoodReserve", 20, 0, 1000000);
+        SETTLER_CONTRACT_FOOD_COST = builder.comment("Food consumed when a new Settler Contract is generated.")
+                .defineInRange("settlerContractFoodCost", 10, 0, 1000000);
+        SETTLER_CONTRACT_MAX_PENDING = builder.comment("Maximum unclaimed Settler Contracts that one settlement can accumulate.")
+                .defineInRange("settlerContractMaxPending", 3, 1, 64);
         builder.pop();
 
         builder.push("research");

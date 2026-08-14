@@ -1,4 +1,4 @@
-SETTLEMENTS 2.5.0 — SOURCE VALIDATION NOTES
+SETTLEMENTS 2.5.1 — SOURCE VALIDATION NOTES
 
 This source package is a TEST RELEASE until it has been compiled in a normal networked Forge development environment and runtime-tested.
 
@@ -19,4 +19,4 @@ A real ./gradlew clean compileJava attempt was made. Gradle failed before projec
 https://services.gradle.org/distributions/gradle-8.1.1-bin.zip
 Reason: java.net.UnknownHostException: services.gradle.org
 
-This is an environment/network bootstrap failure, not Java compiler output from Settlements. A successful local BUILD-V2.5.0.bat run is therefore required before calling 2.5.0 compiled or final.
+This is an environment/network bootstrap failure, not Java compiler output from Settlements. A successful local BUILD-V2.5.1.bat run is therefore required before calling 2.5.1 compiled or final.

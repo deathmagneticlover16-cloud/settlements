@@ -25,7 +25,7 @@ public record SettlementSnapshot(
         int housingCapacity, int freeHousing, int stability, int food, int wealth, int prosperity,
         String taxPolicy, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay, int taxProsperityModifier,
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
-        int professionals, int levymen, int pendingContracts,
+        int professionals, int levymen, int pendingContracts, String settlerGrowthStatus,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet,
         int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, long mercenaryNextPaymentDay, String mercenaryStatus, LevyStatusEntry levyStatus,
         String factionTeam, boolean claimLinked, int claimCount, String claimName,
@@ -75,7 +75,7 @@ public record SettlementSnapshot(
                 limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxPolicy(settlement.getId()).stabilityPerDay(),
                 limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxPolicy(settlement.getId()).prosperityModifier(),
                 limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
-                limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(),
+                limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(), limitedView ? "Hidden" : settlement.getSettlerGrowthStatus(player.serverLevel().getGameTime()),
                 !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null,
                 limitedView ? 0 : settlement.getBarracksRadius(), limitedView ? 0 : settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
                 settlement.getFactionTeam(), !limitedView && settlement.hasClaim(), limitedView ? 0 : settlement.getClaimCount(), limitedView ? "" : settlement.getClaimSummary(), settlement.getNotice(), effects,
@@ -324,7 +324,7 @@ public record SettlementSnapshot(
         buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(wealth); buffer.writeVarInt(prosperity);
         buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay); buffer.writeInt(taxProsperityModifier);
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
-        buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts);
+        buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts); buffer.writeUtf(settlerGrowthStatus, 128);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet);
         buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
@@ -341,7 +341,7 @@ public record SettlementSnapshot(
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readUtf(16), buffer.readVarInt(), buffer.readVarInt(), buffer.readInt(), buffer.readInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readUtf(128),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),
                 buffer.readUtf(64), buffer.readBoolean(), buffer.readVarInt(), buffer.readUtf(180), buffer.readUtf(160),

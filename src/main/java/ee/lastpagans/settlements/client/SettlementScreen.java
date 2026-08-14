@@ -359,9 +359,10 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         stat(graphics, "Military population", snapshot.militaryPopulation(), 22, 176);
         stat(graphics, "Free housing", snapshot.freeHousing(), 290, 110);
         stat(graphics, "Contracts ready", snapshot.pendingContracts(), 290, 132);
+        graphics.drawString(font, fit("Growth: " + snapshot.settlerGrowthStatus(), 220), left + 290, top + 154, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal(
-                "Every villager UUID can contribute only once. Contract settlers use the same resident registry, so registering them again cannot increase population."),
-                left + 290, top + 158, 220, 0xFFAAAAAA);
+                "More settlers require spare housing, sufficient Stability, and a maintained Food reserve. Contract timing uses active server time, not Minecraft days."),
+                left + 290, top + 174, 220, 0xFFAAAAAA);
     }
 
     private void renderTreasury(GuiGraphics graphics) {

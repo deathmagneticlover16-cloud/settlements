@@ -59,12 +59,6 @@ public final class SettlementManager {
     public static final double SMALL_LEVY_SHARE = 0.75D;
     public static final double NORMAL_LEVY_SHARE = 0.50D;
 
-    public static final int CONTRACT_INTERVAL_DAYS = 3;
-    public static final int CONTRACT_MIN_STABILITY = 60;
-    public static final int CONTRACT_FOOD_RESERVE = 20;
-    public static final int CONTRACT_FOOD_COST = 10;
-    public static final int MAX_PENDING_CONTRACTS = 3;
-
     public static final String TAG_MANAGED = "SettlementsManaged";
     public static final String TAG_KIND = "SettlementsKind";
     public static final String TAG_BATCH = "SettlementsBatch";
@@ -505,6 +499,9 @@ public final class SettlementManager {
             if (before > 0 && !settlement.hasPendingFirstSettlers()) {
                 settlement.addChronicle("The first settlers reached the village.");
                 owner.sendSystemMessage(Component.literal("The first settlers have reached your village."));
+                owner.sendSystemMessage(Component.literal("Provide free housing and keep at least "
+                        + SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get() + " Food with Stability at "
+                        + SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get() + "+ to attract more settlers."));
             }
         }
     }
