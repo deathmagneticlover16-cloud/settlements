@@ -36,6 +36,24 @@ import java.util.UUID;
 public final class CampaignManager {
     private CampaignManager() {}
 
+    /** Applies faction Reliability while respecting ruler traits such as Reserved. */
+    public static int changeReliability(ServerLevel level, CampaignData data, String factionId, int delta) {
+        if (data == null || factionId == null || factionId.isBlank() || delta == 0) return 0;
+        int adjusted = delta;
+        if (level != null && FactionEvents.recruitsFactionManager != null) {
+            RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+            UUID leader = faction == null ? null : faction.getTeamLeaderUUID();
+            SettlementData.CharacterRecord character = leader == null ? null : SettlementData.get(level).getCharacter(leader);
+            if (character != null && character.isCreated() && character.getTraits().stream().anyMatch("reserved"::equals)) {
+                int percent = SettlementConfig.RESERVED_RELIABILITY_MAGNITUDE_PERCENT.get();
+                int magnitude = Math.max(1, (int)Math.round(Math.abs(delta) * percent / 100.0D));
+                adjusted = delta < 0 ? -magnitude : magnitude;
+            }
+        }
+        data.changeFactionReliability(factionId, adjusted);
+        return adjusted;
+    }
+
     public static void openMain(ServerPlayer player) {
         SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new CampaignSnapshotPacket(CampaignSnapshot.from(player)));
@@ -550,7 +568,7 @@ public final class CampaignManager {
             case NON_AGGRESSION -> -15;
             default -> -5;
         };
-        data.changeFactionReliability(own, reliabilityPenalty);
+        changeReliability(player.serverLevel(), data, own, reliabilityPenalty);
         if (!syncRelation(player.serverLevel(), own, target, CampaignData.TreatyState.WAR)) {
             data.endWar(war.id(), day, "Declaration aborted: Recruits relation synchronization failed.");
             return "War declaration aborted because Recruits did not confirm ENEMY relations in both directions.";
@@ -693,7 +711,7 @@ public final class CampaignManager {
         // Supporting one of your settlements is a small positive Reliability signal. It is
         // intentionally awarded per aid order rather than per resource/daily tick to prevent
         // trivial recurring transfers from becoming a reputation farm.
-        data.changeFactionReliability(own, 1);
+        changeReliability(player.serverLevel(), data, own, 1);
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.NORMAL, "War aid sent",
                 factionName(own) + " sent aid to " + target.getName() + ".", day, own, targetSettlement, CampaignData.NewsVisibility.PUBLIC);
         if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(player.getServer(), target.getId(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
@@ -1316,7 +1334,7 @@ public final class CampaignManager {
             changeRelationship(player.getServer(), data, proposal.fromFaction(), own, 15);
             // Reliability is earned from actual diplomatic conduct. Answering an ally's
             // legitimate call to war is one of the clearest positive signals.
-            data.changeFactionReliability(own, 8);
+            changeReliability(player.serverLevel(), data, own, 8);
             data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR,
                     "Faction joined a war", factionName(own) + " answered " + factionName(proposal.fromFaction()) + "'s call to war.",
                     day, own, war.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);
@@ -1380,7 +1398,7 @@ public final class CampaignManager {
         if (relation.state() == CampaignData.TreatyState.WAR || relation.state() == CampaignData.TreatyState.NEUTRAL) return "There is no treaty to break.";
         relation.setState(CampaignData.TreatyState.NEUTRAL, day);
         changeRelationship(player.getServer(), data, own, target, -20);
-        data.changeFactionReliability(own, -15);
+        changeReliability(player.serverLevel(), data, own, -15);
         syncRelation(player.serverLevel(), own, target, CampaignData.TreatyState.NEUTRAL);
         CampaignToastSender.relationChanged(player.getServer(), own, target, "Neutral — treaty broken");
         data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL,
@@ -1481,7 +1499,7 @@ public final class CampaignManager {
                     CampaignSystemsData.CandidateHistory history = extra.candidateHistory(player.getUUID());
                     SettlementData.CharacterRecord character = SettlementData.get(player.serverLevel()).getCharacter(player.getUUID());
                     int quality = character == null ? 0 : CampaignDefinitions.totalEffect(character.getTraits(), CampaignDefinitions.EffectKind.SPOUSE_QUALITY);
-                    data.refreshCandidates(player.getUUID(), day, history.rejectedIds(), history.seenIds(), quality);
+                    data.refreshCandidates(player.getUUID(), day, history.rejectedIds(), history.seenIds(), quality, character == null ? "" : character.getFaith());
                     result = quality > 0 ? "A new set of spouse candidates has arrived. Your Charisma improved the selection." : "A new set of spouse candidates has arrived.";
                 }
             }
@@ -1551,8 +1569,8 @@ public final class CampaignManager {
                         CampaignSystemsData.get(player.serverLevel()).removeMarriageAlliance(firstFaction, secondFaction);
                         // The faction whose ruler initiates a political divorce takes the reputation hit.
                         // The other spouse's faction did not choose to break the marriage alliance.
-                        data.changeFactionReliability(firstFaction, -8);
-                        CampaignToastSender.faction(player.getServer(), firstFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(secondFaction) + " has ended. Reliability -8.");
+                        int reliabilityChange = changeReliability(player.serverLevel(), data, firstFaction, -8);
+                        CampaignToastSender.faction(player.getServer(), firstFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(secondFaction) + " has ended. Reliability " + reliabilityChange + ".");
                         CampaignToastSender.faction(player.getServer(), secondFaction, "MARRIAGE ALLIANCE ENDED", "The marriage alliance with " + factionName(firstFaction) + " has ended.");
                     }
                     result = "Marriage ended.";
@@ -1593,6 +1611,7 @@ public final class CampaignManager {
 
     public static String createFaction(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor) {
         if (player == null) return "No player supplied.";
+        if (!SettlementConfig.FACTION_FOUNDING_ENABLED.get()) return "Faction founding is disabled by the server configuration.";
         String currentPoliticalFaction = factionId(player);
         if (!currentPoliticalFaction.isBlank()) return "Leave your current faction before creating another one.";
         if (FactionEvents.recruitsFactionManager == null) return "Recruits faction data is not ready yet.";

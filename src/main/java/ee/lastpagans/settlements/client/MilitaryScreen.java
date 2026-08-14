@@ -67,14 +67,16 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Mercenary Rosters"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MERCENARIES)))
                 .bounds(left + 24, top + 206, 150, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Toggle Nearby Bard"), button -> send(SettlementManager.SettlementAction.TOGGLE_NEARBY_BARD))
+                .bounds(left + 180, top + 206, 142, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Raise Levy"), button -> send(SettlementManager.SettlementAction.RAISE_LEVY))
-                .bounds(left + 24, top + 274, 106, 20).build());
+                .bounds(left + 24, top + 292, 106, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Return Levy"), button -> send(SettlementManager.SettlementAction.RETURN_LEVY))
-                .bounds(left + 136, top + 274, 106, 20).build());
+                .bounds(left + 136, top + 292, 106, 20).build());
         addRenderableWidget(Button.builder(Component.literal("To Barracks"), button -> send(SettlementManager.SettlementAction.RETURN_TO_BARRACKS))
-                .bounds(left + 248, top + 274, 104, 20).build());
+                .bounds(left + 248, top + 292, 104, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Recover MP"), button -> send(SettlementManager.SettlementAction.RUN_CHECKER))
-                .bounds(left + 358, top + 274, 96, 20).build());
+                .bounds(left + 358, top + 292, 96, 20).build());
 
         addRenderableWidget(Button.builder(Component.literal("◀ Previous"), button -> switchSettlement(false))
                 .bounds(left + 14, top + 331, 92, 18).build());
@@ -162,6 +164,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
             graphics.drawString(font, "No professional unit types are available.", left + 24, top + 174, 0xFFFFA080, false);
         }
 
+        graphics.drawString(font, "Bards: " + snapshot.bards() + (snapshot.bardPerforming() ? " · performing at Town Square" : ""), left + 24, top + 230, snapshot.bardPerforming() ? 0xFFA9D18E : 0xFFB8B0A0, false);
         graphics.drawString(font, "Mercenary obligation: " + snapshot.mercenaryWages() + " wealth / cycle", left + 286, top + 214, 0xFFB8B0A0, false);
         String mercenaryTiming = snapshot.mercenaries() <= 0 ? "No active contracts"
                 : snapshot.mercenaryStatus() + " · next payment day " + snapshot.mercenaryNextPaymentDay();
@@ -170,7 +173,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         SettlementSnapshot.LevyStatusEntry levy = snapshot.levyStatus();
         String factionLabel = snapshot.factionId().isBlank() ? "Independent" : "Faction";
         graphics.drawString(font, "Levy capacity: you " + levy.playerDeployed() + "/" + levy.playerCap()
-                + " · " + factionLabel + " " + levy.factionDeployed() + "/" + levy.factionCap(), left + 24, top + 230, 0xFFB8B0A0, false);
+                + " · " + factionLabel + " " + levy.factionDeployed() + "/" + levy.factionCap(), left + 24, top + 244, 0xFFB8B0A0, false);
         long elapsed = Math.max(0L, System.currentTimeMillis() - snapshotReceivedAt);
         long musterRemaining = Math.max(0L, levy.mobilizationRemainingMillis() - elapsed);
         long cooldownRemaining = Math.max(0L, levy.cooldownRemainingMillis() - elapsed);
@@ -178,11 +181,11 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                 ? "Mustering " + levy.mobilizingSpawned() + "/" + levy.mobilizingTotal() + " · " + duration(musterRemaining) + " remaining"
                 : cooldownRemaining > 0 ? "Cooldown " + duration(cooldownRemaining)
                 : "Ready to mobilise";
-        graphics.drawString(font, "Levy status: " + levyState + " · " + levy.serviceState(), left + 24, top + 244, 0xFFB8B0A0, false);
-        status(graphics, "Town Square", snapshot.townSquareSet(), 24, 260);
-        status(graphics, "Muster Ground", snapshot.musterGroundSet(), 190, 260);
-        status(graphics, "Barracks", snapshot.barracksSet(), 374, 260);
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 305, 0xFFFFD27A);
+        graphics.drawString(font, "Levy status: " + levyState + " · " + levy.serviceState(), left + 24, top + 258, 0xFFB8B0A0, false);
+        status(graphics, "Town Square", snapshot.townSquareSet(), 24, 274);
+        status(graphics, "Muster Ground", snapshot.musterGroundSet(), 190, 274);
+        status(graphics, "Barracks", snapshot.barracksSet(), 374, 274);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 318, 0xFFFFD27A);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }

@@ -13,12 +13,15 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import java.util.ArrayList;
 import java.util.List;
 
+/** Total-War-inspired technology tree backed by History Stages. */
 public final class ResearchScreen extends ScaledCampaignScreen {
-    private static final int W = 540, H = 330, ROWS = 8;
+    private static final int W = 660, H = 400, COLUMNS = 4, ROWS = 7;
+    private static final int TREE_X = 14, TREE_Y = 112, TREE_W = 430, TREE_H = 244;
     private ResearchSnapshot snapshot;
-    private int left, top, scroll, selected;
+    private int left, top, scroll, selected = -1, refreshTicks;
     private Button startButton, cancelButton;
 
     public ResearchScreen(ResearchSnapshot snapshot) {
@@ -29,18 +32,35 @@ public final class ResearchScreen extends ScaledCampaignScreen {
     @Override protected void init() {
         setupCampaignScale(W, H);
         left = campaignLeft(W); top = campaignTop(H);
-        addRenderableWidget(Button.builder(Component.literal("Return to Main"), b ->
-                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
-                .bounds(left + W - 118, top + H - 26, 104, 18).build());
         startButton = addRenderableWidget(Button.builder(Component.literal("Begin Research"), b -> startSelected())
-                .bounds(left + 314, top + 250, 124, 20).build());
+                .bounds(left + 466, top + 304, 166, 20).build());
         cancelButton = addRenderableWidget(Button.builder(Component.literal("Cancel Current"), b ->
                 SettlementNetwork.CHANNEL.sendToServer(new ResearchActionPacket("CANCEL", "")))
-                .bounds(left + 314, top + 275, 124, 20).build());
+                .bounds(left + 466, top + 330, 166, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Return to Main"), b ->
+                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
+                .bounds(left + 528, top + 370, 104, 18).build());
         refreshButtons();
     }
 
-    public void updateSnapshot(ResearchSnapshot value) { snapshot = value; scroll = Math.min(scroll, Math.max(0, value.technologies().size() - ROWS)); refreshButtons(); }
+    @Override public void tick() {
+        super.tick();
+        if (++refreshTicks >= 20) {
+            refreshTicks = 0;
+            SettlementNetwork.CHANNEL.sendToServer(new ResearchActionPacket("REFRESH", ""));
+        }
+    }
+
+    public void updateSnapshot(ResearchSnapshot value) {
+        String selectedId = selected >= 0 && selected < snapshot.technologies().size() ? snapshot.technologies().get(selected).id() : "";
+        snapshot = value;
+        if (!selectedId.isBlank()) {
+            selected = -1;
+            for (int i = 0; i < value.technologies().size(); i++) if (selectedId.equals(value.technologies().get(i).id())) { selected = i; break; }
+        }
+        scroll = Math.min(scroll, maxScroll());
+        refreshButtons();
+    }
 
     private void startSelected() {
         if (selected < 0 || selected >= snapshot.technologies().size()) return;
@@ -58,71 +78,128 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         renderBackground(graphics);
         int ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
+        graphics.fill(left, top, left + W, top + H, 0xF0161616);
         graphics.fill(left + 4, top + 4, left + W - 4, top + 56, 0xFF3B3023);
-        graphics.drawCenteredString(font, "RESEARCH — " + snapshot.polityName(), left + W / 2, top + 14, 0xFFFFE2A3);
-        graphics.drawCenteredString(font, snapshot.historyStagesInstalled() ? "History Stages integration active" : "History Stages not installed", left + W / 2, top + 33,
-                snapshot.historyStagesInstalled() ? 0xFFA8E39D : 0xFFFFA27A);
-        graphics.fill(left + 12, top + 66, left + 286, top + 302, 0xFF242424);
-        graphics.fill(left + 296, top + 66, left + 528, top + 302, 0xFF242424);
-        graphics.drawString(font, "Technologies", left + 22, top + 75, 0xFFFFFFFF, false);
-        List<ResearchSnapshot.TechnologyEntry> list = snapshot.technologies();
-        int max = Math.min(list.size(), scroll + ROWS);
-        for (int index = scroll; index < max; index++) {
-            ResearchSnapshot.TechnologyEntry entry = list.get(index);
-            int row = index - scroll;
-            int y = top + 96 + row * 23;
-            boolean chosen = index == selected;
-            graphics.fill(left + 20, y - 2, left + 278, y + 18, chosen ? 0xFF5A4B35 : 0xFF333333);
-            int color = entry.completed() ? 0xFF8FD694 : entry.available() ? 0xFFFFFFFF : 0xFF999999;
-            String prefix = entry.completed() ? "✓ " : (!entry.available() ? "× " : "");
-            graphics.renderItem(icon(entry.icon()), left + 24, y);
-            graphics.drawString(font, prefix + trim(entry.name(), 31), left + 44, y + 4, color, false);
-        }
+        graphics.drawCenteredString(font, "RESEARCH — " + snapshot.polityName(), left + W / 2, top + 13, 0xFFFFE2A3);
+        graphics.drawCenteredString(font, snapshot.historyStagesInstalled()
+                        ? "History Stages · Research tier " + snapshot.researchTier() + " · " + snapshot.speedPercent() + "% speed"
+                        : "History Stages not installed — research unavailable",
+                left + W / 2, top + 33, snapshot.historyStagesInstalled() ? 0xFFA8E39D : 0xFFFFA27A);
+
+        renderActiveProject(graphics);
+        graphics.fill(left + TREE_X, top + TREE_Y, left + TREE_X + TREE_W, top + TREE_Y + TREE_H, 0xFF222222);
+        graphics.fill(left + 452, top + TREE_Y, left + 646, top + TREE_Y + TREE_H, 0xFF222222);
+        renderTree(graphics);
         renderDetails(graphics);
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, snapshot.message(), left + W / 2, top + 309, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, trim(snapshot.message(), 80), left + W / 2, top + 382, 0xFFFFD27A);
         super.render(graphics, ux, uy, partialTick);
         endCampaignRender(graphics);
     }
 
+    private void renderActiveProject(GuiGraphics graphics) {
+        int x = left + 14, y = top + 64, width = W - 28;
+        graphics.fill(x, y, x + width, y + 38, 0xFF25211B);
+        graphics.drawString(font, "ACTIVE RESEARCH", x + 8, y + 6, 0xFFE7D8B0, false);
+        if (snapshot.activeStageId().isBlank()) {
+            graphics.drawString(font, "No project selected", x + 112, y + 6, 0xFFAAAAAA, false);
+            return;
+        }
+        graphics.drawString(font, trim(snapshot.activeStageName(), 40), x + 112, y + 6, 0xFFFFE2A3, false);
+        int barX = x + 8, barY = y + 22, barW = width - 190;
+        graphics.fill(barX, barY, barX + barW, barY + 8, 0xFF0E0E0E);
+        int fill = (int)Math.round(barW * Math.max(0, Math.min(1000, snapshot.progressPermille())) / 1000.0D);
+        graphics.fill(barX, barY, barX + fill, barY + 8, 0xFF8F7A45);
+        graphics.drawString(font, String.format(java.util.Locale.ROOT, "%.1f%%", snapshot.progressPermille() / 10.0D), barX + barW + 8, barY, 0xFFFFFFFF, false);
+        graphics.drawString(font, duration(snapshot.remainingSeconds()) + " remaining", x + width - 112, y + 6, 0xFFCCCCCC, false);
+    }
+
+    private void renderTree(GuiGraphics graphics) {
+        String[] headers = {"FOUNDATION", "DEVELOPMENT", "ADVANCED", "LATE"};
+        int colW = TREE_W / COLUMNS;
+        for (int col = 0; col < COLUMNS; col++) {
+            int x = left + TREE_X + col * colW;
+            if (col > 0) graphics.fill(x, top + TREE_Y + 4, x + 1, top + TREE_Y + TREE_H - 4, 0xFF3A3A3A);
+            graphics.drawCenteredString(font, headers[col], x + colW / 2, top + TREE_Y + 8, 0xFFC9B98E);
+        }
+        for (Node node : visibleNodes()) {
+            ResearchSnapshot.TechnologyEntry entry = snapshot.technologies().get(node.index());
+            boolean chosen = node.index() == selected;
+            int frame = chosen ? 0xFFB89652 : entry.completed() ? 0xFF557755 : entry.available() ? 0xFF55504A : 0xFF3B3B3B;
+            int fill = chosen ? 0xFF51442F : entry.completed() ? 0xFF2E4230 : entry.available() ? 0xFF333333 : 0xFF282828;
+            graphics.fill(node.x(), node.y(), node.x() + node.w(), node.y() + node.h(), frame);
+            graphics.fill(node.x() + 1, node.y() + 1, node.x() + node.w() - 1, node.y() + node.h() - 1, fill);
+            graphics.renderItem(icon(entry.icon()), node.x() + 4, node.y() + 4);
+            int color = entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFFFFF : 0xFF888888;
+            graphics.drawString(font, trim(entry.name(), 12), node.x() + 24, node.y() + 5, color, false);
+            String state = entry.completed() ? "DONE" : entry.available() ? "READY" : "LOCKED";
+            graphics.drawString(font, state, node.x() + 24, node.y() + 15, color, false);
+        }
+        if (maxScroll() > 0) graphics.drawString(font, "Mouse wheel to scroll technology rows", left + TREE_X + 8, top + TREE_Y + TREE_H - 13, 0xFF888888, false);
+    }
+
     private void renderDetails(GuiGraphics graphics) {
-        graphics.drawString(font, "Current project", left + 306, top + 75, 0xFFFFFFFF, false);
-        if (snapshot.activeStageId().isBlank()) graphics.drawString(font, "None", left + 306, top + 92, 0xFFAAAAAA, false);
-        else {
-            graphics.drawString(font, trim(snapshot.activeStageName(), 28), left + 306, top + 92, 0xFFFFE2A3, false);
-            int x = left + 306, y = top + 111, width = 202;
-            graphics.fill(x, y, x + width, y + 9, 0xFF111111);
-            int fill = (int)Math.round(width * Math.max(0, Math.min(1000, snapshot.progressPermille())) / 1000.0D);
-            graphics.fill(x, y, x + fill, y + 9, 0xFF8F7A45);
-            graphics.drawString(font, (snapshot.progressPermille() / 10.0D) + "% · " + duration(snapshot.remainingSeconds()) + " remaining", x, y + 15, 0xFFCCCCCC, false);
-            graphics.drawString(font, "Research speed: " + snapshot.speedPercent() + "%", x, y + 31, 0xFFCCCCCC, false);
+        int x = left + 464, y = top + TREE_Y + 10;
+        graphics.drawString(font, "TECHNOLOGY", x, y, 0xFFE7D8B0, false);
+        ResearchSnapshot.TechnologyEntry entry = selected >= 0 && selected < snapshot.technologies().size() ? snapshot.technologies().get(selected) : null;
+        if (entry == null) {
+            graphics.drawWordWrap(font, Component.literal("Select a technology node to inspect its prerequisites, research tier and duration."), x, y + 22, 166, 0xFFAAAAAA);
+            return;
         }
-        ResearchSnapshot.TechnologyEntry selectedEntry = selected >= 0 && selected < snapshot.technologies().size() ? snapshot.technologies().get(selected) : null;
-        graphics.drawString(font, "Selected technology", left + 306, top + 166, 0xFFFFFFFF, false);
-        if (selectedEntry != null) {
-            graphics.renderItem(icon(selectedEntry.icon()), left + 306, top + 181);
-            graphics.drawString(font, trim(selectedEntry.name(), 24), left + 326, top + 184, selectedEntry.completed() ? 0xFF8FD694 : 0xFFFFE2A3, false);
-            graphics.drawString(font, "Base time: " + duration(selectedEntry.durationSeconds()), left + 306, top + 201, 0xFFCCCCCC, false);
-            graphics.drawString(font, selectedEntry.completed() ? "Completed" : selectedEntry.available() ? "Available" : "Locked", left + 306, top + 217,
-                    selectedEntry.completed() ? 0xFF8FD694 : selectedEntry.available() ? 0xFFFFFFFF : 0xFFFF8A8A, false);
-            graphics.drawString(font, "Requires: " + trim(selectedEntry.dependencies(), 26), left + 306, top + 233, 0xFFAAAAAA, false);
+        graphics.renderItem(icon(entry.icon()), x, y + 22);
+        graphics.drawString(font, trim(entry.name(), 21), x + 22, y + 25, entry.completed() ? 0xFFA9D18E : 0xFFFFE2A3, false);
+        graphics.drawString(font, entry.completed() ? "Completed" : entry.available() ? "Available" : "Locked", x, y + 48,
+                entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFFFFF : 0xFFFF8A8A, false);
+        graphics.drawString(font, "Base time: " + duration(entry.durationSeconds()), x, y + 64, 0xFFCCCCCC, false);
+        String tier = "Research tier: " + entry.requiredTier() + ("EXACT".equalsIgnoreCase(entry.tierMode()) ? " exactly" : "+");
+        boolean tierAllowed = "EXACT".equalsIgnoreCase(entry.tierMode())
+                ? snapshot.researchTier() == entry.requiredTier()
+                : snapshot.researchTier() >= entry.requiredTier();
+        graphics.drawString(font, tier, x, y + 80, tierAllowed ? 0xFFCCCCCC : 0xFFFF8A8A, false);
+        graphics.drawString(font, "Prerequisites", x, y + 104, 0xFFE7D8B0, false);
+        graphics.drawWordWrap(font, Component.literal(entry.dependencies()), x, y + 118, 166, 0xFFAAAAAA);
+    }
+
+    private List<Node> visibleNodes() {
+        int colW = TREE_W / COLUMNS;
+        int[] rowCounts = new int[COLUMNS];
+        List<Node> nodes = new ArrayList<>();
+        for (int i = 0; i < snapshot.technologies().size(); i++) {
+            ResearchSnapshot.TechnologyEntry entry = snapshot.technologies().get(i);
+            int col = Math.min(COLUMNS - 1, Math.max(0, entry.depth()));
+            int row = rowCounts[col]++;
+            if (row < scroll || row >= scroll + ROWS) continue;
+            int x = left + TREE_X + col * colW + 5;
+            int y = top + TREE_Y + 26 + (row - scroll) * 29;
+            nodes.add(new Node(i, x, y, colW - 10, 25));
         }
+        return nodes;
+    }
+
+    private int maxScroll() {
+        int[] counts = new int[COLUMNS];
+        for (ResearchSnapshot.TechnologyEntry entry : snapshot.technologies()) counts[Math.min(COLUMNS - 1, Math.max(0, entry.depth()))]++;
+        int maximum = 0;
+        for (int count : counts) maximum = Math.max(maximum, count);
+        return Math.max(0, maximum - ROWS);
     }
 
     @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
         double ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
-        if (button == 0 && ux >= left + 20 && ux <= left + 278 && uy >= top + 94 && uy <= top + 94 + ROWS * 23) {
-            int row = (int)((uy - (top + 94)) / 23);
-            int index = scroll + row;
-            if (index >= 0 && index < snapshot.technologies().size()) { selected = index; refreshButtons(); return true; }
+        if (button == 0) for (Node node : visibleNodes()) {
+            if (ux >= node.x() && ux <= node.x() + node.w() && uy >= node.y() && uy <= node.y() + node.h()) {
+                selected = node.index(); refreshButtons(); return true;
+            }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        int max = Math.max(0, snapshot.technologies().size() - ROWS);
-        if (delta < 0) scroll = Math.min(max, scroll + 1); else if (delta > 0) scroll = Math.max(0, scroll - 1);
-        return true;
+        double ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
+        if (ux >= left + TREE_X && ux <= left + TREE_X + TREE_W && uy >= top + TREE_Y && uy <= top + TREE_Y + TREE_H) {
+            if (delta < 0) scroll = Math.min(maxScroll(), scroll + 1); else if (delta > 0) scroll = Math.max(0, scroll - 1);
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, delta);
     }
 
     private ItemStack icon(String raw) {
@@ -133,10 +210,12 @@ public final class ResearchScreen extends ScaledCampaignScreen {
     }
 
     private static String duration(long seconds) {
-        long h = seconds / 3600L, m = (seconds % 3600L) / 60L;
+        long h = seconds / 3600L, m = (seconds % 3600L) / 60L, s = seconds % 60L;
         if (h > 0) return h + "h " + m + "m";
-        return Math.max(1L, m) + "m";
+        if (m > 0) return m + "m " + s + "s";
+        return s + "s";
     }
     private static String trim(String value, int max) { return value == null ? "" : value.length() <= max ? value : value.substring(0, Math.max(0, max - 1)) + "…"; }
+    private record Node(int index, int x, int y, int w, int h) {}
     @Override public boolean isPauseScreen() { return false; }
 }

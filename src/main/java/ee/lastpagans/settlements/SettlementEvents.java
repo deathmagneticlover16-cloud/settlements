@@ -262,6 +262,7 @@ public final class SettlementEvents {
 
         SettlementData data = SettlementData.get(server.overworld());
         CampaignData campaign = CampaignData.get(server.overworld());
+        SettlementManager.processUpkeepChests(server);
         long day = server.overworld().getDayTime() / 24000L;
         long gameTime = server.overworld().getGameTime();
         data.getSettlements().forEach(settlement -> {

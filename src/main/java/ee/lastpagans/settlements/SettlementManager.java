@@ -26,6 +26,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
@@ -36,6 +37,10 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.scores.PlayerTeam;
@@ -71,6 +76,7 @@ public final class SettlementManager {
     public static final String TAG_MERCENARY_MISSED_PAYMENTS = "SettlementsMercenaryMissedPayments";
     public static final String TAG_MERCENARY_COMPANY = "SettlementsMercenaryCompany";
     public static final String TAG_UNIT_TYPE = "SettlementsUnitType";
+    public static final String TAG_BARD = "SettlementsBard";
     public static final int MERCENARY_DEFAULT_WAGE = 20;
     public static final int MERCENARY_DEFAULT_INTERVAL_DAYS = 7;
     public static final int MERCENARY_DESERTION_MISSES = 3;
@@ -78,6 +84,9 @@ public final class SettlementManager {
     public static final TagKey<Item> CURRENCY = TagKey.create(
             Registries.ITEM,
             new ResourceLocation(Settlements.MOD_ID, "currency")
+    );
+    public static final TagKey<Item> BARD_INSTRUMENTS = TagKey.create(
+            Registries.ITEM, new ResourceLocation(Settlements.MOD_ID, "bard_instruments")
     );
 
     private SettlementManager() {
@@ -179,6 +188,7 @@ public final class SettlementManager {
             case RAISE_LEVY -> requireManager(player, settlement, () -> CampaignSystemsManager.raiseLevy(player, settlement));
             case RETURN_LEVY -> requireManager(player, settlement, () -> CampaignSystemsManager.returnLevy(player, settlement));
             case RETURN_TO_BARRACKS -> requireManager(player, settlement, () -> returnToBarracks(player, settlement));
+            case TOGGLE_NEARBY_BARD -> requireManager(player, settlement, () -> toggleNearbyBard(player, settlement));
             case RUN_CHECKER -> requireManager(player, settlement, () -> {
                 int recovered = settlement.runManpowerChecker();
                 return recovered > 0 ? "Recovered " + recovered + " available MP." : "No manpower recovered.";
@@ -202,6 +212,8 @@ public final class SettlementManager {
             case REMOVE_MEMBER -> requireManager(player, settlement, () -> removeSettlementMember(player, settlement, argument));
             case SET_TOWN_SQUARE -> requireManager(player, settlement, () -> setTownSquareHere(player, settlement));
             case SET_BARRACKS -> requireManager(player, settlement, () -> setBarracksHere(player, settlement));
+            case SET_UPKEEP_CHEST -> requireManager(player, settlement, () -> setUpkeepChest(player, settlement));
+            case CLEAR_UPKEEP_CHEST -> requireManager(player, settlement, () -> { settlement.setUpkeepChest("", null); return "City Upkeep Chest cleared."; });
             case HOUSING_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Housing"));
             case HOUSING_POS2 -> requireManager(player, settlement, () -> regionPos2(player, settlement, "housing"));
             case MUSTER_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Muster Ground"));
@@ -331,6 +343,12 @@ public final class SettlementManager {
     static AbstractRecruitEntity spawnRecruitFromTemplate(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,
                                                             CampaignData.UnitType unitType, int index, PlayerTeam team, boolean levy,
                                                             UUID batchId, ItemStack template) {
+        return spawnRecruitFromTemplate(level, actor, settlement, unitType, index, team, levy, batchId, template, "");
+    }
+
+    static AbstractRecruitEntity spawnRecruitFromTemplate(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,
+                                                            CampaignData.UnitType unitType, int index, PlayerTeam team, boolean levy,
+                                                            UUID batchId, ItemStack template, String mercenaryCompanyId) {
         if (template == null) template = ItemStack.EMPTY;
         EntityType<?> entityType = null;
         CompoundTag templateTag = null;
@@ -353,6 +371,8 @@ public final class SettlementManager {
         recruit.getPersistentData().putString(TAG_KIND, levy ? "levy" : "professional");
         recruit.getPersistentData().putString(TAG_SETTLEMENT, settlement.getId());
         recruit.getPersistentData().putString(TAG_UNIT_TYPE, unitType.name());
+        if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank())
+            recruit.getPersistentData().putString(TAG_MERCENARY_COMPANY, mercenaryCompanyId);
         if (batchId != null) recruit.getPersistentData().putUUID(TAG_BATCH, batchId);
         if (template.getTag() != null && template.getTag().getBoolean(TAG_MERCENARY)) {
             int wage = Math.max(1, template.getTag().getInt(TAG_MERCENARY_WAGE));
@@ -964,13 +984,16 @@ public final class SettlementManager {
         CampaignData campaign = CampaignData.get(server.overworld());
         processMercenaryContracts(server, settlements, campaign, day);
         MercenaryRosterManager.process(server, day);
+        processPlagueEvents(server, settlements, campaign, day);
         for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
+            BardStatus bard = bardStatus(server, settlement);
+            if (bard.performing()) settlement.applyBardStability(day, SettlementConfig.BARD_STABILITY_BONUS.get());
             for (UUID uuid : Set.copyOf(settlement.getAllMilitaryUnits())) {
                 AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
                 if (recruit == null) continue;
                 maintainBarracksLink(recruit, settlement);
                 syncMercenaryEntityFromContract(recruit, CampaignSystemsData.get(server.overworld()).mercenaryContract(uuid));
-                applySettlementMorale(recruit, settlement, settlements, campaign);
+                applySettlementMorale(recruit, settlement, settlements, campaign, bard.count());
             }
         }
         if (SettlementConfig.ENABLE_RECRUIT_LEVEL_OVERRIDE.get()) {
@@ -980,6 +1003,29 @@ public final class SettlementManager {
                     if (entity instanceof AbstractRecruitEntity recruit && recruit.getXpLevel() > cap) recruit.setXpLevel(cap);
                 }
             }
+        }
+    }
+
+    private static void processPlagueEvents(MinecraftServer server, SettlementData settlements, CampaignData campaign, long day) {
+        CampaignSystemsData extra = CampaignSystemsData.get(server.overworld());
+        int baseChance = SettlementConfig.PLAGUE_DAILY_CHANCE_PER_10000.get();
+        if (baseChance <= 0) return;
+        for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
+            if (!settlement.beginPlagueCheck(day) || settlement.getVillagerCount() <= 0) continue;
+            extra.expireModifiers(settlement.getId());
+            if (extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals("plague"))) continue;
+            int chance = baseChance;
+            SettlementData.CharacterRecord ruler = settlement.getOwnerId() == null ? null : settlements.getCharacter(settlement.getOwnerId());
+            if (ruler != null && ruler.isCreated() && ruler.getTraits().stream().anyMatch("healthy"::equals))
+                chance = (int)Math.round(chance * SettlementConfig.HEALTHY_PLAGUE_CHANCE_PERCENT.get() / 100.0D);
+            long seed = 31L * day + settlement.getId().hashCode() * 0x9E3779B9L;
+            if (new java.util.Random(seed).nextInt(10000) >= Math.max(0, chance)) continue;
+            long duration = SettlementConfig.hoursMillis(SettlementConfig.PLAGUE_DURATION_HOURS);
+            extra.addModifier(settlement.getId(), CampaignSystemsManager.standardModifier(server.overworld(), settlement.getId(), "plague", duration));
+            settlement.addChronicle("Plague has broken out in the settlement.");
+            CampaignToastSender.settlementManagers(server, settlement.getId(), "PLAGUE", "Disease has broken out in " + settlement.getName() + ".");
+            campaign.addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.NORMAL, "Plague outbreak",
+                    "Disease has broken out in " + settlement.getName() + ".", day, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
         }
     }
 
@@ -1054,8 +1100,8 @@ public final class SettlementManager {
         }
         // Reliability is faction reputation, not a per-soldier score. Award/penalize at most
         // once per processing pass regardless of how many mercenary contracts were due.
-        for (String faction : paidFactions) if (!missedFactions.contains(faction)) campaign.changeFactionReliability(faction, 1);
-        for (String faction : missedFactions) campaign.changeFactionReliability(faction, -2);
+        for (String faction : paidFactions) if (!missedFactions.contains(faction)) CampaignManager.changeReliability(server.overworld(), campaign, faction, 1);
+        for (String faction : missedFactions) CampaignManager.changeReliability(server.overworld(), campaign, faction, -2);
     }
 
     private static void syncMercenaryEntityFromContract(AbstractRecruitEntity recruit, CampaignSystemsData.MercenaryContractRecord contract) {
@@ -1112,7 +1158,7 @@ public final class SettlementManager {
     }
 
     private static void applySettlementMorale(AbstractRecruitEntity recruit, SettlementData.SettlementRecord settlement,
-                                               SettlementData settlements, CampaignData campaign) {
+                                               SettlementData settlements, CampaignData campaign, int bardCount) {
         int target = 50 + Math.round((settlement.getStability() - 50) * 0.30F);
         SettlementData.CharacterRecord ruler = settlement.getOwnerId() == null ? null : settlements.getCharacter(settlement.getOwnerId());
         if (ruler != null) target += CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.MORALE);
@@ -1125,6 +1171,7 @@ public final class SettlementManager {
         }
         if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())
                 && recruit.blockPosition().closerThan(settlement.getBarracks(), settlement.getBarracksRadius())) target += 8;
+        target += Math.min(Math.max(0, bardCount), SettlementConfig.BARD_MAX_MORALE_STACKS.get()) * SettlementConfig.BARD_MORALE_BONUS.get();
         CampaignSystemsData extra = CampaignSystemsData.get((ServerLevel) recruit.level());
         for (CampaignSystemsData.ModifierRecord modifier : extra.modifiers(settlement.getId())) target += modifier.morale;
         if (recruit.getPersistentData().getBoolean(TAG_MERCENARY)) {
@@ -1139,6 +1186,94 @@ public final class SettlementManager {
     private static String setTownSquareHere(ServerPlayer player, SettlementData.SettlementRecord settlement) {
         settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
         return "Town Square moved to your current position.";
+    }
+
+    private static String toggleNearbyBard(ServerPlayer player, SettlementData.SettlementRecord settlement) {
+        AbstractRecruitEntity recruit = player.serverLevel().getEntitiesOfClass(AbstractRecruitEntity.class, player.getBoundingBox().inflate(8.0D), entity ->
+                settlement.getId().equals(entity.getPersistentData().getString(TAG_SETTLEMENT)) && entity.getPersistentData().getBoolean(TAG_MANAGED))
+                .stream().min(java.util.Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
+        if (recruit == null) return "No managed recruit from this settlement is within 8 blocks.";
+        boolean bard = !recruit.getPersistentData().getBoolean(TAG_BARD);
+        recruit.getPersistentData().putBoolean(TAG_BARD, bard);
+        return bard ? "Nearest recruit designated as a Bard. Give them an item in #settlements:bard_instruments and place them near the Town Square to perform."
+                : "Nearest recruit is no longer designated as a Bard.";
+    }
+
+    public static BardStatus bardStatus(MinecraftServer server, SettlementData.SettlementRecord settlement) {
+        if (server == null || settlement == null) return new BardStatus(0, false);
+        int count = 0;
+        boolean performing = false;
+        for (UUID uuid : settlement.getAllMilitaryUnits()) {
+            AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
+            if (recruit == null || !recruit.getPersistentData().getBoolean(TAG_BARD) || !bardIsInTown(recruit, settlement)) continue;
+            count++;
+            if (!performing && settlement.hasTownSquare()
+                    && recruit.level().dimension().location().toString().equals(settlement.getTownSquareDimension())
+                    && recruit.blockPosition().closerThan(settlement.getTownSquare(), SettlementConfig.BARD_TOWN_SQUARE_RADIUS.get())
+                    && (recruit.getMainHandItem().is(BARD_INSTRUMENTS) || recruit.getOffhandItem().is(BARD_INSTRUMENTS))) performing = true;
+        }
+        return new BardStatus(count, performing);
+    }
+
+    public record BardStatus(int count, boolean performing) {}
+
+    private static boolean bardIsInTown(AbstractRecruitEntity recruit, SettlementData.SettlementRecord settlement) {
+        String dimension = recruit.level().dimension().location().toString();
+        if (settlement.hasClaim() && ClaimEvents.recruitsClaimManager != null) {
+            RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(new ChunkPos(recruit.blockPosition()));
+            if (claim != null && settlement.containsClaim(dimension, claim.getUUID())) return true;
+        }
+        return settlement.hasTownSquare()
+                && dimension.equals(settlement.getTownSquareDimension())
+                && recruit.blockPosition().closerThan(settlement.getTownSquare(), Math.max(16, SettlementConfig.BARD_TOWN_SQUARE_RADIUS.get() * 2));
+    }
+
+    private static String setUpkeepChest(ServerPlayer player, SettlementData.SettlementRecord settlement) {
+        ServerLevel level = player.serverLevel();
+        Vec3 eye = player.getEyePosition();
+        Vec3 end = eye.add(player.getViewVector(1.0F).scale(6.0D));
+        BlockHitResult hit = level.clip(new ClipContext(eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
+        if (hit.getType() == HitResult.Type.MISS) return "Look directly at a chest or other inventory container within 6 blocks.";
+        BlockPos pos = hit.getBlockPos();
+        if (!(level.getBlockEntity(pos) instanceof Container)) return "That block is not a supported inventory container.";
+        settlement.setUpkeepChest(level.dimension().location().toString(), pos);
+        return "City Upkeep Chest linked. Edible items placed inside will automatically maintain the settlement Food stockpile.";
+    }
+
+    public static void processUpkeepChests(MinecraftServer server) {
+        if (server == null) return;
+        for (SettlementData.SettlementRecord settlement : SettlementData.get(server.overworld()).getSettlements()) {
+            BlockPos pos = settlement.getUpkeepChest();
+            if (pos == null || settlement.getUpkeepChestDimension().isBlank()) continue;
+            ServerLevel level = resolveLevel(server, settlement.getUpkeepChestDimension());
+            if (level == null || !level.isLoaded(pos) || !(level.getBlockEntity(pos) instanceof Container container)) continue;
+            int mouths = settlement.getVillagerCount() + settlement.getProfessionalCount() + settlement.getMercenaryCompanyCount();
+            if (mouths <= 0) continue;
+            int target = Math.max(SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get(), mouths * SettlementConfig.UPKEEP_CHEST_TARGET_DAYS.get());
+            int needed = Math.max(0, target - settlement.getFood());
+            if (needed <= 0) continue;
+            int itemBudget = SettlementConfig.UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP.get();
+            int supplied = 0;
+            for (int slot = 0; slot < container.getContainerSize() && needed > 0 && itemBudget > 0; slot++) {
+                ItemStack stack = container.getItem(slot);
+                if (stack.isEmpty() || !stack.isEdible()) continue;
+                FoodProperties properties = stack.getFoodProperties(null);
+                if (properties == null) continue;
+                int perItem = Math.max(1, properties.getNutrition());
+                int take = Math.min(stack.getCount(), Math.min(itemBudget, (needed + perItem - 1) / perItem));
+                if (take <= 0) continue;
+                stack.shrink(take);
+                container.setItem(slot, stack);
+                int points = take * perItem;
+                supplied += points;
+                needed -= points;
+                itemBudget -= take;
+            }
+            if (supplied > 0) {
+                container.setChanged();
+                settlement.addFoodStockpile(supplied);
+            }
+        }
     }
 
     private static String setBarracksHere(ServerPlayer player, SettlementData.SettlementRecord settlement) {
@@ -1245,11 +1380,11 @@ public final class SettlementManager {
 
     public enum SettlementAction {
         RECRUIT_ONE, RECRUIT_FIVE, RECRUIT_TEN, RECRUIT_TWENTY_FIVE, RECRUIT_UNIT,
-        RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_CURRENCY,
+        RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, TOGGLE_NEARBY_BARD, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_CURRENCY,
         WITHDRAW_CURRENCY_ONE, WITHDRAW_CURRENCY_TEN, SET_TAX_POLICY, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
         RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
-        SET_TOWN_SQUARE, SET_BARRACKS, HOUSING_POS1, HOUSING_POS2, MUSTER_POS1, MUSTER_POS2,
+        SET_TOWN_SQUARE, SET_BARRACKS, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST, HOUSING_POS1, HOUSING_POS2, MUSTER_POS1, MUSTER_POS2,
         PRAYER_POS1, PRAYER_POS2, RECALCULATE_HOUSING, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
 

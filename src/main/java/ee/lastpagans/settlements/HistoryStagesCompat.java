@@ -1,6 +1,8 @@
 package ee.lastpagans.settlements;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.fml.ModList;
@@ -39,8 +41,11 @@ public final class HistoryStagesCompat {
                 int ticks = ((Number) duration.invoke(null, id)).intValue();
                 if (ticks <= 0) ticks = SettlementConfig.RESEARCH_FALLBACK_HOURS.get() * 60 * 60 * 20;
                 List<DependencyRule> dependencies = dependencyRules(stage);
+                int minimumTier = Math.max(1, ((Number) type.getMethod("getMinPedestalTier").invoke(stage)).intValue());
+                Object rawMode = type.getMethod("getPedestalTierMode").invoke(stage);
+                String tierMode = rawMode == null ? "MIN" : rawMode.toString().toUpperCase(java.util.Locale.ROOT);
                 values.add(new Technology(id, name == null || name.isBlank() ? id : name, icon == null ? "" : icon,
-                        Math.max(20L, ticks), dependencies));
+                        Math.max(20L, ticks), dependencies, minimumTier, tierMode));
             }
             values.sort(Comparator.comparing(Technology::name, String.CASE_INSENSITIVE_ORDER));
             return List.copyOf(values);
@@ -101,11 +106,14 @@ public final class HistoryStagesCompat {
                     .invoke(data, player.getUUID(), stageId));
             if (!already) {
                 dataClass.getMethod("addStage", java.util.UUID.class, String.class).invoke(data, player.getUUID(), stageId);
+                try { dataClass.getMethod("refreshCache").invoke(data); } catch (NoSuchMethodException ignored) {}
                 dataClass.getMethod("setDirty").invoke(data);
                 Class<?> eventClass = Class.forName("net.bananemdnsa.historystages.events.StageEvent$IndividualUnlocked");
                 Constructor<?> eventCtor = eventClass.getConstructor(String.class, String.class, java.util.UUID.class);
                 Object event = eventCtor.newInstance(stageId, display, player.getUUID());
                 if (event instanceof Event forgeEvent) MinecraftForge.EVENT_BUS.post(forgeEvent);
+                player.playNotifySound(SoundEvents.PLAYER_LEVELUP, SoundSource.MASTER, 0.8F, 1.0F);
+                CampaignToastSender.send(player, "TECHNOLOGY UNLOCKED", display);
             }
 
             Object unlocked = dataClass.getMethod("getUnlockedStages", java.util.UUID.class).invoke(data, player.getUUID());
@@ -126,5 +134,5 @@ public final class HistoryStagesCompat {
     }
 
     public record DependencyRule(boolean anyOf, List<String> stageIds) {}
-    public record Technology(String id, String name, String icon, long researchTicks, List<DependencyRule> dependencies) {}
+    public record Technology(String id, String name, String icon, long researchTicks, List<DependencyRule> dependencies, int minimumTier, String tierMode) {}
 }

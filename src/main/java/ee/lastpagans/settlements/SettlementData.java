@@ -381,6 +381,8 @@ public final class SettlementData extends SavedData {
         private int housingCapacity;
         private int pendingContracts;
         private long lastFoodDay = Long.MIN_VALUE;
+        private long lastPlagueCheckDay = Long.MIN_VALUE;
+        private long lastBardStabilityDay = Long.MIN_VALUE;
         private long lastContractGameTime = Long.MIN_VALUE;
         private String notice = "";
 
@@ -391,6 +393,8 @@ public final class SettlementData extends SavedData {
         private String barracksDimension = "";
         private BlockPos barracks;
         private BlockPos barracksChest;
+        private String upkeepChestDimension = "";
+        private BlockPos upkeepChest;
         private int barracksRadius = 12;
         private int barracksCapacity = 64;
         /** Political faction. Blank means this settlement is independent in Settlements diplomacy. */
@@ -437,6 +441,8 @@ public final class SettlementData extends SavedData {
             housingCapacity = Math.max(0, tag.getInt("HousingCapacity"));
             pendingContracts = Math.max(0, tag.getInt("PendingContracts"));
             lastFoodDay = tag.getLong("LastFoodDay");
+            lastPlagueCheckDay = tag.contains("LastPlagueCheckDay") ? tag.getLong("LastPlagueCheckDay") : Long.MIN_VALUE;
+            lastBardStabilityDay = tag.contains("LastBardStabilityDay") ? tag.getLong("LastBardStabilityDay") : Long.MIN_VALUE;
             lastContractGameTime = tag.contains("LastContractGameTime", Tag.TAG_LONG) ? tag.getLong("LastContractGameTime") : Long.MIN_VALUE;
             notice = cleanText(tag.getString("Notice"), "", 160);
             factionTeam = tag.getString("FactionTeam");
@@ -463,6 +469,11 @@ public final class SettlementData extends SavedData {
                 musterGroundDimension = point.getString("Dimension");
                 musterGround = BlockPos.of(point.getLong("Pos"));
             }
+            if (tag.contains("UpkeepChest", Tag.TAG_COMPOUND)) {
+                CompoundTag point = tag.getCompound("UpkeepChest");
+                upkeepChestDimension = point.getString("Dimension");
+                upkeepChest = BlockPos.of(point.getLong("Pos"));
+            }
             if (tag.contains("Barracks", Tag.TAG_COMPOUND)) {
                 CompoundTag point = tag.getCompound("Barracks");
                 barracksDimension = point.getString("Dimension");
@@ -475,6 +486,9 @@ public final class SettlementData extends SavedData {
             readUuidSet(tag, "Villagers", villagerResidents);
             readUuidSet(tag, "Professionals", professionalUnits);
             readUuidSet(tag, "MercenaryCompanyUnits", mercenaryCompanyUnits);
+            // Named mercenary companies are tracked separately from professional manpower. Repair
+            // any overlap left by the old entity-join race so population/manpower are never doubled.
+            professionalUnits.removeAll(mercenaryCompanyUnits);
 
             for (Tag raw : tag.getList("Members", Tag.TAG_COMPOUND)) {
                 CompoundTag member = (CompoundTag) raw;
@@ -510,6 +524,8 @@ public final class SettlementData extends SavedData {
             tag.putInt("HousingCapacity", housingCapacity);
             tag.putInt("PendingContracts", pendingContracts);
             tag.putLong("LastFoodDay", lastFoodDay);
+            tag.putLong("LastPlagueCheckDay", lastPlagueCheckDay);
+            tag.putLong("LastBardStabilityDay", lastBardStabilityDay);
             if (lastContractGameTime != Long.MIN_VALUE) tag.putLong("LastContractGameTime", lastContractGameTime);
             tag.putString("Notice", notice);
             tag.putString("FactionTeam", factionTeam);
@@ -536,6 +552,12 @@ public final class SettlementData extends SavedData {
                 point.putString("Dimension", musterGroundDimension);
                 point.putLong("Pos", musterGround.asLong());
                 tag.put("MusterGround", point);
+            }
+            if (upkeepChest != null && !upkeepChestDimension.isBlank()) {
+                CompoundTag point = new CompoundTag();
+                point.putString("Dimension", upkeepChestDimension);
+                point.putLong("Pos", upkeepChest.asLong());
+                tag.put("UpkeepChest", point);
             }
             if (barracks != null) {
                 CompoundTag point = new CompoundTag();
@@ -588,6 +610,8 @@ public final class SettlementData extends SavedData {
         public String getBarracksDimension() { return barracksDimension; }
         public BlockPos getBarracks() { return barracks; }
         public BlockPos getBarracksChest() { return barracksChest; }
+        public String getUpkeepChestDimension() { return upkeepChestDimension; }
+        public BlockPos getUpkeepChest() { return upkeepChest; }
         public int getBarracksRadius() { return barracksRadius; }
         public int getBarracksCapacity() { return barracksCapacity; }
         public String getFactionTeam() { return factionTeam; }
@@ -777,6 +801,13 @@ public final class SettlementData extends SavedData {
             dirty();
         }
 
+        public void setUpkeepChest(String dimension, BlockPos position) {
+            upkeepChestDimension = position == null || dimension == null ? "" : dimension;
+            upkeepChest = position == null ? null : position.immutable();
+            addChronicle(position == null ? "City Upkeep Chest cleared." : "City Upkeep Chest linked for automatic Food supply.");
+            dirty();
+        }
+
         public void setBarracksSettings(int radius, int capacity) {
             barracksRadius = Math.max(2, Math.min(64, radius));
             barracksCapacity = Math.max(1, Math.min(512, capacity));
@@ -870,6 +901,12 @@ public final class SettlementData extends SavedData {
             dirty();
         }
 
+        public void addFoodStockpile(int amount) {
+            if (amount <= 0) return;
+            food += amount;
+            dirty();
+        }
+
         public boolean spendFood(int amount) {
             if (amount < 0 || food < amount) return false;
             food -= amount;
@@ -905,9 +942,19 @@ public final class SettlementData extends SavedData {
         }
         public boolean hasVillager(UUID villager) { return villagerResidents.contains(villager); }
         public boolean removeVillager(UUID villager) { boolean removed = villagerResidents.remove(villager); if (removed) dirty(); return removed; }
-        public void addProfessional(UUID unit) { professionalUnits.add(unit); dirty(); }
+        public void addProfessional(UUID unit) {
+            if (unit == null) return;
+            boolean changed = mercenaryCompanyUnits.remove(unit);
+            changed |= professionalUnits.add(unit);
+            if (changed) dirty();
+        }
         public boolean removeProfessional(UUID unit) { boolean removed = professionalUnits.remove(unit); if (removed) dirty(); return removed; }
-        public void addMercenaryCompanyUnit(UUID unit) { if (unit != null && mercenaryCompanyUnits.add(unit)) dirty(); }
+        public void addMercenaryCompanyUnit(UUID unit) {
+            if (unit == null) return;
+            boolean changed = professionalUnits.remove(unit);
+            changed |= mercenaryCompanyUnits.add(unit);
+            if (changed) dirty();
+        }
         public boolean removeMercenaryCompanyUnit(UUID unit) { boolean removed = unit != null && mercenaryCompanyUnits.remove(unit); if (removed) dirty(); return removed; }
 
         public UUID addLevyBatch(int manpowerSpent, Collection<UUID> units) {
@@ -1008,6 +1055,22 @@ public final class SettlementData extends SavedData {
             return recovered;
         }
 
+        public boolean beginPlagueCheck(long day) {
+            if (lastPlagueCheckDay == day) return false;
+            lastPlagueCheckDay = day;
+            dirty();
+            return true;
+        }
+
+        public boolean applyBardStability(long day, int amount) {
+            if (amount <= 0 || lastBardStabilityDay == day) return false;
+            lastBardStabilityDay = day;
+            changeStability(amount);
+            addChronicle("Music at the Town Square lifted local spirits (Stability +" + amount + ").");
+            dirty();
+            return true;
+        }
+
         public void processDaily(long day) {
             processDaily(day, null);
         }
@@ -1076,7 +1139,7 @@ public final class SettlementData extends SavedData {
             int requiredFood = Math.max(reserve, cost);
             if (pendingContracts >= maxPending || getFreeHousing() <= 0 || stability < minimumStability || food < requiredFood) return;
 
-            long intervalTicks = Math.max(20L, SettlementConfig.SETTLER_CONTRACT_INTERVAL_MINUTES.get() * 60L * 20L);
+            long intervalTicks = settlerContractIntervalTicks();
             if (lastContractGameTime != Long.MIN_VALUE && gameTime - lastContractGameTime < intervalTicks) return;
 
             food = Math.max(0, food - cost);
@@ -1101,15 +1164,36 @@ public final class SettlementData extends SavedData {
             if (getFreeHousing() <= 0) return "Blocked: no free housing.";
             if (stability < minimumStability) return "Blocked: Stability " + stability + "/" + minimumStability + ".";
             if (food < requiredFood) return "Blocked: Food " + food + "/" + requiredFood + ".";
-            if (lastContractGameTime == Long.MIN_VALUE) return "Eligible now · costs " + cost + " Food.";
-            long intervalTicks = Math.max(20L, SettlementConfig.SETTLER_CONTRACT_INTERVAL_MINUTES.get() * 60L * 20L);
+            int attraction = settlerAttractionPercent();
+            if (lastContractGameTime == Long.MIN_VALUE) return "Eligible now · attraction " + attraction + "% · costs " + cost + " Food.";
+            long intervalTicks = settlerContractIntervalTicks();
             long remainingTicks = Math.max(0L, intervalTicks - Math.max(0L, gameTime - lastContractGameTime));
-            if (remainingTicks <= 0L) return "Eligible now · costs " + cost + " Food.";
+            if (remainingTicks <= 0L) return "Eligible now · attraction " + attraction + "% · costs " + cost + " Food.";
             long seconds = (remainingTicks + 19L) / 20L;
             long minutes = seconds / 60L;
             long remainder = seconds % 60L;
-            return "Next contract in " + (minutes > 0 ? minutes + "m " : "") + remainder + "s · costs " + cost + " Food.";
+            return "Next contract in " + (minutes > 0 ? minutes + "m " : "") + remainder + "s · attraction " + attraction + "% · costs " + cost + " Food.";
         }
+
+        private int settlerAttractionPercent() {
+            int minimumStability = SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get();
+            int requiredFood = Math.max(SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get(), SettlementConfig.SETTLER_CONTRACT_FOOD_COST.get());
+            double stabilityQuality = 0.15D + 0.85D * clamp01((stability - minimumStability) / (double)Math.max(1, 100 - minimumStability));
+            double housingQuality = 0.15D + 0.85D * clamp01(getFreeHousing() / (double)Math.max(1, housingCapacity));
+            int mouths = Math.max(1, getVillagerCount() + getProfessionalCount() + getMercenaryCompanyCount());
+            double foodQuality = 0.15D + 0.85D * clamp01(food / (double)Math.max(requiredFood, requiredFood + mouths * 4));
+            return (int)Math.round(100.0D * stabilityQuality * housingQuality * foodQuality);
+        }
+
+        private long settlerContractIntervalTicks() {
+            int fastest = Math.max(1, SettlementConfig.SETTLER_CONTRACT_FASTEST_MINUTES.get());
+            int slowest = Math.max(fastest, SettlementConfig.SETTLER_CONTRACT_SLOWEST_MINUTES.get());
+            double attraction = clamp01(settlerAttractionPercent() / 100.0D);
+            double minutes = slowest - (slowest - fastest) * attraction;
+            return Math.max(20L, Math.round(minutes * 60.0D * 20.0D));
+        }
+
+        private static double clamp01(double value) { return Math.max(0.0D, Math.min(1.0D, value)); }
 
         public boolean claimContract() {
             if (pendingContracts <= 0) return false;

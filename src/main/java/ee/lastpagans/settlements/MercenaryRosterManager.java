@@ -111,7 +111,7 @@ public final class MercenaryRosterManager {
         for (MercenaryRosterRegistry.UnitStack unit : definition.units()) {
             ItemStack template = templateRoster == null ? ItemStack.EMPTY : templateRoster.getTemplate(unit.type());
             for (int i = 0; i < unit.count(); i++, index++) {
-                AbstractRecruitEntity recruit = SettlementManager.spawnRecruitFromTemplate(level, player, settlement, unit.type(), index, team, false, null, template);
+                AbstractRecruitEntity recruit = SettlementManager.spawnRecruitFromTemplate(level, player, settlement, unit.type(), index, team, false, null, template, definition.id());
                 if (recruit == null) {
                     spawned.forEach(Entity::discard);
                     return "Mercenary spawning failed; no Wealth was charged.";
@@ -205,10 +205,10 @@ public final class MercenaryRosterManager {
                     boolean paid = contract.factionId().isBlank() ? settlement.spendWealth(definition.upkeep()) : systems.spendFactionWealth(contract.factionId(), definition.upkeep());
                     if (paid) {
                         missed = 0; data.changeTrust(definition.id(), contract.employerKey(), 2, definition.startingLoyalty());
-                        if (!contract.factionId().isBlank()) campaign.changeFactionReliability(contract.factionId(), 1);
+                        if (!contract.factionId().isBlank()) CampaignManager.changeReliability(server.overworld(), campaign, contract.factionId(), 1);
                     } else {
                         missed++; data.changeTrust(definition.id(), contract.employerKey(), -10, definition.startingLoyalty());
-                        if (!contract.factionId().isBlank()) campaign.changeFactionReliability(contract.factionId(), -2);
+                        if (!contract.factionId().isBlank()) CampaignManager.changeReliability(server.overworld(), campaign, contract.factionId(), -2);
                     }
                     next += definition.paymentIntervalDays();
                     if (missed >= 3) break;

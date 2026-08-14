@@ -20,6 +20,7 @@ public final class CampaignDefinitions {
             "Finnic Paganism",
             "Norse Paganism",
             "Slavic Paganism",
+            "Roman Paganism",
             "Islam",
             "Judaism",
             "Other"
@@ -52,8 +53,9 @@ public final class CampaignDefinitions {
                         new TraitEffect("Recruit morale", "+8", 8, EffectKind.MORALE),
                         new TraitEffect("Diplomatic relations", "-4", -4, EffectKind.RELATIONS)
                 )));
-        register(new TraitDefinition("reserved", "Reserved", "minecraft:book", TraitTone.NEUTRAL,
-                "Quiet and difficult to read; neither a clear boon nor a serious flaw.", List.of()));
+        register(new TraitDefinition("reserved", "Reserved", "minecraft:book", TraitTone.MIXED,
+                "A guarded ruler whose reputation changes more slowly, for better and for worse.",
+                List.of(new TraitEffect("Reliability change magnitude", "-35%", -35, EffectKind.RELIABILITY))));
         register(new TraitDefinition("extravagant", "Extravagant", "minecraft:gold_ingot", TraitTone.NEGATIVE,
                 "Spends freely on display, gifts and household comforts.",
                 List.of(new TraitEffect("Settlement wealth", "-1 per day", -1, EffectKind.WEALTH))));
@@ -70,7 +72,8 @@ public final class CampaignDefinitions {
                 "Naturally persuasive and more likely to attract desirable political marriage candidates.",
                 List.of(new TraitEffect("Spouse candidate quality", "+1 tier", 1, EffectKind.SPOUSE_QUALITY))));
         register(new TraitDefinition("healthy", "Healthy", "minecraft:apple", TraitTone.POSITIVE,
-                "Robust and energetic; useful for future health and event systems.", List.of()));
+                "Robust and energetic; reduces the chance of plague taking hold in the ruler's settlements.",
+                List.of(new TraitEffect("Plague chance", "-50%", -50, EffectKind.HEALTH))));
         register(new TraitDefinition("rousing_orator", "Rousing Orator", "minecraft:goat_horn", TraitTone.POSITIVE,
                 "Can mobilise the population faster through forceful speeches.",
                 List.of(new TraitEffect("Levy muster time", "-20%", -20, EffectKind.LEVY_MUSTER))));
@@ -226,7 +229,7 @@ public final class CampaignDefinitions {
     }
 
     public enum TraitTone { POSITIVE, NEGATIVE, MIXED, NEUTRAL }
-    public enum EffectKind { STABILITY, WEALTH, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER, RESEARCH_SPEED }
+    public enum EffectKind { STABILITY, WEALTH, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER, RESEARCH_SPEED, HEALTH }
 
     public record TraitEffect(String label, String displayValue, int amount, EffectKind kind) {}
 

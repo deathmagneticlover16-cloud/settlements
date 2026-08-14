@@ -737,12 +737,12 @@ public final class CampaignSystemsManager {
             int remaining = value.remainingDays() - 1;
             CampaignData campaign = CampaignData.get(server.overworld());
             if (paid < value.wealthPerDay()) {
-                campaign.changeFactionReliability(value.payerFaction(), -2);
+                CampaignManager.changeReliability(server.overworld(), campaign, value.payerFaction(), -2);
                 CampaignToastSender.faction(server, value.receiverFaction(), "REPARATIONS MISSED", CampaignManager.factionName(value.payerFaction()) + " could not pay the full daily reparations.");
             } else if (remaining <= 0) {
                 // Completing the imposed payment schedule earns back a modest amount of
                 // reputation. Earlier missed instalments have already applied their own penalties.
-                campaign.changeFactionReliability(value.payerFaction(), 6);
+                CampaignManager.changeReliability(server.overworld(), campaign, value.payerFaction(), 6);
                 CampaignToastSender.faction(server, value.payerFaction(), "REPARATIONS COMPLETE", "Your faction has completed its war-reparation obligations.");
                 CampaignToastSender.faction(server, value.receiverFaction(), "REPARATIONS COMPLETE", CampaignManager.factionName(value.payerFaction()) + " completed its war-reparation obligations.");
             }
@@ -781,8 +781,8 @@ public final class CampaignSystemsManager {
             if (until > 0 && until <= day && campaign.relation(a, b).state() == CampaignData.TreatyState.NON_AGGRESSION) {
                 campaign.relation(a, b).setState(CampaignData.TreatyState.NEUTRAL, day);
                 // Both factions saw the compulsory peace period through without breaking it.
-                campaign.changeFactionReliability(a, 5);
-                campaign.changeFactionReliability(b, 5);
+                CampaignManager.changeReliability(server.overworld(), campaign, a, 5);
+                CampaignManager.changeReliability(server.overworld(), campaign, b, 5);
                 extra.setForcedNap(a, b, 0);
                 CampaignManager.syncRelation(server.overworld(), a, b, CampaignData.TreatyState.NEUTRAL);
                 CampaignToastSender.relationChanged(server, a, b, "Neutral — non-aggression obligation fulfilled");

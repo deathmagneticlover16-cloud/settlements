@@ -27,9 +27,10 @@ public final class ResearchManager {
     public static void handleAction(ServerPlayer player, String action, String stageId) {
         Polity polity = polityFor(player);
         if (polity == null) { open(player, "Own a settlement or join a political faction before researching technologies."); return; }
-        if (!canManage(player, polity)) { open(player, "Only the settlement ruler or senior faction leadership may direct research."); return; }
         ResearchData data = ResearchData.get(player.serverLevel());
         String command = action == null ? "" : action.toUpperCase(java.util.Locale.ROOT);
+        if ("REFRESH".equals(command)) { open(player, ""); return; }
+        if (!canManage(player, polity)) { open(player, "Only the settlement ruler or senior faction leadership may direct research."); return; }
         if ("CANCEL".equals(command)) {
             open(player, data.cancel(polity.key()) ? "Research project cancelled. Progress was lost." : "There is no active research project.");
             return;
@@ -42,6 +43,10 @@ public final class ResearchManager {
         if (data.isCompleted(polity.key(), technology.id())) { open(player, "That technology has already been researched."); return; }
         if (!HistoryStagesCompat.dependenciesMet(technology, data.completed(polity.key()))) {
             open(player, "Research prerequisites are not yet satisfied."); return;
+        }
+        int tier = researchTier(player.getServer(), polity);
+        if (!tierAllows(technology, tier)) {
+            open(player, "That technology requires research tier " + technology.minimumTier() + ("EXACT".equals(technology.tierMode()) ? " exactly." : " or higher.")); return;
         }
         if (!data.start(polity.key(), technology)) { open(player, "Unable to start that research project."); return; }
         open(player, "Research begun: " + technology.name() + ".");
@@ -105,6 +110,33 @@ public final class ResearchManager {
         for (UUID ruler : independentRulers) {
             for (String stage : data.completed("independent:" + ruler)) HistoryStagesCompat.unlock(player, stage);
         }
+    }
+
+    public static int researchTier(MinecraftServer server, Polity polity) {
+        if (server == null || polity == null) return 1;
+        SettlementData data = SettlementData.get(server.overworld());
+        List<SettlementData.SettlementRecord> holdings;
+        if ("independent".equals(polity.kind())) {
+            UUID ruler;
+            try { ruler = UUID.fromString(polity.id()); } catch (IllegalArgumentException exception) { return 1; }
+            holdings = data.getOwnedSettlements(ruler).stream().filter(value -> value.getFactionTeam().isBlank()).toList();
+        } else holdings = data.settlementsForFaction(polity.id());
+        int tier = 1;
+        for (SettlementData.SettlementRecord holding : holdings) {
+            tier = Math.max(tier, switch (holding.getRank()) {
+                case VILLAGE -> 1;
+                case TOWN -> 2;
+                case CITY_STATE -> 3;
+                case CAPITAL -> 4;
+            });
+        }
+        return tier;
+    }
+
+    public static boolean tierAllows(HistoryStagesCompat.Technology technology, int polityTier) {
+        if (technology == null) return false;
+        int required = Math.max(1, technology.minimumTier());
+        return "EXACT".equalsIgnoreCase(technology.tierMode()) ? polityTier == required : polityTier >= required;
     }
 
     public static int speedPercent(MinecraftServer server, Polity polity) {

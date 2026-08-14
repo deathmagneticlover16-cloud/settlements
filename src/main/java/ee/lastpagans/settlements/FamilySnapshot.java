@@ -49,7 +49,7 @@ public record FamilySnapshot(
         long day = player.serverLevel().getDayTime() / 24000L;
         boolean canDivorce = marriage != null && day - marriage.marriedDay() >= 7L
                 && campaign.getAdditionalNpcMarriages(player.getUUID()).stream().allMatch(value -> day - value.marriedDay() >= 7L);
-        int maxSpouses = character != null && character.getFaith().equalsIgnoreCase("Islam") ? 4 : 1;
+        int maxSpouses = character == null ? SettlementConfig.DEFAULT_MAX_SPOUSES.get() : SettlementConfig.maxSpousesForFaith(character.getFaith());
         int spouseCount = campaign.spouseCount(player.getUUID());
         List<AdditionalSpouse> additionalSpouses = new ArrayList<>();
         int secondaryIndex = 1;
@@ -108,7 +108,8 @@ public record FamilySnapshot(
                 .sorted(java.util.Comparator.comparing(PlayerCandidate::name, String.CASE_INSENSITIVE_ORDER))
                 .toList();
 
-        List<CampaignData.NpcSpouse> generatedCandidates = campaign.candidatesFor(player.getUUID(), day, history.rejectedIds(), history.seenIds(), spouseQuality);
+        String preferredFaith = character != null && character.isCreated() ? character.getFaith() : "";
+        List<CampaignData.NpcSpouse> generatedCandidates = campaign.candidatesFor(player.getUUID(), day, history.rejectedIds(), history.seenIds(), spouseQuality, preferredFaith);
         generatedCandidates.forEach(value -> extra.markCandidateSeen(player.getUUID(), value.name()));
         List<Candidate> candidates = generatedCandidates.stream()
                 .filter(value -> history.rejectedIds().stream().noneMatch(rejected -> rejected.equalsIgnoreCase(value.id()) || rejected.equalsIgnoreCase(value.name())))

@@ -542,13 +542,17 @@ public final class CampaignData extends SavedData {
     }
 
     public List<NpcSpouse> candidatesFor(UUID playerId, long day) {
-        return candidatesFor(playerId, day, List.of(), List.of(), 0);
+        return candidatesFor(playerId, day, List.of(), List.of(), 0, "");
     }
 
     public List<NpcSpouse> candidatesFor(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
+        return candidatesFor(playerId, day, rejectedNames, seenNames, qualityBonus, "");
+    }
+
+    public List<NpcSpouse> candidatesFor(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
         List<NpcSpouse> values = spouseCandidates.get(playerId);
         if (values == null || values.isEmpty()) {
-            values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus);
+            values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus, preferredFaith);
             spouseCandidates.put(playerId, values);
             spouseCandidateGeneratedDay.put(playerId, day);
             setDirty();
@@ -561,12 +565,16 @@ public final class CampaignData extends SavedData {
     }
 
     public List<NpcSpouse> refreshCandidates(UUID playerId, long day) {
-        return refreshCandidates(playerId, day, List.of(), List.of(), 0);
+        return refreshCandidates(playerId, day, List.of(), List.of(), 0, "");
     }
 
     public List<NpcSpouse> refreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
-        if (!canRefreshCandidates(playerId, day)) return candidatesFor(playerId, day, rejectedNames, seenNames, qualityBonus);
-        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus);
+        return refreshCandidates(playerId, day, rejectedNames, seenNames, qualityBonus, "");
+    }
+
+    public List<NpcSpouse> refreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
+        if (!canRefreshCandidates(playerId, day)) return candidatesFor(playerId, day, rejectedNames, seenNames, qualityBonus, preferredFaith);
+        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus, preferredFaith);
         spouseCandidates.put(playerId, values);
         spouseCandidateGeneratedDay.put(playerId, day);
         setDirty();
@@ -574,11 +582,15 @@ public final class CampaignData extends SavedData {
     }
 
     public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day) {
-        return forceRefreshCandidates(playerId, day, List.of(), List.of(), 0);
+        return forceRefreshCandidates(playerId, day, List.of(), List.of(), 0, "");
     }
 
     public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
-        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus);
+        return forceRefreshCandidates(playerId, day, rejectedNames, seenNames, qualityBonus, "");
+    }
+
+    public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
+        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus, preferredFaith);
         spouseCandidates.put(playerId, values);
         spouseCandidateGeneratedDay.put(playerId, day);
         setDirty();
@@ -662,28 +674,31 @@ public final class CampaignData extends SavedData {
     }
 
     private static List<NpcSpouse> generateCandidates(UUID playerId, long day, int count,
-                                                       List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
-        String[] cultures = {"Baltic", "Finnic", "Norse", "Germanic", "Slavic"};
+                                                       List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
+        String[] cultures = {"Baltic", "Finnic", "Norse", "Germanic", "Slavic", "Roman"};
         String[][] firstNames = {
                 {"Aino", "Linda", "Maia", "Leelo", "Ilmar", "Jaan", "Lembit", "Marek"},
                 {"Kyllikki", "Aila", "Tuuli", "Vaino", "Tapio", "Mikko", "Kauko", "Sampo"},
                 {"Astrid", "Sigrid", "Freydis", "Ingrid", "Ragnar", "Leif", "Eirik", "Harald"},
                 {"Adelheid", "Helena", "Gertrud", "Mathilde", "Konrad", "Otto", "Heinrich", "Bruno"},
-                {"Miroslava", "Milena", "Zora", "Danica", "Bogdan", "Milos", "Radomir", "Vladan"}
+                {"Miroslava", "Milena", "Zora", "Danica", "Bogdan", "Milos", "Radomir", "Vladan"},
+                {"Julia", "Aurelia", "Claudia", "Marcella", "Marcus", "Lucius", "Gaius", "Titus"}
         };
         String[][] lastNames = {
                 {"Tamm", "Varik", "Kask", "Saar", "Lepp", "Raud", "Vaher", "Mets"},
                 {"Korhonen", "Virtanen", "Maki", "Laine", "Niemi", "Kivi", "Aho", "Jarvi"},
                 {"Eiriksson", "Haraldsdottir", "Ulfsson", "Ragnarsdottir", "Bjornsson", "Sigurdsdottir"},
                 {"Falk", "Stein", "Wulf", "Hartmann", "Lind", "Bauer", "Keller", "Brandt"},
-                {"Dragovic", "Mirovic", "Radic", "Kovac", "Veselin", "Dabrowski", "Novak", "Vukic"}
+                {"Dragovic", "Mirovic", "Radic", "Kovac", "Veselin", "Dabrowski", "Novak", "Vukic"},
+                {"Valerius", "Cassius", "Flavius", "Aemilius", "Aurelius", "Claudius", "Cornelius", "Julius"}
         };
         String[][] religions = {
                 {"Baltic Paganism", "Finnic Paganism", "Catholic Christianity"},
                 {"Finnic Paganism", "Orthodox Christianity", "Catholic Christianity"},
                 {"Norse Paganism", "Catholic Christianity"},
                 {"Catholic Christianity", "Orthodox Christianity"},
-                {"Slavic Paganism", "Orthodox Christianity", "Catholic Christianity"}
+                {"Slavic Paganism", "Orthodox Christianity", "Catholic Christianity"},
+                {"Roman Paganism", "Catholic Christianity", "Orthodox Christianity"}
         };
         List<String> traitPool = CampaignDefinitions.playableTraits().stream().map(CampaignDefinitions.TraitDefinition::id).toList();
         long seed = day * 341873128712L;
@@ -702,10 +717,12 @@ public final class CampaignData extends SavedData {
             // Rejected people should stay gone. Previously-seen names have a 75% reroll chance, so they
             // remain possible without dominating every weekly candidate refresh.
             for (int attempt = 0; attempt < 64; attempt++) {
-                culture = random.nextInt(cultures.length);
+                boolean romanPreferred = preferredFaith != null && preferredFaith.equalsIgnoreCase("Roman Paganism");
+                culture = romanPreferred && random.nextDouble() < 0.70D ? 5 : random.nextInt(cultures.length);
                 int firstIndex = "Female".equals(gender) ? random.nextInt(4) : 4 + random.nextInt(Math.max(1, firstNames[culture].length - 4));
                 first = firstNames[culture][firstIndex];
                 last = lastNames[culture][random.nextInt(lastNames[culture].length)];
+                if (culture == 5 && "Female".equals(gender) && last.endsWith("us")) last = last.substring(0, last.length() - 2) + "a";
                 fullName = first + " " + last;
                 if (containsIgnoreCase(rejectedNames, fullName) || containsIgnoreCase(generatedNames, fullName)) continue;
                 if (containsIgnoreCase(seenNames, fullName) && random.nextDouble() < 0.75D) continue;

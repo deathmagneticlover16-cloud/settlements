@@ -32,6 +32,8 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue PRAYER_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue CURRENCY_DONATION_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue CURRENCY_ITEM_WEALTH_VALUE;
+    public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_TARGET_DAYS;
+    public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP;
     public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_WEALTH;
     public static final ForgeConfigSpec.IntValue TAX_MIN_COLLECTION_EFFICIENCY_PERCENT;
     public static final ForgeConfigSpec.IntValue RESIDENT_BOUNDARY_CHECK_TICKS;
@@ -39,7 +41,8 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_COUNT;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MIN_DELAY_SECONDS;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MAX_DELAY_SECONDS;
-    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_INTERVAL_MINUTES;
+    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FASTEST_MINUTES;
+    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_SLOWEST_MINUTES;
     public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_MIN_STABILITY;
     public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_RESERVE;
     public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_COST;
@@ -47,6 +50,15 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue RESEARCH_FALLBACK_HOURS;
     public static final ForgeConfigSpec.IntValue SCHOLARLY_RESEARCH_BONUS_PERCENT;
     public static final ForgeConfigSpec.IntValue RESEARCH_MAX_PROSPERITY_BONUS_PERCENT;
+    public static final ForgeConfigSpec.IntValue RESERVED_RELIABILITY_MAGNITUDE_PERCENT;
+    public static final ForgeConfigSpec.IntValue PLAGUE_DAILY_CHANCE_PER_10000;
+    public static final ForgeConfigSpec.IntValue HEALTHY_PLAGUE_CHANCE_PERCENT;
+    public static final ForgeConfigSpec.IntValue PLAGUE_DURATION_HOURS;
+    public static final ForgeConfigSpec.IntValue BARD_MORALE_BONUS;
+    public static final ForgeConfigSpec.IntValue BARD_MAX_MORALE_STACKS;
+    public static final ForgeConfigSpec.IntValue BARD_TOWN_SQUARE_RADIUS;
+    public static final ForgeConfigSpec.IntValue BARD_STABILITY_BONUS;
+    public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_ENABLED;
     public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_REQUIRE_TOWN;
     public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_POPULATION;
     public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_STABILITY;
@@ -123,6 +135,10 @@ public final class SettlementConfig {
         builder.push("economy");
         CURRENCY_ITEM_WEALTH_VALUE = builder.comment("Settlement wealth represented by one item in #settlements:currency when depositing or withdrawing physical currency.")
                 .defineInRange("currencyItemWealthValue", 10, 1, 100000);
+        UPKEEP_CHEST_TARGET_DAYS = builder.comment("Automatic city-upkeep chest tries to maintain this many days of Food for civilians and tracked soldiers.")
+                .defineInRange("upkeepChestTargetDays", 3, 1, 30);
+        UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP = builder.comment("Maximum edible item count consumed from a city-upkeep chest per 30-second maintenance sweep.")
+                .defineInRange("upkeepChestMaxItemsPerSweep", 64, 1, 4096);
         builder.pop();
 
         builder.push("taxation");
@@ -143,8 +159,10 @@ public final class SettlementConfig {
                 .defineInRange("firstSettlerMinDelaySeconds", 10, 0, 300);
         FIRST_SETTLER_MAX_DELAY_SECONDS = builder.comment("Maximum real-time delay after founding before the first settlers can arrive.")
                 .defineInRange("firstSettlerMaxDelaySeconds", 60, 0, 600);
-        SETTLER_CONTRACT_INTERVAL_MINUTES = builder.comment("Active server minutes between new Settler Contracts once a settlement remains eligible. This is deliberately real-time/server-tick based rather than Minecraft-day based.")
-                .defineInRange("settlerContractIntervalMinutes", 5, 1, 1440);
+        SETTLER_CONTRACT_FASTEST_MINUTES = builder.comment("Fastest possible Settler Contract interval when Stability, free Housing and Food are all excellent.")
+                .defineInRange("settlerContractFastestMinutes", 2, 1, 1440);
+        SETTLER_CONTRACT_SLOWEST_MINUTES = builder.comment("Slowest eligible Settler Contract interval when the settlement only barely meets the minimum requirements.")
+                .defineInRange("settlerContractSlowestMinutes", 12, 1, 1440);
         SETTLER_CONTRACT_MIN_STABILITY = builder.comment("Minimum settlement Stability required to attract a new Settler Contract.")
                 .defineInRange("settlerContractMinimumStability", 60, 0, 100);
         SETTLER_CONTRACT_FOOD_RESERVE = builder.comment("Minimum Food stockpile required before a new Settler Contract can be generated.")
@@ -153,6 +171,31 @@ public final class SettlementConfig {
                 .defineInRange("settlerContractFoodCost", 10, 0, 1000000);
         SETTLER_CONTRACT_MAX_PENDING = builder.comment("Maximum unclaimed Settler Contracts that one settlement can accumulate.")
                 .defineInRange("settlerContractMaxPending", 3, 1, 64);
+        builder.pop();
+
+        builder.push("character_traits");
+        RESERVED_RELIABILITY_MAGNITUDE_PERCENT = builder.comment("Percentage of normal Reliability changes applied while the faction ruler has Reserved. Applies to both gains and losses.")
+                .defineInRange("reservedReliabilityMagnitudePercent", 65, 1, 100);
+        HEALTHY_PLAGUE_CHANCE_PERCENT = builder.comment("Percentage of normal plague chance retained when the settlement ruler has Healthy. 50 means half the normal chance.")
+                .defineInRange("healthyPlagueChancePercent", 50, 0, 100);
+        builder.pop();
+
+        builder.push("bards");
+        BARD_MORALE_BONUS = builder.comment("Recruit morale bonus supplied per loaded designated Bard in the settlement.")
+                .defineInRange("moraleBonusPerBard", 4, 0, 50);
+        BARD_MAX_MORALE_STACKS = builder.comment("Maximum number of Bards whose morale bonus can stack in one settlement.")
+                .defineInRange("maximumMoraleStacks", 3, 1, 16);
+        BARD_TOWN_SQUARE_RADIUS = builder.comment("Radius around the Town Square within which an instrument-holding Bard counts as performing.")
+                .defineInRange("townSquarePerformanceRadius", 12, 2, 64);
+        BARD_STABILITY_BONUS = builder.comment("Daily Stability gained while a designated Bard is performing at the Town Square.")
+                .defineInRange("townSquareStabilityBonus", 1, 0, 10);
+        builder.pop();
+
+        builder.push("events");
+        PLAGUE_DAILY_CHANCE_PER_10000 = builder.comment("Base chance per settlement per Minecraft day for a plague event, in ten-thousandths. 35 = 0.35% per day.")
+                .defineInRange("plagueDailyChancePer10000", 35, 0, 10000);
+        PLAGUE_DURATION_HOURS = builder.comment("Active-server hours a naturally occurring Plague modifier lasts.")
+                .defineInRange("plagueDurationHours", 12, 1, 24 * 30);
         builder.pop();
 
         builder.push("research");
@@ -165,6 +208,8 @@ public final class SettlementConfig {
         builder.pop();
 
         builder.push("faction_founding");
+        FACTION_FOUNDING_ENABLED = builder.comment("Allow independent rulers to found full political factions through Settlements. Disable for servers that want factions to be admin/story controlled only.")
+                .define("enabled", true);
         FACTION_FOUNDING_REQUIRE_TOWN = builder.comment("Require an established Town/City-State before an independent ruler may form a full political faction.")
                 .define("requireTown", true);
         FACTION_FOUNDING_MIN_POPULATION = builder.comment("Minimum settlement population required to found a political faction.")

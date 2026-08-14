@@ -116,6 +116,8 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                     .bounds(left + 180, top + 242, 154, 20).build());
         }
         if (snapshot.canManage()) {
+            if (snapshot.upkeepChestSet()) addRenderableWidget(Button.builder(Component.literal("Clear Upkeep Chest"), button -> send(SettlementManager.SettlementAction.CLEAR_UPKEEP_CHEST))
+                    .bounds(left + 356, top + 266, 154, 20).build());
             addRenderableWidget(Button.builder(Component.literal("Withdraw 1 Currency"), button -> send(SettlementManager.SettlementAction.WITHDRAW_CURRENCY_ONE))
                     .bounds(left + 20, top + 266, 154, 20).build());
             addRenderableWidget(Button.builder(Component.literal("Withdraw 10 Currency"), button -> send(SettlementManager.SettlementAction.WITHDRAW_CURRENCY_TEN))
@@ -151,24 +153,26 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void locationManagementButtons() {
         addRenderableWidget(Button.builder(Component.literal("Set Town Square Here"), b -> send(SettlementManager.SettlementAction.SET_TOWN_SQUARE))
                 .bounds(left + 30, top + 146, 150, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Set Upkeep Chest"), b -> send(SettlementManager.SettlementAction.SET_UPKEEP_CHEST))
+                .bounds(left + 195, top + 146, 150, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Set Barracks Here"), b -> send(SettlementManager.SettlementAction.SET_BARRACKS))
                 .bounds(left + 360, top + 146, 150, 18).build());
 
         addRenderableWidget(Button.builder(Component.literal("Housing Pos 1"), b -> send(SettlementManager.SettlementAction.HOUSING_POS1))
-                .bounds(left + 30, top + 190, 104, 18).build());
+                .bounds(left + 30, top + 200, 104, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Housing Pos 2"), b -> send(SettlementManager.SettlementAction.HOUSING_POS2))
-                .bounds(left + 140, top + 190, 104, 18).build());
+                .bounds(left + 140, top + 200, 104, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Recalculate"), b -> send(SettlementManager.SettlementAction.RECALCULATE_HOUSING))
-                .bounds(left + 250, top + 190, 92, 18).build());
+                .bounds(left + 250, top + 200, 92, 18).build());
 
         addRenderableWidget(Button.builder(Component.literal("Muster Pos 1"), b -> send(SettlementManager.SettlementAction.MUSTER_POS1))
-                .bounds(left + 30, top + 234, 104, 18).build());
+                .bounds(left + 30, top + 244, 104, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Muster Pos 2"), b -> send(SettlementManager.SettlementAction.MUSTER_POS2))
-                .bounds(left + 140, top + 234, 104, 18).build());
+                .bounds(left + 140, top + 244, 104, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Prayer Pos 1"), b -> send(SettlementManager.SettlementAction.PRAYER_POS1))
-                .bounds(left + 300, top + 234, 104, 18).build());
+                .bounds(left + 300, top + 244, 104, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Prayer Pos 2"), b -> send(SettlementManager.SettlementAction.PRAYER_POS2))
-                .bounds(left + 410, top + 234, 104, 18).build());
+                .bounds(left + 410, top + 244, 104, 18).build());
     }
 
     private void identityManagementButtons() {
@@ -371,6 +375,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         stat(graphics, "Settlement wealth", snapshot.wealth(), 22, 132);
         stat(graphics, "Prosperity", snapshot.prosperity() + "/100", 22, 154);
         stat(graphics, "Mercenary wage cycle", snapshot.mercenaryWages(), 22, 176);
+        graphics.drawString(font, "City upkeep: " + (snapshot.upkeepChestSet() ? "automatic chest linked" : "manual food deposits"), left + 356, top + 246, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
 
         graphics.drawString(font, "TAXATION", left + 22, top + 194, 0xFFE7D8B0, false);
         String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " wealth/day · Last +" + snapshot.lastTaxIncome()
@@ -440,16 +445,17 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void renderLocationManagement(GuiGraphics graphics) {
         graphics.drawString(font, "SETTLEMENT LOCATIONS", left + 30, top + 128, 0xFFE7D8B0, false);
         graphics.drawString(font, "Town Square: " + (snapshot.townSquareSet() ? "set" : "missing"), left + 30, top + 168, snapshot.townSquareSet() ? 0xFFA9D18E : 0xFFFFA080, false);
-        graphics.drawString(font, "Barracks: " + (snapshot.barracksSet() ? snapshot.barracksRadius() + " block radius · capacity " + snapshot.barracksCapacity() : "missing"), left + 360, top + 168, snapshot.barracksSet() ? 0xFFA9D18E : 0xFFFFA080, false);
+        graphics.drawString(font, "Upkeep: " + (snapshot.upkeepChestSet() ? "chest linked" : "missing"), left + 195, top + 168, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFFFA080, false);
+        graphics.drawString(font, "Barracks: " + (snapshot.barracksSet() ? snapshot.barracksRadius() + "r · cap " + snapshot.barracksCapacity() : "missing"), left + 360, top + 168, snapshot.barracksSet() ? 0xFFA9D18E : 0xFFFFA080, false);
 
-        graphics.drawString(font, "HOUSING", left + 30, top + 182, 0xFFE7D8B0, false);
-        graphics.drawString(font, "Registered capacity: " + snapshot.housingCapacity(), left + 360, top + 194, 0xFFAAAAAA, false);
+        graphics.drawString(font, "HOUSING", left + 30, top + 184, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Registered capacity: " + snapshot.housingCapacity(), left + 360, top + 184, 0xFFAAAAAA, false);
 
-        graphics.drawString(font, "MUSTER GROUND", left + 30, top + 226, 0xFFE7D8B0, false);
-        graphics.drawString(font, snapshot.musterGroundSet() ? "Military spawn region is set." : "Choose two corners for the military spawn region.", left + 30, top + 256, snapshot.musterGroundSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
+        graphics.drawString(font, "MUSTER GROUND", left + 30, top + 228, 0xFFE7D8B0, false);
+        graphics.drawString(font, snapshot.musterGroundSet() ? "Military spawn region is set." : "Choose two corners for the military spawn region.", left + 30, top + 266, snapshot.musterGroundSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
 
-        graphics.drawString(font, "PRAYER SITE", left + 300, top + 226, 0xFFE7D8B0, false);
-        graphics.drawString(font, "Choose two corners for the settlement prayer region.", left + 300, top + 256, 0xFFAAAAAA, false);
+        graphics.drawString(font, "PRAYER SITE", left + 300, top + 228, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Choose two corners for the settlement prayer region.", left + 300, top + 266, 0xFFAAAAAA, false);
     }
 
     private void renderIdentityManagement(GuiGraphics graphics) {
