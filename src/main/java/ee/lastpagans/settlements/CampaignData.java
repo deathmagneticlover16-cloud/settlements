@@ -214,6 +214,11 @@ public final class CampaignData extends SavedData {
         return settlementVisuals.computeIfAbsent(id, SettlementVisualRecord::new);
     }
 
+    public void clearSettlementVisual(String settlementId) {
+        String id = SettlementData.normalizeId(settlementId);
+        if (!id.isBlank() && settlementVisuals.remove(id) != null) setDirty();
+    }
+
     public RosterRecord createRoster(String rawId, String rawName) {
         String id = SettlementData.normalizeId(rawId);
         if (id.isBlank() || rosters.containsKey(id)) return null;

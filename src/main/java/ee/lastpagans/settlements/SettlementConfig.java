@@ -32,6 +32,7 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue PRAYER_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue CURRENCY_DONATION_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue CURRENCY_ITEM_WEALTH_VALUE;
+    public static final ForgeConfigSpec.IntValue CHARACTER_RENAME_CURRENCY_COST;
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_TARGET_DAYS;
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP;
     public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_WEALTH;
@@ -136,6 +137,8 @@ public final class SettlementConfig {
         builder.push("economy");
         CURRENCY_ITEM_WEALTH_VALUE = builder.comment("Settlement wealth represented by one item in #settlements:currency when depositing or withdrawing physical currency.")
                 .defineInRange("currencyItemWealthValue", 10, 1, 100000);
+        CHARACTER_RENAME_CURRENCY_COST = builder.comment("Number of #settlements:currency items consumed when a created character changes their personal name. Main House edits remain free.")
+                .defineInRange("characterRenameCurrencyCost", 10, 0, 100000);
         UPKEEP_CHEST_TARGET_DAYS = builder.comment("Automatic city-upkeep chest tries to maintain this many days of Food for civilians and tracked soldiers.")
                 .defineInRange("upkeepChestTargetDays", 3, 1, 30);
         UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP = builder.comment("Maximum edible item count consumed from a city-upkeep chest per 30-second maintenance sweep.")

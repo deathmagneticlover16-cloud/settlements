@@ -30,6 +30,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private Tab tab = Tab.OVERVIEW;
     private BannerRenderer factionBanner, settlementBanner;
     private boolean confirmClearClaims;
+    private boolean confirmDeleteSettlement;
     private ManagePage managePage = ManagePage.LOCATIONS;
     private int effectScroll;
     private EditBox renameBox, transferBox;
@@ -133,13 +134,13 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void managementButtons() {
         if (!snapshot.canManage()) return;
 
-        addRenderableWidget(Button.builder(Component.literal("Locations"), b -> { managePage = ManagePage.LOCATIONS; buildWidgets(); })
+        addRenderableWidget(Button.builder(Component.literal("Locations"), b -> { managePage = ManagePage.LOCATIONS; confirmDeleteSettlement = false; buildWidgets(); })
                 .bounds(left + 20, top + 102, 112, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Identity"), b -> { managePage = ManagePage.IDENTITY; buildWidgets(); })
                 .bounds(left + 138, top + 102, 112, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Claims"), b -> { managePage = ManagePage.CLAIMS; buildWidgets(); })
+        addRenderableWidget(Button.builder(Component.literal("Claims"), b -> { managePage = ManagePage.CLAIMS; confirmDeleteSettlement = false; buildWidgets(); })
                 .bounds(left + 256, top + 102, 112, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Members"), b -> { managePage = ManagePage.MEMBERS; buildWidgets(); })
+        addRenderableWidget(Button.builder(Component.literal("Members"), b -> { managePage = ManagePage.MEMBERS; confirmDeleteSettlement = false; buildWidgets(); })
                 .bounds(left + 374, top + 102, 112, 18).build());
 
         switch (managePage) {
@@ -195,6 +196,17 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             addRenderableWidget(transferBox);
             addRenderableWidget(Button.builder(Component.literal("Transfer Ownership"), b -> send(SettlementManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
                     .bounds(left + 260, top + 252, 128, 20).build());
+
+            addRenderableWidget(Button.builder(Component.literal(confirmDeleteSettlement ? "CONFIRM DELETE" : "Delete Settlement"), b -> {
+                        if (confirmDeleteSettlement) {
+                            send(SettlementManager.SettlementAction.DELETE_SETTLEMENT, "CONFIRM");
+                            confirmDeleteSettlement = false;
+                        } else {
+                            confirmDeleteSettlement = true;
+                            send(SettlementManager.SettlementAction.DELETE_SETTLEMENT, "ARM");
+                            buildWidgets();
+                        }
+                    }).bounds(left + 30, top + 278, 158, 18).build());
         }
     }
 
@@ -465,6 +477,10 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Rename settlement", left + 30, top + 198, 0xFFE7D8B0, false);
         if ("OWNER".equals(snapshot.role())) {
             graphics.drawString(font, "Transfer ownership to an online player", left + 30, top + 242, 0xFFE7D8B0, false);
+            graphics.drawWordWrap(font, Component.literal(confirmDeleteSettlement
+                            ? "PERMANENT: press CONFIRM DELETE to erase this settlement and its linked claims."
+                            : "Delete settlement permanently. All stored settlement data and linked claims are erased."),
+                    left + 198, top + 278, 310, confirmDeleteSettlement ? 0xFFFF7070 : 0xFFB08080);
         } else {
             graphics.drawString(font, "Only the settlement owner may transfer ownership.", left + 30, top + 242, 0xFF888888, false);
         }

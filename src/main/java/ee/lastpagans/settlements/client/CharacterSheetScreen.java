@@ -41,7 +41,7 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Donate to Faith"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new FamilyActionPacket("DONATE_FAITH", "", null)))
                 .bounds(left + 18, top + 376, 135, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Main House"), button ->
+        addRenderableWidget(Button.builder(Component.literal("Identity"), button ->
                 minecraft.setScreen(new CharacterIdentityEditScreen(snapshot, returnToMain)))
                 .bounds(left + 159, top + 376, 105, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Main Seat"), button ->

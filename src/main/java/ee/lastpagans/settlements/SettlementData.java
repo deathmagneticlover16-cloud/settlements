@@ -1333,6 +1333,13 @@ public final class SettlementData extends SavedData {
             // Starting traits are selected explicitly in the three-card character creation flow. Legacy saves retain their existing traits.
         }
 
+        public void rename(String first, String middle, String last) {
+            this.firstName = cleanText(first, "", 24);
+            this.middleName = cleanText(middle, "", 24);
+            this.lastName = cleanText(last, "", 24);
+            this.created = !this.firstName.isBlank() && !this.lastName.isBlank();
+        }
+
         public void setHouse(String house) { this.house = cleanText(house, "", 32); }
 
         public void setPrimarySeat(String value) { primarySeat = normalizeId(value); }

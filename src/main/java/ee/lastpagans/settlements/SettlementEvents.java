@@ -127,7 +127,10 @@ public final class SettlementEvents {
         String settlementId = entity.getPersistentData().getString(SettlementManager.TAG_SETTLEMENT);
         if (settlementId.isBlank()) return;
         SettlementData.SettlementRecord settlement = SettlementData.get(level).getSettlement(settlementId);
-        if (settlement == null) return;
+        if (settlement == null) {
+            SettlementManager.clearOrphanedSettlementTags(entity);
+            return;
+        }
 
         if (entity instanceof Villager villager && entity.getPersistentData().getBoolean(SettlementManager.TAG_RESIDENT)) {
             SettlementManager.reconcileResidentVillager(level, villager);

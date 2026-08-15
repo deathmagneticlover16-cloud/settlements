@@ -1,0 +1,42 @@
+SETTLEMENTS 2.5.3 — TEST CHECKLIST
+
+FIRST GATE
+[ ] BUILD-V2.5.3.bat completes.
+[ ] Server/client launch with identical 2.5.3 JARs.
+[ ] Protocol mismatch against an older client/server is rejected cleanly.
+
+CHARACTER RENAME
+[ ] Character Sheet button is labelled Identity.
+[ ] Identity screen shows current first/middle/last name and Main House.
+[ ] Editing only Main House costs no currency.
+[ ] Changing a name with fewer than the configured #settlements:currency items fails and consumes nothing.
+[ ] Changing a name with enough currency consumes exactly the configured item count, including across multiple tagged currency stacks/types.
+[ ] Blank first or last name is rejected.
+[ ] A display name already used by another created character is rejected without charge.
+[ ] Successful rename immediately updates Character Sheet, nametag/tab formatting and other Settlements profile views.
+[ ] A zero rename-cost config allows free renaming.
+
+SETTLEMENT DELETION
+[ ] Only the actual OWNER sees the Delete Settlement button.
+[ ] First press arms deletion and displays an explicit permanent-loss warning.
+[ ] Second press within 30 seconds deletes the settlement.
+[ ] Waiting beyond the server confirmation window requires arming deletion again.
+[ ] Co-owner/citizen cannot delete by forged packet.
+[ ] OP status without actual ownership cannot delete through the normal player action.
+[ ] Protected admin settlement/faction is rejected.
+[ ] Settlement participating in an active war is rejected.
+[ ] Deleted settlement disappears from settlement lists/selections.
+[ ] Deleted settlement wealth/Food/population/manpower/tax/modifier/housing/muster/prayer data does not return after restart.
+[ ] Main Seat pointing at the deleted settlement is cleared.
+[ ] Linked Recruits claims are actually removed from the world/claim manager.
+[ ] Named mercenary contracts based in the settlement terminate cleanly.
+[ ] Loaded resident/military entities no longer retain Settlements settlement-management tags.
+[ ] An unloaded tagged resident/recruit loaded after deletion has orphaned Settlements tags cleared safely.
+[ ] If it was the last settlement using an independent backing faction, that hidden faction retires.
+[ ] If another independent settlement still uses the same backing faction, the backing faction remains.
+[ ] After deletion the owner returns to Campaign Main instead of seeing a stale deleted-settlement screen.
+
+REGRESSION
+[ ] 2.5.2 taxation, settler attraction, Roman religion/spouses, Research/History Stages, Bards and Mercenary Rosters still behave normally.
+[ ] Settlement War/peace authority remains correct for OP players.
+[ ] #settlements:currency still works for treasury and faith donations.

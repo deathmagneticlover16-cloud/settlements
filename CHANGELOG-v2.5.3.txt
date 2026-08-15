@@ -1,0 +1,30 @@
+SETTLEMENTS 2.5.3 — CHANGELOG
+
+CHARACTER IDENTITY
+- Character Sheet now opens a unified Identity editor instead of a Main-House-only editor.
+- Created characters can change first, middle and last name after creation.
+- A name change consumes a configurable number of physical items from #settlements:currency (default: 10).
+- Main House edits remain free.
+- Renames reject blank first/last names and duplicate character display names.
+- Successful renames immediately refresh player display/tab names and synced Settlements profiles.
+- Character snapshot/network data now carries split name fields and the server-configured rename price.
+
+SETTLEMENT DELETION
+- Settlement owners can permanently delete a settlement from Manage > Identity.
+- Deletion uses a two-step confirmation and a short server-side confirmation window.
+- OP/admin status alone does NOT count as settlement ownership for this normal-player deletion action.
+- Protected admin settlements/factions cannot be deleted through the normal settlement GUI.
+- Active-war settlements cannot be deleted until the war ends.
+- Permanent deletion removes the settlement record and all settlement-owned campaign state, including treasury/wealth, Food, Stability/population registry, housing/muster/prayer regions, modifiers, taxation state, manpower/military tracking, aid/peace references, mercenary contracts and settlement banner state.
+- All linked Recruits claims are permanently removed as part of settlement deletion.
+- Loaded settlement-managed entity tags are cleared; unloaded orphaned residents/soldiers are cleaned when they next load.
+- Main Seat and selected-settlement references are cleared by the existing settlement-data deletion path.
+- Unused hidden independent backing factions are retired after their final settlement is deleted.
+- After deletion the owner is returned to the campaign main screen.
+
+NETWORK / VERSION
+- Mod version bumped to 2.5.3.
+- Network protocol bumped to 34 because CharacterSnapshot and UpdateCharacterIdentityPacket changed wire format.
+
+CARRIED FORWARD
+- All Settlements 2.5.2 research, History Stages, Bard, plague, Roman spouse/religion, dynamic settler attraction, taxation, mercenary rosters, independent backing factions and release-hardening work remains present.

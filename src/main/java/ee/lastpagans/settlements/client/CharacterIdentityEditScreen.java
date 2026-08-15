@@ -9,16 +9,19 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 public final class CharacterIdentityEditScreen extends ScaledCampaignScreen {
-    private static final int W = 420;
-    private static final int H = 176;
+    private static final int W = 440;
+    private static final int H = 270;
     private final CharacterSnapshot snapshot;
     private final boolean returnToMain;
     private int left;
     private int top;
+    private EditBox firstName;
+    private EditBox middleName;
+    private EditBox lastName;
     private EditBox house;
 
     public CharacterIdentityEditScreen(CharacterSnapshot snapshot, boolean returnToMain) {
-        super(Component.literal("Edit Main House"));
+        super(Component.literal("Edit Character Identity"));
         this.snapshot = snapshot;
         this.returnToMain = returnToMain;
     }
@@ -29,7 +32,11 @@ public final class CharacterIdentityEditScreen extends ScaledCampaignScreen {
         left = campaignLeft(W);
         top = campaignTop(H);
 
-        house = new EditBox(font, left + 150, top + 76, 242, 20, Component.literal("Main house"));
+        firstName = nameBox(top + 72, "First name", snapshot.firstName());
+        middleName = nameBox(top + 98, "Middle name", snapshot.middleName());
+        lastName = nameBox(top + 124, "Last name", snapshot.lastName());
+
+        house = new EditBox(font, left + 152, top + 178, 252, 20, Component.literal("Main house"));
         house.setMaxLength(32);
         house.setHint(Component.literal("Main house (optional)"));
         house.setValue(snapshot.house());
@@ -37,12 +44,21 @@ public final class CharacterIdentityEditScreen extends ScaledCampaignScreen {
 
         addRenderableWidget(Button.builder(Component.literal("Back"), button ->
                 minecraft.setScreen(new CharacterSheetScreen(snapshot, returnToMain)))
-                .bounds(left + 150, top + 136, 92, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Save"), button ->
+                .bounds(left + 152, top + 232, 100, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Save Identity"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new UpdateCharacterIdentityPacket(
-                        house.getValue(), returnToMain)))
-                .bounds(left + 250, top + 136, 142, 20).build());
-        setInitialFocus(house);
+                        firstName.getValue(), middleName.getValue(), lastName.getValue(), house.getValue(), returnToMain)))
+                .bounds(left + 260, top + 232, 144, 20).build());
+        setInitialFocus(firstName);
+    }
+
+    private EditBox nameBox(int y, String hint, String value) {
+        EditBox box = new EditBox(font, left + 152, y, 252, 20, Component.literal(hint));
+        box.setMaxLength(24);
+        box.setHint(Component.literal(hint));
+        box.setValue(value == null ? "" : value);
+        addRenderableWidget(box);
+        return box;
     }
 
     @Override
@@ -53,12 +69,22 @@ public final class CharacterIdentityEditScreen extends ScaledCampaignScreen {
         beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 43, 0xFF3B3023);
-        graphics.drawCenteredString(font, "EDIT MAIN HOUSE", left + W / 2, top + 14, 0xFFE7D8B0);
+        graphics.drawCenteredString(font, "CHARACTER IDENTITY", left + W / 2, top + 14, 0xFFE7D8B0);
+
         graphics.drawWordWrap(font, Component.literal(
-                "Main House is a roleplay identity field and can be changed later as your character's political situation develops."
+                "Your personal name can be changed, but doing so has a social and administrative cost. Main House changes remain free."
         ), left + 22, top + 49, W - 44, 0xFFB8B0A0);
-        graphics.drawString(font, "Main house", left + 26, top + 82, 0xFFDDDDDD, false);
-        graphics.drawString(font, "Leave it blank if your character has no established house.", left + 26, top + 108, 0xFF888888, false);
+
+        graphics.drawString(font, "First name", left + 28, top + 78, 0xFFDDDDDD, false);
+        graphics.drawString(font, "Middle name", left + 28, top + 104, 0xFFDDDDDD, false);
+        graphics.drawString(font, "Last name", left + 28, top + 130, 0xFFDDDDDD, false);
+        graphics.drawWordWrap(font, Component.literal(
+                        "Changing the name costs " + snapshot.renameCurrencyCost() + " item(s) from #settlements:currency."),
+                left + 28, top + 151, W - 56, 0xFFFFC873);
+
+        graphics.drawString(font, "Main house", left + 28, top + 184, 0xFFDDDDDD, false);
+        graphics.drawString(font, "House edits are free and may be left blank.", left + 28, top + 207, 0xFF888888, false);
+
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
