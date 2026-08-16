@@ -14,9 +14,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-/** Total-War-inspired technology tree backed by History Stages. */
+/** Total-War-inspired technology tree backed by History Stages individual stages. */
 public final class ResearchScreen extends ScaledCampaignScreen {
     private static final int W = 660, H = 400, COLUMNS = 4, ROWS = 7;
     private static final int TREE_X = 14, TREE_Y = 112, TREE_W = 430, TREE_H = 244;
@@ -82,7 +84,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         graphics.fill(left + 4, top + 4, left + W - 4, top + 56, 0xFF3B3023);
         graphics.drawCenteredString(font, "RESEARCH — " + snapshot.polityName(), left + W / 2, top + 13, 0xFFFFE2A3);
         graphics.drawCenteredString(font, snapshot.historyStagesInstalled()
-                        ? "History Stages · Research tier " + snapshot.researchTier() + " · " + snapshot.speedPercent() + "% speed"
+                        ? "History Stages · Settlement research tier " + roman(snapshot.researchTier()) + " · " + snapshot.speedPercent() + "% speed"
                         : "History Stages not installed — research unavailable",
                 left + W / 2, top + 33, snapshot.historyStagesInstalled() ? 0xFFA8E39D : 0xFFFFA27A);
 
@@ -114,22 +116,28 @@ public final class ResearchScreen extends ScaledCampaignScreen {
     }
 
     private void renderTree(GuiGraphics graphics) {
-        String[] headers = {"FOUNDATION", "DEVELOPMENT", "ADVANCED", "LATE"};
+        String[] headers = {"I", "II", "III", "IV+"};
         int colW = TREE_W / COLUMNS;
         for (int col = 0; col < COLUMNS; col++) {
             int x = left + TREE_X + col * colW;
             if (col > 0) graphics.fill(x, top + TREE_Y + 4, x + 1, top + TREE_Y + TREE_H - 4, 0xFF3A3A3A);
             graphics.drawCenteredString(font, headers[col], x + colW / 2, top + TREE_Y + 8, 0xFFC9B98E);
         }
-        for (Node node : visibleNodes()) {
+
+        List<Node> nodes = visibleNodes();
+        Map<String, Node> byId = new HashMap<>();
+        for (Node node : nodes) byId.put(snapshot.technologies().get(node.index()).id(), node);
+        renderDependencyEdges(graphics, byId);
+
+        for (Node node : nodes) {
             ResearchSnapshot.TechnologyEntry entry = snapshot.technologies().get(node.index());
             boolean chosen = node.index() == selected;
-            int frame = chosen ? 0xFFB89652 : entry.completed() ? 0xFF557755 : entry.available() ? 0xFF55504A : 0xFF3B3B3B;
-            int fill = chosen ? 0xFF51442F : entry.completed() ? 0xFF2E4230 : entry.available() ? 0xFF333333 : 0xFF282828;
+            int frame = chosen ? 0xFFB89652 : entry.completed() ? 0xFF557755 : entry.available() ? 0xFF756747 : 0xFF3B3B3B;
+            int fill = chosen ? 0xFF51442F : entry.completed() ? 0xFF2E4230 : entry.available() ? 0xFF35322B : 0xFF282828;
             graphics.fill(node.x(), node.y(), node.x() + node.w(), node.y() + node.h(), frame);
             graphics.fill(node.x() + 1, node.y() + 1, node.x() + node.w() - 1, node.y() + node.h() - 1, fill);
             graphics.renderItem(icon(entry.icon()), node.x() + 4, node.y() + 4);
-            int color = entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFFFFF : 0xFF888888;
+            int color = entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFE2A3 : 0xFF888888;
             graphics.drawString(font, trim(entry.name(), 12), node.x() + 24, node.y() + 5, color, false);
             String state = entry.completed() ? "DONE" : entry.available() ? "READY" : "LOCKED";
             graphics.drawString(font, state, node.x() + 24, node.y() + 15, color, false);
@@ -137,20 +145,46 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         if (maxScroll() > 0) graphics.drawString(font, "Mouse wheel to scroll technology rows", left + TREE_X + 8, top + TREE_Y + TREE_H - 13, 0xFF888888, false);
     }
 
+    private void renderDependencyEdges(GuiGraphics graphics, Map<String, Node> byId) {
+        for (Node target : nodes) {
+            ResearchSnapshot.TechnologyEntry targetEntry = snapshot.technologies().get(target.index());
+            for (String dependencyId : targetEntry.dependencyIds()) {
+                Node source = byId.get(dependencyId);
+                if (source == null) continue;
+                ResearchSnapshot.TechnologyEntry sourceEntry = snapshot.technologies().get(source.index());
+                int color = sourceEntry.completed() ? 0xFF678A67 : 0xFF5B5548;
+                drawDependencyEdge(graphics, source, target, color);
+            }
+        }
+    }
+
+    private void drawDependencyEdge(GuiGraphics graphics, Node source, Node target, int color) {
+        int sx = source.x() + source.w();
+        int sy = source.y() + source.h() / 2;
+        int tx = target.x();
+        int ty = target.y() + target.h() / 2;
+        if (tx <= sx) return;
+        int middle = sx + Math.max(4, (tx - sx) / 2);
+        graphics.fill(sx, sy - 1, middle + 1, sy + 1, color);
+        graphics.fill(middle, Math.min(sy, ty), middle + 2, Math.max(sy, ty) + 1, color);
+        graphics.fill(middle, ty - 1, tx, ty + 1, color);
+        graphics.fill(tx - 4, ty - 3, tx, ty + 4, color);
+    }
+
     private void renderDetails(GuiGraphics graphics) {
         int x = left + 464, y = top + TREE_Y + 10;
         graphics.drawString(font, "TECHNOLOGY", x, y, 0xFFE7D8B0, false);
         ResearchSnapshot.TechnologyEntry entry = selected >= 0 && selected < snapshot.technologies().size() ? snapshot.technologies().get(selected) : null;
         if (entry == null) {
-            graphics.drawWordWrap(font, Component.literal("Select a technology node to inspect its prerequisites, research tier and duration."), x, y + 22, 166, 0xFFAAAAAA);
+            graphics.drawWordWrap(font, Component.literal("Select a technology node. Arrows show the prerequisite path: research the node on the left before its descendants become available."), x, y + 22, 166, 0xFFAAAAAA);
             return;
         }
         graphics.renderItem(icon(entry.icon()), x, y + 22);
         graphics.drawString(font, trim(entry.name(), 21), x + 22, y + 25, entry.completed() ? 0xFFA9D18E : 0xFFFFE2A3, false);
         graphics.drawString(font, entry.completed() ? "Completed" : entry.available() ? "Available" : "Locked", x, y + 48,
-                entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFFFFF : 0xFFFF8A8A, false);
+                entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFE2A3 : 0xFFFF8A8A, false);
         graphics.drawString(font, "Base time: " + duration(entry.durationSeconds()), x, y + 64, 0xFFCCCCCC, false);
-        String tier = "Research tier: " + entry.requiredTier() + ("EXACT".equalsIgnoreCase(entry.tierMode()) ? " exactly" : "+");
+        String tier = "Settlement tier gate: " + roman(entry.requiredTier()) + ("EXACT".equalsIgnoreCase(entry.tierMode()) ? " exactly" : "+");
         boolean tierAllowed = "EXACT".equalsIgnoreCase(entry.tierMode())
                 ? snapshot.researchTier() == entry.requiredTier()
                 : snapshot.researchTier() >= entry.requiredTier();
@@ -215,6 +249,16 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         if (m > 0) return m + "m " + s + "s";
         return s + "s";
     }
+
+    private static String roman(int value) {
+        return switch (Math.max(1, Math.min(4, value))) {
+            case 1 -> "I";
+            case 2 -> "II";
+            case 3 -> "III";
+            default -> "IV";
+        };
+    }
+
     private static String trim(String value, int max) { return value == null ? "" : value.length() <= max ? value : value.substring(0, Math.max(0, max - 1)) + "…"; }
     private record Node(int index, int x, int y, int w, int h) {}
     @Override public boolean isPauseScreen() { return false; }

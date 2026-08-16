@@ -1,0 +1,83 @@
+SETTLEMENTS + HISTORY STAGES — RESEARCH TREE GUIDE
+Target integration: History Stages 5.4.0 / Minecraft 1.20.1
+
+WHAT SETTLEMENTS USES
+Settlements treats History Stages INDIVIDUAL stages as technologies.
+Do not create the campaign technology tree as Global stages if you want Settlements to manage it.
+
+The division of responsibility is:
+- History Stages defines the technology: display name, icon, research time, locked items/tags and prerequisite stage IDs.
+- Settlements displays those technologies as a polity technology tree.
+- Settlements enforces one active project per polity and advances its own campaign research timer while the server is running.
+- When the project completes, Settlements grants the corresponding History Stages individual stage to the polity's eligible players.
+- History Stages then enforces the actual per-player content locks/unlocks.
+
+SIMPLE ARMOUR TREE
+The easiest reliable setup is three individual stages:
+
+    Early Armour  ->  Improved Armour  ->  Advanced Armour
+    armor_tier_1      armor_tier_2         armor_tier_3
+
+1. Open the History Stages in-game editor as an OP.
+2. Create INDIVIDUAL stage `armor_tier_1`.
+   - Display name: Early Armour
+   - Choose an armour/item icon.
+   - Set the research time you want.
+   - Put the Tier 1 equipment/items or, preferably, your Tier 1 equipment tag in its locked Items/Tags section.
+3. Create INDIVIDUAL stage `armor_tier_2`.
+   - Display name: Improved Armour
+   - Lock the Tier 2 equipment/items/tag.
+   - In Dependencies, add an INDIVIDUAL STAGE prerequisite pointing to `armor_tier_1`.
+4. Create INDIVIDUAL stage `armor_tier_3`.
+   - Display name: Advanced Armour
+   - Lock the Tier 3 equipment/items/tag.
+   - Add an INDIVIDUAL STAGE prerequisite pointing to `armor_tier_2`.
+5. Reload/reopen as required by History Stages, then open Settlements -> Research.
+
+Settlements 2.5.4 reads those dependency IDs and lays them out as a visible tree with arrows. `armor_tier_2` cannot be started until `armor_tier_1` is in the polity's completed research set, and the same applies to Tier 3.
+
+IMPORTANT: EQUIPMENT TIER VS SETTLEMENT RESEARCH TIER
+History Stages has `min_pedestal_tier` / `pedestal_tier_mode` fields for its own Research Pedestal tiers.
+Settlements reuses those values as a SETTLEMENT DEVELOPMENT gate:
+- 1 = Village
+- 2 = Town
+- 3 = City-State
+- 4 = Capital
+
+This is separate from "Tier 1 armour / Tier 2 armour".
+
+If you ONLY want the technology chain to control armour progression, leave every armour technology at minimum pedestal tier 1 and use the individual-stage dependencies to make the chain.
+
+If you ALSO want Advanced Armour to require a developed settlement, for example:
+- Early Armour: min pedestal tier 1
+- Improved Armour: min pedestal tier 2
+- Advanced Armour: min pedestal tier 3
+
+Then a player needs BOTH the preceding technology AND a polity with a sufficiently developed settlement.
+
+WHY INDIVIDUAL STAGES
+Settlements grants research to players as History Stages individual stages. This allows "researched FOR YOU" content locking instead of automatically unlocking an era for the entire server.
+
+For equipment progression, prefer locking the actual armour item IDs or an armour item tag in the individual stage. That gives History Stages a concrete per-player lock to enforce.
+
+NATIVE HISTORY STAGES RESEARCH VS SETTLEMENTS RESEARCH
+History Stages normally researches through Research Scrolls and Research Pedestals.
+Settlements is an alternative campaign-facing research driver: its GUI/timer completes the technology and then grants the same individual stage.
+You do not need to make players run the History Stages pedestal as well unless you deliberately want both systems available.
+
+DEPENDENCY LIMIT FOR SETTLEMENTS 2.5.4
+For a clean strategy-game tree, use History Stages `individual_stage` dependencies between your technologies.
+History Stages also supports non-stage requirements such as XP, kills, statistics and scoreboard conditions, but Settlements' campaign tree is currently designed around stage-to-stage prerequisites and should not be used as the UI for those extra dependency types.
+
+TREE DESIGN EXAMPLE
+You can branch exactly like a Total War technology tree:
+
+                      -> Heavy Infantry
+                     /
+Basic Smithing -> Iron Working -> Improved Armour -> Advanced Armour
+                     \
+                      -> Improved Weapons
+
+Each arrow is simply an Individual Stage dependency. Multiple later stages can depend on the same earlier stage.
+
+For the least version-specific configuration work, use the History Stages in-game editor rather than hand-writing JSON.

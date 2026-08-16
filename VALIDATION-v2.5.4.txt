@@ -1,0 +1,16 @@
+SETTLEMENTS 2.5.4 — SOURCE VALIDATION NOTES
+
+This checkpoint is source-validated but must still be compiled and runtime-tested in a normal Forge development environment.
+
+Checks performed before packaging:
+- git diff --check
+- Git repository integrity (git fsck)
+- resource JSON parse validation
+- Java source syntax-oriented scan
+- Java public top-level type / filename consistency scan
+- research packet encode/decode ordering review
+- History Stages 5.4.0 reflection targets reviewed against the supplied JAR / documented API model
+- ZIP integrity test
+
+Known environment limitation:
+The assistant build environment cannot currently bootstrap Gradle 8.1.1 from services.gradle.org, so ForgeGradle stops before Java compilation. A successful local BUILD-V2.5.4.bat run is required before calling this release compiled/final.
