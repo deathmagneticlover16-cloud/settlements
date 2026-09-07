@@ -191,17 +191,18 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         cost += Math.min(20, ceilDiv(value(napDays), 7));
         if (convertFaith) cost += 25;
         DiplomacySnapshot.SettlementTarget whole = selectedEnemySettlement();
-        if (transferSettlement && whole != null) cost += settlementTermCost(whole.rank(), false);
+        if (transferSettlement && whole != null) cost += settlementTermCost(whole.rank(), whole.capital(), false);
         if (transferClaim) cost += selectedClaimIds.size() * 8;
         if (renounceClaim) cost += selectedClaimIds.size() * 6;
         DiplomacySnapshot.SettlementTarget released = selectedIndependenceSettlement();
-        if (recognizeIndependence && released != null) cost += settlementTermCost(released.rank(), true);
+        if (recognizeIndependence && released != null) cost += settlementTermCost(released.rank(), released.capital(), true);
         return Math.min(999, cost);
     }
-    private static int settlementTermCost(String rank, boolean independence) {
+    private static int settlementTermCost(String rank, boolean capital, boolean independence) {
         String value = rank == null ? "" : rank.toUpperCase(java.util.Locale.ROOT);
-        int base = value.contains("CAPITAL") ? 60 : value.contains("CITY") ? 55 : value.contains("TOWN") ? 40 : 25;
-        return independence ? Math.min(65, base + 5) : base;
+        int base = value.contains("MAJOR") ? 60 : value.contains("CITY") ? 50 : value.contains("TOWN") ? 40 : 25;
+        if (capital) base += 5;
+        return independence ? Math.min(70, base + 5) : base;
     }
     private static int ceilDiv(int value, int divisor) { return value <= 0 ? 0 : (value + divisor - 1) / divisor; }
     private int enforcementBudget() {

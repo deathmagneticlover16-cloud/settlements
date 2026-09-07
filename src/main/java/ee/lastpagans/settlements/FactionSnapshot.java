@@ -87,7 +87,7 @@ public record FactionSnapshot(
         List<SettlementEntry> settlements = owned.stream().map(settlement -> new SettlementEntry(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(),
                 settlement.getDisplayedPopulation(), settlement.getStability(), CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
-                settlement.getRank() == SettlementData.SettlementRank.CAPITAL
+                settlement.isCapital()
         )).toList();
 
         List<String> allies = new ArrayList<>();

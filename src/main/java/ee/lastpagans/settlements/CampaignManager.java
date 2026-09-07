@@ -191,10 +191,9 @@ public final class CampaignManager {
                     if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
                     else {
                         for (SettlementData.SettlementRecord settlement : settlements.settlementsForFaction(factionId)) {
-                            if (settlement.getRank() == SettlementData.SettlementRank.CAPITAL && settlement != target) settlement.setRank(SettlementData.SettlementRank.TOWN);
+                            if (settlement != target) settlement.setCapital(false);
                         }
-                        target.setRank(SettlementData.SettlementRank.CAPITAL);
-                        target.addChronicle("Designated as the faction capital.");
+                        target.setCapital(true);
                         result = target.getName() + " is now the faction capital.";
                     }
                 }
@@ -957,11 +956,12 @@ public final class CampaignManager {
     private static int settlementPeaceCost(ServerLevel level, String settlementId, boolean independence) {
         SettlementData.SettlementRecord settlement = level == null ? null : SettlementData.get(level).getSettlement(settlementId);
         int base = settlement == null ? 25 : switch (settlement.getRank()) {
-            case CAPITAL -> 60;
-            case CITY_STATE -> 55;
+            case MAJOR_CITY -> 60;
+            case CITY -> 50;
             case TOWN -> 40;
             case VILLAGE -> 25;
         };
+        if (settlement != null && settlement.isCapital()) base += 5;
         return independence ? Math.min(65, base + 5) : base;
     }
 
@@ -1185,10 +1185,8 @@ public final class CampaignManager {
             settlement.setOwner(recipientOwner);
             if (previousOwner != null) settlement.setRole(previousOwner, SettlementData.SettlementRole.OUTSIDER);
         }
-        if (settlement.getRank() == SettlementData.SettlementRank.CAPITAL
-                || (!winnerFaction.isBlank() && settlement.getRank() == SettlementData.SettlementRank.CITY_STATE)) {
-            settlement.setRank(SettlementData.SettlementRank.TOWN);
-        }
+        // Physical city tier survives political conquest; only the political capital designation is lost.
+        settlement.setCapital(false);
         if (!winnerFaction.isBlank() && FactionEvents.recruitsFactionManager != null && ClaimEvents.recruitsClaimManager != null) {
             RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(winnerFaction);
             if (faction != null) for (SettlementData.ClaimLink link : settlement.getClaimLinks()) {
@@ -1206,7 +1204,7 @@ public final class CampaignManager {
     private static void releaseSettlementByTreaty(SettlementData.SettlementRecord settlement) {
         if (settlement == null) return;
         settlement.setFactionTeam("");
-        if (settlement.getRank() == SettlementData.SettlementRank.CAPITAL) settlement.setRank(SettlementData.SettlementRank.TOWN);
+        settlement.setCapital(false);
         settlement.addChronicle("Independence recognized by peace treaty.");
     }
 
@@ -1540,7 +1538,7 @@ public final class CampaignManager {
                     CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
                     int divorces = extra.incrementDivorceCount(player.getUUID());
                     SettlementData.SettlementRecord capital = SettlementData.get(player.serverLevel()).getOwnedSettlements(player.getUUID()).stream()
-                            .filter(s -> s.getRank() == SettlementData.SettlementRank.CAPITAL || s.getRank() == SettlementData.SettlementRank.CITY_STATE)
+                            .filter(s -> s.isCapital() || (s.getFactionTeam().isBlank() && s.getRank().ordinal() >= SettlementData.SettlementRank.CITY.ordinal()))
                             .findFirst().orElse(null);
                     if (capital != null) {
                         int penalty = -Math.min(8, 2 * divorces);
@@ -1674,7 +1672,6 @@ public final class CampaignManager {
         BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, factionId);
         CampaignData campaign = CampaignData.get(player.serverLevel());
         campaign.factionProfile(factionId);
-        CampaignSystemsData.get(player.serverLevel()).setFactionWealth(factionId, 0);
         long day = player.serverLevel().getDayTime() / 24000L;
         campaign.addNews(CampaignData.NewsCategory.FACTIONS, CampaignData.NewsImportance.MAJOR,
                 "Faction founded", displayName + " was founded by " + SettlementManager.characterOrAccountName(player) + ".",

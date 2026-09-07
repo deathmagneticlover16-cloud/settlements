@@ -569,7 +569,7 @@ public final class SettlementCommands {
         SettlementData.SettlementRecord settlement = requireManage(player, id);
         if (settlement == null) return 0;
         settlement.setFactionTeam("");
-        if (settlement.getRank() == SettlementData.SettlementRank.CAPITAL) settlement.setRank(SettlementData.SettlementRank.TOWN);
+        settlement.setCapital(false);
         BackingFactionManager.assignIndependentSettlement(player, settlement);
         source.sendSuccess(() -> Component.literal("Settlement is now independent."), true);
         return 1;
@@ -661,22 +661,10 @@ public final class SettlementCommands {
         if (settlement == null) return 0;
         SettlementData.SettlementRank rank;
         try {
-            rank = SettlementData.SettlementRank.valueOf(rawRank.toUpperCase(Locale.ROOT));
+            rank = SettlementData.SettlementRank.valueOf(rawRank.toUpperCase(Locale.ROOT).replace('-', '_'));
         } catch (IllegalArgumentException exception) {
-            source.sendFailure(Component.literal("Use village, town, or capital."));
+            source.sendFailure(Component.literal("Use village, town, city, or major_city."));
             return 0;
-        }
-        if (rank == SettlementData.SettlementRank.CAPITAL && settlement.getFactionTeam().isBlank()) {
-            source.sendFailure(Component.literal("An independent settlement cannot be a faction capital."));
-            return 0;
-        }
-        if (rank == SettlementData.SettlementRank.CAPITAL) {
-            SettlementData data = SettlementData.get(player.serverLevel());
-            data.getSettlements().stream()
-                    .filter(other -> other != settlement)
-                    .filter(other -> other.getRank() == SettlementData.SettlementRank.CAPITAL)
-                    .filter(other -> other.getFactionTeam().equals(settlement.getFactionTeam()))
-                    .forEach(other -> other.setRank(SettlementData.SettlementRank.TOWN));
         }
         settlement.setRank(rank);
         source.sendSuccess(() -> Component.literal(settlement.getName() + " is now a " + rank.displayName() + "."), true);
@@ -1226,15 +1214,7 @@ public final class SettlementCommands {
         String normalized = rawTier.trim().toUpperCase(Locale.ROOT).replace('-', '_');
         SettlementData.SettlementRank rank;
         try { rank = SettlementData.SettlementRank.valueOf(normalized); }
-        catch (IllegalArgumentException exception) { source.sendFailure(Component.literal("Use village, town, capital, or city_state.")); return 0; }
-        if (rank == SettlementData.SettlementRank.CAPITAL && settlement.getFactionTeam().isBlank()) {
-            source.sendFailure(Component.literal("Independent settlements cannot be faction capitals. Use city_state instead.")); return 0;
-        }
-        if (rank == SettlementData.SettlementRank.CAPITAL) {
-            SettlementData.get(source.getLevel()).settlementsForFaction(settlement.getFactionTeam()).stream()
-                    .filter(other -> other != settlement && other.getRank() == SettlementData.SettlementRank.CAPITAL)
-                    .forEach(other -> other.setRank(SettlementData.SettlementRank.TOWN));
-        }
+        catch (IllegalArgumentException exception) { source.sendFailure(Component.literal("Use village, town, city, or major_city.")); return 0; }
         settlement.setRank(rank);
         source.sendSuccess(() -> Component.literal(settlement.getName() + " tier set to " + rank.displayName() + "."), true);
         return 1;

@@ -1246,7 +1246,7 @@ public final class SettlementManager {
         SettlementData.CharacterRecord ruler = settlement.getOwnerId() == null ? null : settlements.getCharacter(settlement.getOwnerId());
         if (ruler != null) target += CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.MORALE);
         CampaignData.MarriageRecord marriage = settlement.getOwnerId() == null ? null : campaign.getMarriage(settlement.getOwnerId());
-        if (marriage != null && (settlement.getRank() == SettlementData.SettlementRank.CAPITAL || settlement.getRank() == SettlementData.SettlementRank.CITY_STATE)) {
+        if (marriage != null && (settlement.isCapital() || (settlement.getFactionTeam().isBlank() && settlement.getRank().ordinal() >= SettlementData.SettlementRank.CITY.ordinal()))) {
             target += marriage.effectiveMoraleBonus(settlements);
             int spouseIndex = 1;
             for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(settlement.getOwnerId()))

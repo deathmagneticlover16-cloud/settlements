@@ -67,7 +67,7 @@ public record DiplomacySnapshot(
                 .filter(value -> !campaignSystems.settlementProtected(value.getId())
                         && !campaignSystems.factionProtected(value.getFactionTeam()))
                 .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
-                        CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(),
+                        CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(), value.isCapital(),
                         CampaignManager.canRepresentSettlement(player, value), value.getClaimLinks().stream()
                         .map(claim -> new ClaimTarget(claim.id(), claim.name())).toList()))
                 .sorted(Comparator.comparing(SettlementTarget::factionName, String.CASE_INSENSITIVE_ORDER)
@@ -212,21 +212,21 @@ public record DiplomacySnapshot(
         }
     }
 
-    public record SettlementTarget(String settlementId, String settlementName, String factionId, String factionName, String rank, boolean manageable,
+    public record SettlementTarget(String settlementId, String settlementName, String factionId, String factionName, String rank, boolean capital, boolean manageable,
                                    List<ClaimTarget> claims) {
         private static void encode(SettlementTarget value, FriendlyByteBuf buffer) {
             buffer.writeUtf(value.settlementId, 64); buffer.writeUtf(value.settlementName, 64); buffer.writeUtf(value.factionId, 64);
-            buffer.writeUtf(value.factionName, 64); buffer.writeUtf(value.rank, 32); buffer.writeBoolean(value.manageable);
+            buffer.writeUtf(value.factionName, 64); buffer.writeUtf(value.rank, 32); buffer.writeBoolean(value.capital); buffer.writeBoolean(value.manageable);
             buffer.writeVarInt(value.claims.size());
             for (ClaimTarget claim : value.claims) { buffer.writeUUID(claim.id()); buffer.writeUtf(claim.name(), 64); }
         }
         private static SettlementTarget decode(FriendlyByteBuf buffer) {
             String id = buffer.readUtf(64), name = buffer.readUtf(64), faction = buffer.readUtf(64), factionName = buffer.readUtf(64), rank = buffer.readUtf(32);
-            boolean manageable = buffer.readBoolean(); int count = Math.min(256, buffer.readVarInt()); List<ClaimTarget> claims = new ArrayList<>(count);
+            boolean capital = buffer.readBoolean(); boolean manageable = buffer.readBoolean(); int count = Math.min(256, buffer.readVarInt()); List<ClaimTarget> claims = new ArrayList<>(count);
             for (int i = 0; i < count; i++) claims.add(new ClaimTarget(buffer.readUUID(), buffer.readUtf(64)));
-            return new SettlementTarget(id, name, faction, factionName, rank, manageable, List.copyOf(claims));
+            return new SettlementTarget(id, name, faction, factionName, rank, capital, manageable, List.copyOf(claims));
         }
-        public String display() { return settlementName + " — " + rank + (factionId.isBlank() ? " · Independent" : " · " + factionName); }
+        public String display() { return settlementName + " — " + rank + (capital ? " · Capital" : "") + (factionId.isBlank() ? " · Independent" : " · " + factionName); }
     }
     public record ClaimTarget(UUID id, String name) {
         public String display() { return name == null || name.isBlank() ? id.toString() : name; }

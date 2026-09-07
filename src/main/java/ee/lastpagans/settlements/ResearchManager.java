@@ -127,13 +127,9 @@ public final class ResearchManager {
             int urbanTier = switch (holding.getRank()) {
                 case VILLAGE -> 1;
                 case TOWN -> 2;
-                case CITY_STATE, CAPITAL -> 3;
+                case CITY -> 3;
+                case MAJOR_CITY -> 4;
             };
-            boolean majorCity = urbanTier >= 3
-                    && holding.getCivilianPopulation() >= SettlementConfig.MAJOR_CITY_MIN_POPULATION.get()
-                    && holding.getStability() >= SettlementConfig.MAJOR_CITY_MIN_STABILITY.get()
-                    && extra.prosperity(holding.getId()) >= SettlementConfig.MAJOR_CITY_MIN_PROSPERITY.get();
-            if (majorCity) urbanTier = 4;
             tier = Math.max(tier, urbanTier);
         }
         return tier;

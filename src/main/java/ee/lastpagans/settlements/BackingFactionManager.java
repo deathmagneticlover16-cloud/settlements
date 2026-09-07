@@ -139,6 +139,16 @@ public final class BackingFactionManager {
             migrateLoadedEntities(player.getServer(), settlement, previous, factionId);
             settlement.addChronicle("Joined political faction " + CampaignManager.factionName(factionId) + ".");
         }
+        CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
+        int transferredTreasury = 0;
+        for (String backingId : oldBacking) {
+            int balance = systems.factionWealth(backingId);
+            if (balance > 0) {
+                transferredTreasury += balance;
+                systems.setFactionWealth(backingId, 0);
+            }
+        }
+        if (transferredTreasury > 0) systems.changeFactionWealth(factionId, transferredTreasury);
         oldBacking.forEach(value -> retireIfUnused(player.getServer(), value));
     }
 

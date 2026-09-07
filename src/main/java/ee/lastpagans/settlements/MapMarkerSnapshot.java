@@ -28,6 +28,7 @@ public record MapMarkerSnapshot(List<Marker> markers) {
                     settlement.getTownSquare().getX(),
                     settlement.getTownSquare().getZ(),
                     settlement.getRank().name(),
+                    settlement.isCapital(),
                     settlement.getFactionTeam(),
                     factionName,
                     settlement.getDisplayedPopulation(),
@@ -57,6 +58,7 @@ public record MapMarkerSnapshot(List<Marker> markers) {
             int x,
             int z,
             String rank,
+            boolean capital,
             String factionId,
             String factionName,
             int population,
@@ -70,6 +72,7 @@ public record MapMarkerSnapshot(List<Marker> markers) {
             buffer.writeInt(x);
             buffer.writeInt(z);
             buffer.writeUtf(rank, 16);
+            buffer.writeBoolean(capital);
             buffer.writeUtf(factionId, 64);
             buffer.writeUtf(factionName, 64);
             buffer.writeVarInt(population);
@@ -85,6 +88,7 @@ public record MapMarkerSnapshot(List<Marker> markers) {
                     buffer.readInt(),
                     buffer.readInt(),
                     buffer.readUtf(16),
+                    buffer.readBoolean(),
                     buffer.readUtf(64),
                     buffer.readUtf(64),
                     buffer.readVarInt(),

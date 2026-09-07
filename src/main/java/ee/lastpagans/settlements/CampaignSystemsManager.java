@@ -277,7 +277,6 @@ public final class CampaignSystemsManager {
     }
 
     private static void updateSettlementTier(ServerLevel level, SettlementData.SettlementRecord settlement, int prosperity, CampaignSystemsData extra) {
-        if (settlement.getRank() == SettlementData.SettlementRank.CAPITAL) return;
         if (settlement.getRank() == SettlementData.SettlementRank.VILLAGE
                 && settlement.getCivilianPopulation() >= 100 && prosperity >= 35
                 && settlement.getStability() >= 45 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
@@ -292,19 +291,35 @@ public final class CampaignSystemsManager {
             CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "SETTLEMENT ADVANCED",
                     settlement.getName() + " is now a Town. Civic Pride is temporarily boosting the settlement.");
         }
-        if (settlement.getRank() == SettlementData.SettlementRank.TOWN && settlement.getFactionTeam().isBlank()
-                && settlement.getCivilianPopulation() >= 250 && prosperity >= 60 && settlement.getStability() >= 60
+        if (settlement.getRank() == SettlementData.SettlementRank.TOWN
+                && settlement.getCivilianPopulation() >= 250 && prosperity >= 55 && settlement.getStability() >= 55
                 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
-                && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.CITY_STATE)) {
-            settlement.setRank(SettlementData.SettlementRank.CITY_STATE);
+                && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.CITY)) {
+            settlement.setRank(SettlementData.SettlementRank.CITY);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 3L * 24L * 60L * 60L * 1000L));
-            settlement.addChronicle("The independent settlement emerged as a City-State.");
+            settlement.addChronicle("The settlement developed into a City.");
             long day = level.getDayTime() / 24000L;
             CampaignData.get(level).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MAJOR,
-                    "City-State emerged", settlement.getName() + " has become an independent City-State.",
-                    day, "", settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
-            CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "CITY-STATE",
-                    settlement.getName() + " has grown powerful enough to become a City-State.");
+                    "City emerged", settlement.getName() + " has developed into a City.",
+                    day, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
+            CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "CITY",
+                    settlement.getName() + " has developed into a City.");
+        }
+        if (settlement.getRank() == SettlementData.SettlementRank.CITY
+                && settlement.getCivilianPopulation() >= SettlementConfig.MAJOR_CITY_MIN_POPULATION.get()
+                && prosperity >= SettlementConfig.MAJOR_CITY_MIN_PROSPERITY.get()
+                && settlement.getStability() >= SettlementConfig.MAJOR_CITY_MIN_STABILITY.get()
+                && settlement.getHousingCapacity() >= settlement.getVillagerCount()
+                && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.MAJOR_CITY)) {
+            settlement.setRank(SettlementData.SettlementRank.MAJOR_CITY);
+            extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 4L * 24L * 60L * 60L * 1000L));
+            settlement.addChronicle("The settlement became a Major City.");
+            long day = level.getDayTime() / 24000L;
+            CampaignData.get(level).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MAJOR,
+                    "Major City", settlement.getName() + " has become a Major City.",
+                    day, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
+            CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "MAJOR CITY",
+                    settlement.getName() + " is now a Major City and can support Tier IV research.");
         }
     }
 

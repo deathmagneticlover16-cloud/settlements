@@ -349,9 +349,9 @@ public final class SettlementData extends SavedData {
 
     public enum SettlementRank {
         VILLAGE("Village", "Minor Settlement"),
-        TOWN("Town", "Major Settlement"),
-        CAPITAL("Capital", "Faction Capital"),
-        CITY_STATE("City-State", "Independent Major Power");
+        TOWN("Town", "Developed Settlement"),
+        CITY("City", "Urban Settlement"),
+        MAJOR_CITY("Major City", "Major Urban Centre");
 
         private final String displayName;
         private final String subtitle;
@@ -372,6 +372,8 @@ public final class SettlementData extends SavedData {
         private UUID ownerId;
         private final Map<UUID, SettlementRole> members = new HashMap<>();
         private SettlementRank rank = SettlementRank.VILLAGE;
+        /** Political capital designation is intentionally separate from physical settlement tier. */
+        private boolean capital;
 
         private int stability = 100;
         private int food;
@@ -432,6 +434,7 @@ public final class SettlementData extends SavedData {
         private void load(CompoundTag tag) {
             if (tag.hasUUID("Owner")) ownerId = tag.getUUID("Owner");
             try { rank = SettlementRank.valueOf(tag.getString("Rank")); } catch (IllegalArgumentException ignored) { rank = SettlementRank.VILLAGE; }
+            capital = tag.getBoolean("Capital");
             stability = clamp(tag.getInt("Stability"), 0, 100);
             food = Math.max(0, tag.getInt("Food"));
             wealth = Math.max(0, tag.getInt("Wealth"));
@@ -514,6 +517,7 @@ public final class SettlementData extends SavedData {
             tag.putString("Name", name);
             if (ownerId != null) tag.putUUID("Owner", ownerId);
             tag.putString("Rank", rank.name());
+            tag.putBoolean("Capital", capital);
             tag.putInt("Stability", stability);
             tag.putInt("Food", food);
             tag.putInt("Wealth", wealth);
@@ -591,6 +595,7 @@ public final class SettlementData extends SavedData {
         public String getName() { return name; }
         public UUID getOwnerId() { return ownerId; }
         public SettlementRank getRank() { return rank; }
+        public boolean isCapital() { return capital; }
         public int getStability() { return stability; }
         public int getFood() { return food; }
         public int getWealth() { return wealth; }
@@ -740,8 +745,15 @@ public final class SettlementData extends SavedData {
         }
 
         public void setRank(SettlementRank value) {
-            rank = value;
-            addChronicle("Settlement rank changed to " + value.displayName() + ".");
+            rank = value == null ? SettlementRank.VILLAGE : value;
+            addChronicle("Settlement rank changed to " + rank.displayName() + ".");
+            dirty();
+        }
+
+        public void setCapital(boolean value) {
+            if (capital == value) return;
+            capital = value;
+            addChronicle(value ? "Designated as the political capital." : "No longer designated as the political capital.");
             dirty();
         }
 
@@ -1061,11 +1073,7 @@ public final class SettlementData extends SavedData {
 
 
 
-        public void processDaily(long day) {
-            processDaily(day, null);
-        }
-
-        public void processDaily(long day, CampaignData campaign) {
+        public void processDaily(ServerLevel level, long day, CampaignData campaign) {
             if (lastFoodDay == day) return;
             lastFoodDay = day;
 
@@ -1089,26 +1097,23 @@ public final class SettlementData extends SavedData {
                 int stabilityEffect = CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
                 int wealthEffect = CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.WEALTH);
                 if (stabilityEffect != 0) changeStability(stabilityEffect);
-                if (wealthEffect > 0) wealth += wealthEffect;
-                else if (wealthEffect < 0) wealth = Math.max(0, wealth + wealthEffect);
+                if (wealthEffect != 0 && level != null) StateTreasury.change(level, this, wealthEffect);
             }
 
-            if (campaign != null && ownerId != null && (rank == SettlementRank.CAPITAL || rank == SettlementRank.CITY_STATE)) {
+            if (campaign != null && ownerId != null && (capital || (factionTeam.isBlank() && rank.ordinal() >= SettlementRank.CITY.ordinal()))) {
                 CampaignData.MarriageRecord marriage = campaign.getMarriage(ownerId);
                 if (marriage != null) {
                     int spouseStability = marriage.effectiveStabilityBonus(owner);
                     int spouseWealth = marriage.effectiveWealthPerDay(owner);
                     if (spouseStability != 0) changeStability(spouseStability);
-                    if (spouseWealth > 0) wealth += spouseWealth;
-                    else if (spouseWealth < 0) wealth = Math.max(0, wealth + spouseWealth);
+                    if (spouseWealth != 0 && level != null) StateTreasury.change(level, this, spouseWealth);
                 }
                 int spouseIndex = 1;
                 for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(ownerId)) {
                     int stability = CampaignData.scaledSpouseEffect(additional.stabilityBonus(), spouseIndex);
                     int spouseWealth = CampaignData.scaledSpouseEffect(additional.wealthPerDay(), spouseIndex);
                     if (stability != 0) changeStability(stability);
-                    if (spouseWealth > 0) wealth += spouseWealth;
-                    else if (spouseWealth < 0) wealth = Math.max(0, wealth + spouseWealth);
+                    if (spouseWealth != 0 && level != null) StateTreasury.change(level, this, spouseWealth);
                     spouseIndex++;
                 }
             }

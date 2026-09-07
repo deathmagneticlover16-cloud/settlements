@@ -59,17 +59,17 @@ public final class ClientCampaignEvents {
             if (Minecraft.getInstance().level == null || !marker.dimension().equals(Minecraft.getInstance().level.dimension().location().toString())) continue;
             int x = (int) Math.round(offsetX + marker.x() * scale);
             int y = (int) Math.round(offsetZ + marker.z() * scale);
-            int size = switch (marker.rank()) { case "CAPITAL" -> 9; case "TOWN" -> 7; default -> 5; };
+            int size = marker.capital() ? 9 : switch (marker.rank()) { case "MAJOR_CITY" -> 8; case "CITY" -> 7; case "TOWN" -> 6; default -> 5; };
             int color = marker.factionId().isBlank() ? 0xFFE0D2A2 : 0xFFFFC65D;
             graphics.fill(x - size, y - size, x + size, y + size, 0xCC111111);
             graphics.fill(x - size + 1, y - size + 1, x + size - 1, y + size - 1, color);
-            graphics.drawCenteredString(Minecraft.getInstance().font, marker.rank().equals("CAPITAL") ? "◆" : marker.rank().equals("TOWN") ? "■" : "•", x, y - 4, 0xFF222222);
+            graphics.drawCenteredString(Minecraft.getInstance().font, marker.capital() ? "◆" : marker.rank().equals("MAJOR_CITY") || marker.rank().equals("CITY") ? "■" : marker.rank().equals("TOWN") ? "▪" : "•", x, y - 4, 0xFF222222);
             if (mouseX >= x - size && mouseX <= x + size && mouseY >= y - size && mouseY <= y + size) hovered = marker;
         }
         if (hovered != null) {
             graphics.renderTooltip(Minecraft.getInstance().font, List.of(
                     net.minecraft.network.chat.Component.literal(hovered.name()),
-                    net.minecraft.network.chat.Component.literal(pretty(hovered.rank()) + " — " + hovered.factionName()),
+                    net.minecraft.network.chat.Component.literal(pretty(hovered.rank()) + (hovered.capital() ? " · Capital" : "") + " — " + hovered.factionName()),
                     net.minecraft.network.chat.Component.literal("Population " + hovered.population() + " · Stability " + hovered.stability() + "%")
             ), java.util.Optional.empty(), mouseX, mouseY);
         }
