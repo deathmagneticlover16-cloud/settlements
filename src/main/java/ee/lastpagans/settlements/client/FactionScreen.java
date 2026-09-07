@@ -4,6 +4,7 @@ import com.talhanation.recruits.client.gui.component.BannerRenderer;
 import com.talhanation.recruits.world.RecruitsFaction;
 import ee.lastpagans.settlements.CampaignData;
 import ee.lastpagans.settlements.FactionSnapshot;
+import ee.lastpagans.settlements.FactionColorUtil;
 import ee.lastpagans.settlements.network.FactionActionPacket;
 import ee.lastpagans.settlements.network.FactionCreatePacket;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
@@ -28,7 +29,7 @@ import java.util.Locale;
 public final class FactionScreen extends ScaledCampaignScreen {
     private static final int W = 560;
     private static final int H = 440;
-    private final FactionSnapshot snapshot;
+    private FactionSnapshot snapshot;
     private int left;
     private int top;
     private Tab tab = Tab.OVERVIEW;
@@ -43,6 +44,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private DropdownWidget inviteCandidateDrop;
     private EditBox titleEdit;
     private EditBox factionNameEdit;
+    private String factionNameDraft = "";
     private DropdownWidget teamColorDrop;
     private DropdownWidget unitColorDrop;
     private DropdownWidget governmentDrop;
@@ -89,8 +91,16 @@ public final class FactionScreen extends ScaledCampaignScreen {
         rebuildWidgets();
     }
 
+    public boolean updateCreationSnapshot(FactionSnapshot value) {
+        if (!snapshot.factionId().isBlank() || !value.factionId().isBlank()) return false;
+        snapshot = value;
+        rebuildWidgets();
+        return true;
+    }
+
     @Override
     protected void rebuildWidgets() {
+        if (factionNameEdit != null) factionNameDraft = factionNameEdit.getValue();
         setupCampaignScale(W, H);
         left = campaignLeft(W);
         top = campaignTop(H);
@@ -128,6 +138,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             if (createPage == CreatePage.IDENTITY) {
                 factionNameEdit = new EditBox(font, left + 168, top + 126, 280, 22, Component.literal("Faction name"));
                 factionNameEdit.setMaxLength(32);
+                factionNameEdit.setValue(factionNameDraft);
                 factionNameEdit.setHint(Component.literal("Faction name"));
                 addRenderableWidget(factionNameEdit);
 
@@ -478,6 +489,11 @@ public final class FactionScreen extends ScaledCampaignScreen {
         stat(graphics, "Military roster", fit(snapshot.rosterName(), 150), 24, 210);
         stat(graphics, "Government", snapshot.government(), 24, 230);
         stat(graphics, "Active wars", snapshot.activeWars(), 24, 250);
+        graphics.drawString(font, "Faction dye: " + prettify(snapshot.teamDye()), left + 24, top + 274,
+                0xFF000000 | FactionColorUtil.rgb(FactionColorUtil.dye(snapshot.teamDye())), false);
+        graphics.drawString(font, "Unit dye: " + prettify(snapshot.unitDye()), left + 24, top + 292,
+                0xFF000000 | FactionColorUtil.rgb(FactionColorUtil.dye(snapshot.unitDye())), false);
+        graphics.drawString(font, "Recruits uses the nearest supported colors.", left + 24, top + 314, 0xFFAAAAAA, false);
         graphics.drawString(font, "Allies", left + 300, top + 110, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal(snapshot.allies().isEmpty() ? "None" : String.join(", ", snapshot.allies())),
                 left + 300, top + 128, 226, 0xFFCCCCCC);

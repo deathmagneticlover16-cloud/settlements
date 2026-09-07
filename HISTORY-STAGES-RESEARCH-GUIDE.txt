@@ -42,7 +42,7 @@ Settlements reuses those values as a SETTLEMENT DEVELOPMENT gate:
 - 1 = Village
 - 2 = Town
 - 3 = City-State
-- 4 = Capital
+- 4 = Major City (political Capital status does not grant Tier IV)
 
 This is separate from "Tier 1 armour / Tier 2 armour".
 

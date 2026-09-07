@@ -289,6 +289,10 @@ public record SettlementSnapshot(
                 : "The settlement economy is stable but unexceptional.");
         values.add(new EffectEntry("Prosperity: " + prosperity + "/100", "Settlement economy", "minecraft:emerald",
                 prosperity >= 65 ? "POSITIVE" : prosperity < 30 ? "NEGATIVE" : "MIXED", prosperityDetail, "Current"));
+        values.add(new EffectEntry("Major City / Tier IV", "Settlement development", "minecraft:bricks", "MIXED",
+                "Requires City rank, " + SettlementConfig.MAJOR_CITY_MIN_POPULATION.get() + " civilian population, "
+                        + SettlementConfig.MAJOR_CITY_MIN_STABILITY.get() + " Stability, "
+                        + SettlementConfig.MAJOR_CITY_MIN_PROSPERITY.get() + " Prosperity, housing for all registered villagers, and 1 Main + 2 Secondary Capture Zones. Capital is a political designation and grants no research tier.", "Server requirements"));
         return values.stream().limit(32).toList();
     }
 

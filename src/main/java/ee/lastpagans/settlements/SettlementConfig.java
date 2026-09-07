@@ -140,7 +140,7 @@ public final class SettlementConfig {
         builder.pop();
 
         builder.push("economy");
-        CURRENCY_ITEM_WEALTH_VALUE = builder.comment("Settlement wealth represented by one item in #settlements:currency when depositing or withdrawing physical currency.")
+        CURRENCY_ITEM_WEALTH_VALUE = builder.comment("State Treasury value represented by one item in #settlements:currency when depositing or withdrawing physical currency.")
                 .defineInRange("currencyItemWealthValue", 10, 1, 100000);
         CHARACTER_RENAME_CURRENCY_COST = builder.comment("Number of #settlements:currency items consumed when a created character changes their personal name. Main House edits remain free.")
                 .defineInRange("characterRenameCurrencyCost", 10, 0, 100000);
@@ -243,7 +243,7 @@ public final class SettlementConfig {
                 .defineInRange("minimumStability", 60, 0, 100);
         FACTION_FOUNDING_MIN_PROSPERITY = builder.comment("Minimum prosperity of the founding settlement.")
                 .defineInRange("minimumProsperity", 40, 0, 100);
-        FACTION_FOUNDING_WEALTH_COST = builder.comment("Settlement Wealth spent when upgrading from an independent polity into a full faction. Recruits' own configured faction-creation item cost still applies too.")
+        FACTION_FOUNDING_WEALTH_COST = builder.comment("State Treasury spent when upgrading from an independent polity into a full faction. Recruits' own configured faction-creation item cost still applies too.")
                 .defineInRange("wealthCost", 500, 0, 1000000);
         builder.pop();
         SPEC = builder.build();

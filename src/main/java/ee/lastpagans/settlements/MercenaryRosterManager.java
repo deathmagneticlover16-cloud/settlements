@@ -202,7 +202,7 @@ public final class MercenaryRosterManager {
             if (day >= next) {
                 int cycles = (int)Math.min(64L, 1L + Math.max(0L, day - next) / definition.paymentIntervalDays());
                 for (int i = 0; i < cycles; i++) {
-                    boolean paid = StateTreasury.spend(level, settlement, definition.upkeep());
+                    boolean paid = StateTreasury.spend(server.overworld(), settlement, definition.upkeep());
                     if (paid) {
                         missed = 0; data.changeTrust(definition.id(), contract.employerKey(), 2, definition.startingLoyalty());
                         if (!contract.factionId().isBlank()) CampaignManager.changeReliability(server.overworld(), campaign, contract.factionId(), 1);

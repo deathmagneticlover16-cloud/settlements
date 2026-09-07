@@ -121,18 +121,20 @@ public final class ResearchManager {
             try { ruler = UUID.fromString(polity.id()); } catch (IllegalArgumentException exception) { return 1; }
             holdings = data.getOwnedSettlements(ruler).stream().filter(value -> value.getFactionTeam().isBlank()).toList();
         } else holdings = data.settlementsForFaction(polity.id());
-        CampaignSystemsData extra = CampaignSystemsData.get(server.overworld());
         int tier = 1;
         for (SettlementData.SettlementRecord holding : holdings) {
-            int urbanTier = switch (holding.getRank()) {
-                case VILLAGE -> 1;
-                case TOWN -> 2;
-                case CITY -> 3;
-                case MAJOR_CITY -> 4;
-            };
-            tier = Math.max(tier, urbanTier);
+            tier = Math.max(tier, settlementTier(holding));
         }
         return tier;
+    }
+
+    public static int settlementTier(SettlementData.SettlementRecord holding) {
+        return switch (holding.getRank()) {
+            case VILLAGE -> 1;
+            case TOWN -> 2;
+            case CITY -> 3;
+            case MAJOR_CITY -> 4;
+        };
     }
 
     public static boolean tierAllows(HistoryStagesCompat.Technology technology, int polityTier) {

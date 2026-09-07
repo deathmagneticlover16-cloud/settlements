@@ -1592,7 +1592,7 @@ public final class CampaignManager {
         else settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
         SettlementCommands.linkClaimAtPlayer(player, settlement, false);
         SettlementManager.scheduleFirstSettlers(player, settlement);
-        CaptureZoneManager.ensureVillageMainZone(player, settlement);
+        CaptureZoneManager.ensureVillageMainZone(player.serverLevel(), settlement);
         data.selectSettlement(player.getUUID(), settlement.getId());
         settlement.addChronicle("Settlement founded by " + SettlementManager.characterOrAccountName(player) + ".");
         CampaignData.get(player.serverLevel()).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.NORMAL,
@@ -1639,6 +1639,10 @@ public final class CampaignManager {
         }
         net.minecraft.world.item.DyeColor teamDye = FactionColorUtil.dye(packet.teamDye());
         net.minecraft.world.item.DyeColor unitDye = FactionColorUtil.dye(packet.unitDye());
+        if (!FactionColorUtil.isKnown(packet.teamDye()) || !FactionColorUtil.isKnown(packet.unitDye())) {
+            openFaction(player, "A selected dye is unavailable on this server. Check that client and server have matching color mods.");
+            return;
+        }
         CampaignData.GovernmentType government = CampaignData.GovernmentType.parse(packet.government());
         String result = createFactionInternal(player, packet.name(), FactionColorUtil.closestChatFormatting(teamDye),
                 FactionColorUtil.closestRecruitsUnitColor(unitDye), foundingSeat, banner, government,
@@ -1678,9 +1682,8 @@ public final class CampaignManager {
             return "Faction founding costs " + wealthCost + " from the State Treasury; the independent polity currently has " + foundingTreasury + ".";
 
         if (banner == null || !(banner.getItem() instanceof BannerItem)) return "Faction creation failed: design a banner first.";
-        banner = banner.copy();
-        banner.setCount(1);
-        if (RecruitsFactionManager.isBannerBlank(banner)) return "Faction creation failed: Your faction banner must contain at least one pattern.";
+        banner = FactionBannerUtil.sanitize(banner);
+        if (banner.isEmpty()) return "Faction creation failed: choose 1–6 registered banner patterns with valid dye colors.";
         if (FactionEvents.recruitsFactionManager.isDisplayNameInUse(displayName)) return "Faction creation failed: that faction display name is already in use.";
         if (FactionEvents.recruitsFactionManager.isBannerInUse(banner.serializeNBT())) return "Faction creation failed: that banner is already used by another faction.";
         String baseId = SettlementData.normalizeId(displayName);

@@ -146,7 +146,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
     }
 
     private void renderDependencyEdges(GuiGraphics graphics, Map<String, Node> byId) {
-        for (Node target : nodes) {
+        for (Node target : byId.values()) {
             ResearchSnapshot.TechnologyEntry targetEntry = snapshot.technologies().get(target.index());
             for (String dependencyId : targetEntry.dependencyIds()) {
                 Node source = byId.get(dependencyId);
@@ -188,7 +188,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         boolean tierAllowed = "EXACT".equalsIgnoreCase(entry.tierMode())
                 ? snapshot.researchTier() == entry.requiredTier()
                 : snapshot.researchTier() >= entry.requiredTier();
-        graphics.drawString(font, tier, x, y + 80, tierAllowed ? 0xFFCCCCCC : 0xFFFF8A8A, false);
+        graphics.drawWordWrap(font, Component.literal(tier), x, y + 80, 166, tierAllowed ? 0xFFCCCCCC : 0xFFFF8A8A);
         graphics.drawString(font, "Prerequisites", x, y + 104, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal(entry.dependencies()), x, y + 118, 166, 0xFFAAAAAA);
     }

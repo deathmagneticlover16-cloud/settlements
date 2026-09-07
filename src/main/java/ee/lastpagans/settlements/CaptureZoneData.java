@@ -93,6 +93,7 @@ public final class CaptureZoneData extends SavedData {
         private double progress;
         private ZoneState state;
         private String attackerTeam;
+        private boolean captured;
 
         public CaptureZoneRecord(UUID id, String settlementId, ZoneType type, String dimension, BlockPos pos1, BlockPos pos2) {
             this(id, settlementId, type, dimension, pos1, pos2, 0.0D, ZoneState.SECURE, "");
@@ -112,6 +113,7 @@ public final class CaptureZoneData extends SavedData {
             this.progress = clamp(progress);
             this.state = state == null ? ZoneState.SECURE : state;
             this.attackerTeam = attackerTeam == null ? "" : attackerTeam;
+            this.captured = state == ZoneState.CAPTURED;
         }
 
         public UUID id() { return id; }
@@ -123,6 +125,8 @@ public final class CaptureZoneData extends SavedData {
         public double progress() { return progress; }
         public ZoneState state() { return state; }
         public String attackerTeam() { return attackerTeam; }
+        public boolean captured() { return captured; }
+        public boolean setCaptured(boolean next) { if (captured == next) return false; captured = next; return true; }
         public int width() { return pos2.getX() - pos1.getX() + 1; }
         public int depth() { return pos2.getZ() - pos1.getZ() + 1; }
         public BlockPos center() { return new BlockPos((pos1.getX()+pos2.getX())/2, (pos1.getY()+pos2.getY())/2, (pos1.getZ()+pos2.getZ())/2); }
@@ -145,6 +149,7 @@ public final class CaptureZoneData extends SavedData {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("Id", id); tag.putString("Settlement", settlementId); tag.putString("Type", type.name()); tag.putString("Dimension", dimension);
             tag.putLong("Pos1", pos1.asLong()); tag.putLong("Pos2", pos2.asLong()); tag.putDouble("Progress", progress); tag.putString("State", state.name()); tag.putString("Attacker", attackerTeam);
+            tag.putBoolean("Captured", captured);
             return tag;
         }
         private static CaptureZoneRecord fromNBT(CompoundTag tag) {
@@ -154,9 +159,11 @@ public final class CaptureZoneData extends SavedData {
                 ZoneState state; try { state = ZoneState.valueOf(tag.getString("State")); } catch (IllegalArgumentException ignored) { state=ZoneState.SECURE; }
                 String settlement = SettlementData.normalizeId(tag.getString("Settlement"));
                 if (settlement.isBlank()) return null;
-                return new CaptureZoneRecord(id, settlement, type, tag.getString("Dimension"), BlockPos.of(tag.getLong("Pos1")), BlockPos.of(tag.getLong("Pos2")), tag.getDouble("Progress"), state, tag.getString("Attacker"));
+                CaptureZoneRecord record = new CaptureZoneRecord(id, settlement, type, tag.getString("Dimension"), BlockPos.of(tag.getLong("Pos1")), BlockPos.of(tag.getLong("Pos2")), tag.getDouble("Progress"), state, tag.getString("Attacker"));
+                if (tag.contains("Captured")) record.captured = tag.getBoolean("Captured");
+                return record;
             } catch (RuntimeException ignored) { return null; }
         }
-        private static double clamp(double value) { return Math.max(0.0D, Math.min(1.0D, value)); }
+        private static double clamp(double value) { return Double.isFinite(value) ? Math.max(0.0D, Math.min(1.0D, value)) : 0.0D; }
     }
 }

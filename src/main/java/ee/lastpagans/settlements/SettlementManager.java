@@ -1417,7 +1417,7 @@ public final class SettlementManager {
         PendingSettlementDeletion pending = PENDING_SETTLEMENT_DELETIONS.get(player.getUUID());
         if (!"CONFIRM".equalsIgnoreCase(argument)) {
             PENDING_SETTLEMENT_DELETIONS.put(player.getUUID(), new PendingSettlementDeletion(settlement.getId(), now + SETTLEMENT_DELETE_CONFIRM_MILLIS));
-            return "DANGER: deleting this settlement is permanent. All Settlements stats, treasury wealth, food, residents, linked Recruits claims, modifiers, housing, military tracking and contracts will be erased. Press CONFIRM DELETE within 30 seconds to proceed.";
+            return "DANGER: deleting this settlement is permanent. Its stats, food, residents, linked claims, modifiers, housing, military tracking and contracts will be erased. The shared State Treasury is not a settlement stockpile. Press CONFIRM DELETE within 30 seconds.";
         }
         if (pending == null || pending.expiresAtMillis() < now || !settlement.getId().equals(pending.settlementId())) {
             PENDING_SETTLEMENT_DELETIONS.remove(player.getUUID());

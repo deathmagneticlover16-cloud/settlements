@@ -33,7 +33,8 @@ public record MapMarkerSnapshot(List<Marker> markers) {
                     factionName,
                     settlement.getDisplayedPopulation(),
                     settlement.getStability(),
-                    visual.getBannerMode().name()
+                    visual.getBannerMode().name(),
+                    FactionColorUtil.rgb(FactionColorUtil.dye(campaign.factionProfile(settlement.getFactionTeam()).teamDye()))
             ));
         }
         return new MapMarkerSnapshot(values);
@@ -63,7 +64,8 @@ public record MapMarkerSnapshot(List<Marker> markers) {
             String factionName,
             int population,
             int stability,
-            String bannerMode
+            String bannerMode,
+            int factionColor
     ) {
         private void encode(FriendlyByteBuf buffer) {
             buffer.writeUtf(id, 64);
@@ -78,6 +80,7 @@ public record MapMarkerSnapshot(List<Marker> markers) {
             buffer.writeVarInt(population);
             buffer.writeVarInt(stability);
             buffer.writeUtf(bannerMode, 16);
+            buffer.writeInt(factionColor);
         }
 
         private static Marker decode(FriendlyByteBuf buffer) {
@@ -93,7 +96,8 @@ public record MapMarkerSnapshot(List<Marker> markers) {
                     buffer.readUtf(64),
                     buffer.readVarInt(),
                     buffer.readVarInt(),
-                    buffer.readUtf(16)
+                    buffer.readUtf(16),
+                    buffer.readInt()
             );
         }
     }

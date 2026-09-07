@@ -261,7 +261,7 @@ public final class CampaignSystemsData extends SavedData {
 
     public int factionWealth(String faction) { return factionWealth.getOrDefault(faction == null ? "" : faction, 0); }
     public void setFactionWealth(String faction, int value) { if (faction == null || faction.isBlank()) return; factionWealth.put(faction, Math.max(0, value)); setDirty(); }
-    public void changeFactionWealth(String faction, int delta) { setFactionWealth(faction, factionWealth(faction) + delta); }
+    public void changeFactionWealth(String faction, int delta) { setFactionWealth(faction, (int)Math.max(0L, Math.min(Integer.MAX_VALUE, (long)factionWealth(faction) + delta))); }
     public boolean spendFactionWealth(String faction, int amount) { int cost = Math.max(0, amount); if (factionWealth(faction) < cost) return false; setFactionWealth(faction, factionWealth(faction) - cost); return true; }
     public int marriageAllianceCount(String first, String second) { return marriageAlliances.getOrDefault(pairKey(first, second), 0); }
     public boolean marriageAlliance(String first, String second) { return marriageAllianceCount(first, second) > 0; }

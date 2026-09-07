@@ -67,7 +67,7 @@ public final class DropdownWidget extends AbstractWidget {
             return true;
         }
         if (expanded) {
-            int row = (int) ((mouseY - (getY() + height)) / height);
+            int row = (int) Math.floor((mouseY - (getY() + height)) / height);
             if (mouseX >= getX() && mouseX < getX() + width && row >= 0 && row < visibleRows) {
                 int index = scroll + row;
                 if (index < options.size()) {

@@ -30,6 +30,12 @@ public final class TaxRateSlider extends AbstractSliderButton {
     @Override protected void updateMessage() { setMessage(Component.literal("Taxation: " + percent() + "% — " + band())); }
     @Override protected void applyValue() { updateMessage(); }
 
+    @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        boolean handled = super.keyPressed(keyCode, scanCode, modifiers);
+        if (handled) commitIfChanged();
+        return handled;
+    }
+
     public void commitIfChanged() {
         int current = percent();
         if (current == lastCommitted) return;

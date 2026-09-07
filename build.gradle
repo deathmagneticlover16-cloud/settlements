@@ -47,7 +47,7 @@ repositories {
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-    implementation fg.deobf(files('libs/recruits-1.20.1-1.15.2.jar'))
+    implementation fg.deobf('local:recruits:1.20.1-1.15.2')
 }
 
 processResources {
@@ -72,3 +72,11 @@ jar {
     }
     finalizedBy 'reobfJar'
 }
+
+tasks.register('regressionChecks', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'ee.lastpagans.settlements.RegressionChecks'
+}
+
+check.dependsOn regressionChecks

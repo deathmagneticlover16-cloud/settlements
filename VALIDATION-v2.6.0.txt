@@ -1,0 +1,32 @@
+SETTLEMENTS 2.6.0 — VALIDATION, 2026-09-07
+
+RECOVERY
+Started from 6e24ea43623ff7cb314bbb1d22cdf5c864bebe46 on the existing branch
+settlements-2.6.0-foundations. The archive's history was preserved.
+The initial source compile failed in three places; this continuation fixes them.
+The archive's gradlew/gradlew.bat executable-mode differences on Windows were
+excluded from the continuation commit; their content remains unchanged.
+
+PASSED
+- ForgeGradle build including Java compilation, resources, JAR and reobfJar.
+- Final offline build after resolving the initially missing Forge runtime dependency.
+- 62 executable regression assertions against actual mapped Minecraft classes.
+  Covers geometry, captured/contested save/load, occupation cleanup on deletion,
+  invalid banner patterns/colors/layer counts, NBT sanitization, treasury spending/
+  overflow, vanilla dye mapping, optional dye-name persistence, capital/rank tier
+  separation and capture-network round trips for 257 objectives.
+- Source audit: no live Bard references; direct legacy settlement get/set Wealth
+  access is confined to the transitional StateTreasury migration. Live expenses
+  use State Treasury or the corresponding shared polity account.
+- Supplied Dye Depot 1.3.0 bytecode confirms dynamic DyeColor extension and banner
+  support. Settlements has no mandatory Dye Depot dependency.
+
+NOT RUN
+- Full Forge client/dedicated-server sessions, multiplayer capture battles,
+  in-game GUI interaction, Dye Depot mixin/rendering or History Stages integration.
+- Regression checks run on the mapped Java classpath, not a full mod-loader session;
+  they cannot prove mixin application, multiplayer behavior or GUI rendering.
+- The compiled JAR has not been installed into the user's PrismLauncher instance.
+
+Treat this as a compiled test build. Follow TESTING-v2.6.0.txt before release.
+Optional Year/Seasons, Leagues, Culture and Trade Agreements remain deferred.

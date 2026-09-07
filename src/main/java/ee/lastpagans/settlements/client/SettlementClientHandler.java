@@ -27,7 +27,11 @@ public final class SettlementClientHandler {
     public static void openCampaign(CampaignSnapshot snapshot) { Minecraft.getInstance().setScreen(new CampaignMainScreen(snapshot)); }
     public static void openDiplomacy(DiplomacySnapshot snapshot) { Minecraft.getInstance().setScreen(new CampaignDiplomacyScreen(snapshot)); }
     public static void openFamily(FamilySnapshot snapshot) { Minecraft.getInstance().setScreen(new FamilyScreen(snapshot)); }
-    public static void openFaction(FactionSnapshot snapshot) { Minecraft.getInstance().setScreen(new FactionScreen(snapshot)); }
+    public static void openFaction(FactionSnapshot snapshot) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof FactionScreen screen && screen.updateCreationSnapshot(snapshot)) return;
+        minecraft.setScreen(new FactionScreen(snapshot));
+    }
     public static void openWorldNews(WorldNewsSnapshot snapshot) { Minecraft.getInstance().setScreen(new WorldNewsScreen(snapshot)); }
     public static void openMilitary(SettlementSnapshot snapshot) { Minecraft.getInstance().setScreen(new MilitaryScreen(snapshot)); }
     public static void openMercenaryRosters(ee.lastpagans.settlements.MercenaryRosterSnapshot snapshot) {

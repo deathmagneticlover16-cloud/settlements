@@ -78,6 +78,7 @@ public final class CaptureZoneManager {
     /** First click stores pos1; second click validates and creates/replaces the zone. */
     public static String setPosition(ServerPlayer player, SettlementData.SettlementRecord settlement, CaptureZoneData.ZoneType type, boolean first) {
         if (player == null || settlement == null) return "Invalid settlement.";
+        if (editingBlocked(player.serverLevel(), settlement)) return "Capture Zones cannot be changed during war or occupation.";
         Map<UUID, Draft> drafts = type == CaptureZoneData.ZoneType.MAIN ? MAIN_DRAFTS : SECONDARY_DRAFTS;
         if (first) {
             drafts.put(player.getUUID(), new Draft(settlement.getId(), player.serverLevel().dimension().location().toString(), player.blockPosition()));
@@ -88,15 +89,18 @@ public final class CaptureZoneManager {
         String dimension = player.serverLevel().dimension().location().toString();
         if (!dimension.equals(draft.dimension)) return "Both Capture Zone corners must be in the same dimension.";
         CaptureZoneData.CaptureZoneRecord candidate = new CaptureZoneData.CaptureZoneRecord(UUID.randomUUID(), settlement.getId(), type, dimension, draft.pos, player.blockPosition());
-        String invalid = validate(player.serverLevel(), settlement, candidate, null);
+        CaptureZoneData.CaptureZoneRecord oldMain = CaptureZoneData.get(player.serverLevel()).zonesFor(settlement.getId()).stream()
+                .filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).findFirst().orElse(null);
+        String invalid = validate(player.serverLevel(), settlement, candidate,
+                type == CaptureZoneData.ZoneType.MAIN && oldMain != null ? oldMain.id() : null);
         if (invalid != null) return invalid;
         CaptureZoneData data = CaptureZoneData.get(player.serverLevel());
         if (type == CaptureZoneData.ZoneType.MAIN) {
             for (CaptureZoneData.CaptureZoneRecord zone : data.zonesFor(settlement.getId())) if (zone.type()==CaptureZoneData.ZoneType.MAIN) data.remove(zone.id());
         } else {
-            int max = Math.max(2, requirement(settlement).secondary());
+            int max = Math.max(2, requirement(settlement).secondary() + 1);
             long existing = data.zonesFor(settlement.getId()).stream().filter(z -> z.type()==CaptureZoneData.ZoneType.SECONDARY).count();
-            if (existing >= max) return "This settlement already has the maximum " + max + " Secondary Capture Zones for its current tier.";
+            if (existing >= max) return "Remove a surplus Secondary before adding another. One spare objective is allowed for relocation.";
         }
         data.put(candidate);
         settlement.addChronicle((type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone designated.");
@@ -106,11 +110,16 @@ public final class CaptureZoneManager {
 
     public static String removeNearest(ServerPlayer player, SettlementData.SettlementRecord settlement) {
         if (player == null || settlement == null) return "Invalid settlement.";
+        if (editingBlocked(player.serverLevel(), settlement)) return "Capture Zones cannot be changed during war or occupation.";
         String dim = player.serverLevel().dimension().location().toString();
         CaptureZoneData data = CaptureZoneData.get(player.serverLevel());
         CaptureZoneData.CaptureZoneRecord nearest = data.zonesFor(settlement.getId()).stream().filter(z -> dim.equals(z.dimension()))
                 .min(java.util.Comparator.comparingDouble(z -> z.center().distSqr(player.blockPosition()))).orElse(null);
         if (nearest == null || nearest.center().distSqr(player.blockPosition()) > 64D*64D) return "No Capture Zone from this settlement is within 64 blocks.";
+        ZoneRequirement needed = requirement(settlement);
+        long sameType = data.zonesFor(settlement.getId()).stream().filter(z -> z.type() == nearest.type()).count();
+        int minimum = nearest.type() == CaptureZoneData.ZoneType.MAIN ? needed.main() : needed.secondary();
+        if (sameType <= minimum) return "That objective is required by this settlement's tier. Replace the Main in place, or add a replacement Secondary before removing this one.";
         data.remove(nearest.id());
         settlement.addChronicle("A " + nearest.type().name().toLowerCase() + " Capture Zone was removed.");
         broadcast(player.getServer());
@@ -161,12 +170,21 @@ public final class CaptureZoneManager {
             RecruitsClaim claim = ClaimEvents.recruitsClaimManager.getClaim(new ChunkPos(x,z));
             if (claim == null || !settlement.containsClaim(candidate.dimension(), claim.getUUID())) return "Every part of a Capture Zone must remain inside this settlement's linked Recruits claims.";
         }
-        for (CaptureZoneData.CaptureZoneRecord existing : CaptureZoneData.get(level).zonesFor(settlement.getId())) {
+        for (CaptureZoneData.CaptureZoneRecord existing : CaptureZoneData.get(level).allZones()) {
             if (replacing != null && replacing.equals(existing.id())) continue;
             if (candidate.intersects(existing)) return "Capture Zones cannot overlap or be placed inside one another.";
-            if (candidate.horizontalDistance(existing) < SettlementConfig.CAPTURE_ZONE_MIN_SPACING.get()) return "Capture Zones must be spread out. Keep their centres at least " + SettlementConfig.CAPTURE_ZONE_MIN_SPACING.get() + " blocks apart.";
+            if (candidate.settlementId().equals(existing.settlementId()) && candidate.horizontalDistance(existing) < SettlementConfig.CAPTURE_ZONE_MIN_SPACING.get()) return "Capture Zones must be spread out. Keep their centres at least " + SettlementConfig.CAPTURE_ZONE_MIN_SPACING.get() + " blocks apart.";
         }
         return null;
+    }
+
+    private static boolean editingBlocked(ServerLevel level, SettlementData.SettlementRecord settlement) {
+        if (!CaptureZoneData.get(level).occupyingTeam(settlement.getId()).isBlank()) return true;
+        String team = effectiveTeam(settlement);
+        return CampaignData.get(level).getWars().stream().anyMatch(w -> w.status() == CampaignData.WarStatus.ACTIVE
+                && (settlement.getId().equals(w.attackerSettlement()) || settlement.getId().equals(w.defenderSettlement())
+                || (!team.isBlank() && (team.equals(w.attackerFaction()) || team.equals(w.defenderFaction())
+                || w.supportingAttackers().contains(team) || w.supportingDefenders().contains(team)))));
     }
 
     public static void process(MinecraftServer server) {
@@ -182,19 +200,29 @@ public final class CaptureZoneManager {
             ServerLevel level = resolveLevel(server, zone.dimension());
             if (level == null) continue;
             CampaignData.WarRecord war = activeAttackOn(campaign, settlement.getId());
-            boolean secondariesRemain = zone.type()==CaptureZoneData.ZoneType.MAIN && data.zonesFor(settlement.getId()).stream()
-                    .anyMatch(other -> other.type()==CaptureZoneData.ZoneType.SECONDARY && other.state()!=CaptureZoneData.ZoneState.CAPTURED);
-            if (secondariesRemain) {
-                anyChanged |= zone.setState(CaptureZoneData.ZoneState.LOCKED);
-                continue;
-            }
             if (war == null) {
-                // Outside war, captured zones recover to their legal defender and occupation is cleared.
+                liberate(level, settlement);
                 if (zone.progress() > 0) anyChanged |= zone.setProgress(Math.max(0D, zone.progress()-0.02D));
-                if (zone.progress() <= 0D) { anyChanged |= zone.setState(CaptureZoneData.ZoneState.SECURE); anyChanged |= zone.setAttackerTeam(""); }
+                if (zone.progress() <= 0D) {
+                    boolean wasCaptured = zone.captured();
+                    anyChanged |= zone.setCaptured(false);
+                    anyChanged |= zone.setState(CaptureZoneData.ZoneState.SECURE);
+                    anyChanged |= zone.setAttackerTeam("");
+                    if (wasCaptured) onRecaptured(level, settlement, zone);
+                }
                 continue;
             }
             TeamSets teams = teamsForWar(settlements, war);
+            if (!zone.attackerTeam().isBlank() && !zone.attackerTeam().equals(teams.primaryAttacker)) {
+                if (zone.type() == CaptureZoneData.ZoneType.MAIN) liberate(level, settlement);
+                anyChanged |= zone.setProgress(0D);
+                anyChanged |= zone.setCaptured(false);
+                anyChanged |= zone.setAttackerTeam("");
+                anyChanged |= zone.setState(CaptureZoneData.ZoneState.SECURE);
+            }
+            boolean secondariesRemain = zone.type() == CaptureZoneData.ZoneType.MAIN && !zone.captured()
+                    && (!requirementsMet(root, settlement) || data.zonesFor(settlement.getId()).stream()
+                    .anyMatch(other -> other.type() == CaptureZoneData.ZoneType.SECONDARY && !other.captured()));
             CapturePresence presence = presence(level, zone, teams.attackers, teams.defenders);
             CaptureZoneData.ZoneState before = zone.state();
             if (presence.attackers>0 && presence.defenders>0) {
@@ -203,6 +231,7 @@ public final class CaptureZoneManager {
                 continue;
             }
             if (presence.attackers>0) {
+                if (secondariesRemain) { anyChanged |= zone.setState(CaptureZoneData.ZoneState.LOCKED); continue; }
                 String attacker = teams.primaryAttacker;
                 anyChanged |= zone.setAttackerTeam(attacker);
                 int baseSeconds = captureSeconds(root, settlement, zone);
@@ -211,25 +240,29 @@ public final class CaptureZoneManager {
                 anyChanged |= zone.setProgress(zone.progress() + speed / Math.max(1D, baseSeconds)); // process called once/sec
                 if (zone.progress() >= 1D) {
                     anyChanged |= zone.setState(CaptureZoneData.ZoneState.CAPTURED);
-                    if (before != CaptureZoneData.ZoneState.CAPTURED) onCaptured(level, settlement, zone, war, attacker);
+                    if (!zone.captured()) {
+                        anyChanged |= zone.setCaptured(true);
+                        onCaptured(level, settlement, zone, war, attacker);
+                    }
                 } else anyChanged |= zone.setState(CaptureZoneData.ZoneState.UNDER_ATTACK);
             } else if (presence.defenders>0 && zone.progress()>0D) {
                 anyChanged |= zone.setProgress(zone.progress()-0.0125D * Math.min(4, presence.defenders));
                 if (zone.progress() <= 0D) {
                     anyChanged |= zone.setState(CaptureZoneData.ZoneState.SECURE); anyChanged |= zone.setAttackerTeam("");
-                    if (before == CaptureZoneData.ZoneState.CAPTURED || !data.occupyingTeam(settlement.getId()).isBlank()) onRecaptured(level, settlement, zone);
-                } else if (before != CaptureZoneData.ZoneState.CAPTURED) anyChanged |= zone.setState(CaptureZoneData.ZoneState.UNDER_ATTACK);
-            } else if (zone.progress() <= 0D) anyChanged |= zone.setState(CaptureZoneData.ZoneState.SECURE);
+                    boolean wasCaptured = zone.captured();
+                    anyChanged |= zone.setCaptured(false);
+                    if (wasCaptured) onRecaptured(level, settlement, zone);
+                } else anyChanged |= zone.setState(zone.captured() ? CaptureZoneData.ZoneState.CAPTURED : CaptureZoneData.ZoneState.UNDER_ATTACK);
+            } else anyChanged |= zone.setState(zone.captured() ? CaptureZoneData.ZoneState.CAPTURED
+                    : secondariesRemain ? CaptureZoneData.ZoneState.LOCKED
+                    : zone.progress() > 0D ? CaptureZoneData.ZoneState.UNDER_ATTACK : CaptureZoneData.ZoneState.SECURE);
         }
         if (anyChanged) { data.setDirty(); broadcast(server); }
     }
 
     private static int captureSeconds(ServerLevel root, SettlementData.SettlementRecord settlement, CaptureZoneData.CaptureZoneRecord zone) {
         if (zone.type()==CaptureZoneData.ZoneType.SECONDARY) return SettlementConfig.CAPTURE_SECONDARY_SECONDS.get();
-        CampaignSystemsData extra=CampaignSystemsData.get(root);
-        boolean major = settlement.getCivilianPopulation() >= SettlementConfig.MAJOR_CITY_MIN_POPULATION.get()
-                && settlement.getStability() >= SettlementConfig.MAJOR_CITY_MIN_STABILITY.get()
-                && extra.prosperity(settlement.getId()) >= SettlementConfig.MAJOR_CITY_MIN_PROSPERITY.get();
+        boolean major = settlement.getRank() == SettlementData.SettlementRank.MAJOR_CITY;
         return major ? SettlementConfig.CAPTURE_MAIN_MAJOR_CITY_SECONDS.get() : SettlementConfig.CAPTURE_MAIN_SECONDS.get();
     }
 
@@ -247,11 +280,17 @@ public final class CaptureZoneManager {
     private static void onRecaptured(ServerLevel level, SettlementData.SettlementRecord settlement, CaptureZoneData.CaptureZoneRecord zone) {
         MinecraftForge.EVENT_BUS.post(new CaptureZoneStateEvent(level, CaptureZoneView.from(zone), CaptureZoneStateEvent.Transition.RECAPTURED));
         if (zone.type()==CaptureZoneData.ZoneType.MAIN) {
-            CaptureZoneData data=CaptureZoneData.get(level);
-            String old=data.occupyingTeam(settlement.getId()); data.setOccupyingTeam(settlement.getId(), "");
-            settlement.addChronicle("The Main Capture Zone was retaken and the occupation was lifted.");
-            MinecraftForge.EVENT_BUS.post(new SettlementOccupationEvent(level, settlement.getId(), old, SettlementOccupationEvent.Transition.LIBERATED));
+            liberate(level, settlement);
         }
+    }
+
+    private static void liberate(ServerLevel level, SettlementData.SettlementRecord settlement) {
+        CaptureZoneData data = CaptureZoneData.get(level);
+        String old = data.occupyingTeam(settlement.getId());
+        if (old.isBlank()) return;
+        data.setOccupyingTeam(settlement.getId(), "");
+        settlement.addChronicle("The military occupation was lifted.");
+        MinecraftForge.EVENT_BUS.post(new SettlementOccupationEvent(level, settlement.getId(), old, SettlementOccupationEvent.Transition.LIBERATED));
     }
 
     private static CampaignData.WarRecord activeAttackOn(CampaignData campaign, String settlementId) {
@@ -281,7 +320,7 @@ public final class CaptureZoneManager {
         AABB box=new AABB(zone.pos1().getX(), level.getMinBuildHeight(), zone.pos1().getZ(), zone.pos2().getX()+1D, level.getMaxBuildHeight(), zone.pos2().getZ()+1D);
         int a=0,d=0;
         for (ServerPlayer player : level.players()) {
-            if (!player.isAlive() || !box.contains(player.position())) continue;
+            if (!player.isAlive() || player.isSpectator() || !box.contains(player.position())) continue;
             String team=teamId(player); if (attackers.contains(team)) a++; else if(defenders.contains(team)) d++;
         }
         for (AbstractRecruitEntity recruit : level.getEntitiesOfClass(AbstractRecruitEntity.class, box, Entity::isAlive)) {

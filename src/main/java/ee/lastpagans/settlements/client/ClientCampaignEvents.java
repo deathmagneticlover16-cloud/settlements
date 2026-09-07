@@ -60,7 +60,7 @@ public final class ClientCampaignEvents {
             int x = (int) Math.round(offsetX + marker.x() * scale);
             int y = (int) Math.round(offsetZ + marker.z() * scale);
             int size = marker.capital() ? 9 : switch (marker.rank()) { case "MAJOR_CITY" -> 8; case "CITY" -> 7; case "TOWN" -> 6; default -> 5; };
-            int color = marker.factionId().isBlank() ? 0xFFE0D2A2 : 0xFFFFC65D;
+            int color = marker.factionId().isBlank() ? 0xFFE0D2A2 : 0xFF000000 | marker.factionColor();
             graphics.fill(x - size, y - size, x + size, y + size, 0xCC111111);
             graphics.fill(x - size + 1, y - size + 1, x + size - 1, y + size - 1, color);
             graphics.drawCenteredString(Minecraft.getInstance().font, marker.capital() ? "◆" : marker.rank().equals("MAJOR_CITY") || marker.rank().equals("CITY") ? "■" : marker.rank().equals("TOWN") ? "▪" : "•", x, y - 4, 0xFF222222);
@@ -75,6 +75,6 @@ public final class ClientCampaignEvents {
         }
     }
 
-    private static String pretty(String value) { return value.charAt(0) + value.substring(1).toLowerCase(java.util.Locale.ROOT); }
+    private static String pretty(String value) { return value.charAt(0) + value.substring(1).toLowerCase(java.util.Locale.ROOT).replace('_', ' '); }
     private static void request(OpenCampaignRequestPacket.ScreenTarget target) { SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target)); }
 }

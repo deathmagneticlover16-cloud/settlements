@@ -1,0 +1,47 @@
+SETTLEMENTS 2.6.0 — TEST PLAN
+
+AUTOMATED
+Run gradlew.bat build (or regressionChecks alone). Checks exercise actual mapped
+Minecraft classes: banner sanitization, capture geometry/control persistence,
+treasury accounting, dye-name persistence, capital/rank research separation,
+and network round trips with more than 256 capture objectives.
+
+MANUAL — FRESH TEST WORLD, MATCHING CLIENT/SERVER BUILDS
+1. Found an independent settlement in linked Recruits claims. Check its initial
+   Main zone, founding cooldown and shared treasury. If the initial footprint
+   cannot fit, designate a valid Main with Manage > Capture.
+2. Advance Village -> Town -> City -> Major City. Town requires population 100,
+   Prosperity 35, Stability 45; City 250/55/55. Major City defaults to population
+   500, Stability 65 and Prosperity 70 (server configurable). All require housing
+   for registered villagers and the next tier's capture objectives.
+3. Verify a Capital at Village/Town/City rank does not grant Tier IV research.
+   Verify an established Major City does, including a non-capital Major City.
+4. Faction creation: enter a name, select government/capital and colors, design
+   1–6 pattern layers, return to Identity and resize the window. Preserve drafts.
+   Force a validation error (insufficient funds or duplicate name), then correct it
+   without losing the banner. Confirm treasury cost and transfer happen once.
+5. Repeat colors/banner tests with Dye Depot 1.3.0 on both sides, including teal,
+   navy and another added dye. Restart and verify saved names, banner and map color.
+   Recruits unit/chat colors are nearest-palette approximations. Repeat without
+   Dye Depot in a separate fresh world. Full Forge mixin/render testing is manual.
+6. Drag taxation to 50, 83 and 150%; verify the committed value, income and effects.
+   Use keyboard arrows and verify the value persists after reopening.
+7. Deposit/withdraw physical currency, recruit professionals, hire mercenaries,
+   process upkeep, send aid and resolve treasury payments. Two settlements in one
+   polity must show the same balance; no action should spend a separate local wallet.
+8. Capture placement: reject undersized, unlinked, nested, overlapping and too-close
+   zones. Replace Main using an overlapping old footprint. Add a spare Secondary,
+   remove the old one, and verify tier minimums remain satisfied. Editing must fail
+   during war/occupation. Claim unlinking must fail while it contains an objective.
+9. In a war targeting the defender settlement, take secondaries then Main. Confirm
+   occupation and a single event/reward per capture. Contest/leave/re-enter an
+   already captured objective; this must not repeatedly add capture war score.
+10. Retake a Secondary and then the Main. Defenders must be able to liberate the
+    Main even while its attack prerequisites are locked. End the war: occupation
+    clears and all objectives recover. Repeat across save/reload; spectators must
+    not capture. Legal settlement ownership must remain separate from occupation.
+11. Open all campaign tabs at multiple GUI scales. Test dropdown overlays and long
+    names; verify research edges, Major City messaging and no Bard controls.
+
+Existing commands are listed in docs/legacy/2.5.4/COMMANDS-v2.5.4.txt; see
+COMMANDS-v2.6.0.txt for the 2.6 context and source of truth.

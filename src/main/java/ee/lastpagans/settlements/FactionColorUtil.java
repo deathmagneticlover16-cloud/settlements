@@ -20,6 +20,13 @@ public final class FactionColorUtil {
 
     private FactionColorUtil() {}
 
+    public static boolean isKnown(String name) {
+        if (name == null) return false;
+        String wanted = name.trim();
+        return java.util.Arrays.stream(DyeColor.values())
+                .anyMatch(color -> color.getName().equalsIgnoreCase(wanted) || color.name().equalsIgnoreCase(wanted));
+    }
+
     public static DyeColor dye(String name) {
         String wanted = name == null ? "" : name.trim().toLowerCase(Locale.ROOT);
         for (DyeColor color : DyeColor.values()) {

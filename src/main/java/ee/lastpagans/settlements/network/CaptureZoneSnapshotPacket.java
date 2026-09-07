@@ -20,15 +20,18 @@ public record CaptureZoneSnapshotPacket(List<CaptureZoneView> zones) {
         for (CaptureZoneView zone : packet.zones) {
             buffer.writeUUID(zone.id()); buffer.writeUtf(zone.settlementId(), 64); buffer.writeEnum(zone.type()); buffer.writeUtf(zone.dimension(), 128);
             buffer.writeBlockPos(zone.pos1()); buffer.writeBlockPos(zone.pos2()); buffer.writeDouble(zone.progress()); buffer.writeEnum(zone.state()); buffer.writeUtf(zone.attackerTeam(), 64);
+            buffer.writeBoolean(zone.captured());
         }
     }
     public static CaptureZoneSnapshotPacket decode(FriendlyByteBuf buffer) {
-        int count = Math.min(256, buffer.readVarInt());
+        int count = buffer.readVarInt();
+        if (count < 0 || count > 65536 || count > buffer.readableBytes() / 44) throw new IllegalArgumentException("Invalid capture zone count");
         List<CaptureZoneView> zones = new ArrayList<>(count);
         for (int i=0;i<count;i++) {
             UUID id=buffer.readUUID(); String settlement=buffer.readUtf(64); CaptureZoneData.ZoneType type=buffer.readEnum(CaptureZoneData.ZoneType.class); String dimension=buffer.readUtf(128);
             BlockPos p1=buffer.readBlockPos(), p2=buffer.readBlockPos(); double progress=buffer.readDouble(); CaptureZoneData.ZoneState state=buffer.readEnum(CaptureZoneData.ZoneState.class); String attacker=buffer.readUtf(64);
-            zones.add(new CaptureZoneView(id, settlement, type, dimension, p1, p2, progress, state, attacker, state==CaptureZoneData.ZoneState.LOCKED));
+            boolean captured = buffer.readBoolean();
+            zones.add(new CaptureZoneView(id, settlement, type, dimension, p1, p2, progress, state, attacker, state==CaptureZoneData.ZoneState.LOCKED, captured));
         }
         return new CaptureZoneSnapshotPacket(List.copyOf(zones));
     }

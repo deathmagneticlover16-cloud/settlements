@@ -532,7 +532,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "SECONDARY OBJECTIVES", left + 30, top + 202, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal("Zones must stay inside linked claims, meet the minimum size, never overlap, and be spread across the settlement."), left + 270, top + 212, 240, 0xFFAAAAAA);
         int y = top + 258;
-        for (int i = 0; i < Math.min(3, zones.size()); i++) {
+        for (int i = 0; i < Math.min(4, zones.size()); i++) {
             var zone = zones.get(i);
             graphics.drawString(font, zone.type().name() + " · " + zone.state().name() + " · " + Math.round(zone.progress() * 100D) + "%",
                     left + 270, y + i * 12, 0xFFBBBBBB, false);

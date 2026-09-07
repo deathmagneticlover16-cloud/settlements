@@ -1,0 +1,13 @@
+SETTLEMENTS 2.6.0 — COMMANDS
+
+Use in-game command completion for the commands registered by SettlementCommands.
+The earlier command reference is retained at docs/legacy/2.5.4/COMMANDS-v2.5.4.txt.
+This continuation does not replace that command tree.
+
+Capture designation: Settlement > Manage > Capture (Main/Secondary Pos 1 and Pos 2).
+Faction creation with dynamic colors and a designed banner: Campaign > Faction.
+Tax slider: Settlement > Treasury.
+Research: Campaign > Research (History Stages required).
+
+Treat old command references to settlement Wealth as State Treasury currency.
+Capital is a political designation; Major City is the urban/research Tier IV rank.
