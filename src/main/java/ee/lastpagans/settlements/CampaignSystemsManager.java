@@ -79,14 +79,13 @@ public final class CampaignSystemsManager {
         int averageDeposit = extra.averageWealthDeposit(settlement.getId(), currentDay, 7);
         // Prosperity is primarily about money actually entering the local economy, not a ruler hoarding a static treasury.
         int economicFlow = extra.hasWealthDepositHistory(settlement.getId())
-                ? Math.min(60, (averageDeposit * 25) / population)
-                : Math.min(40, (settlement.getWealth() * 10) / population); // bootstrap fallback until the settlement has deposit history
-        int reserve = Math.min(10, settlement.getWealth() / Math.max(10, population / 10));
+                ? Math.min(70, (averageDeposit * 25) / population)
+                : 0; // State Treasury is national money, not a local prosperity reserve.
         int foodSecurity = Math.min(10, settlement.getFood() / Math.max(1, settlement.getVillagerCount() * 2));
         int stability = settlement.getStability() / 5;
         int housing = settlement.getFreeHousing() > 0 ? 5 : settlement.getVillagerCount() > settlement.getHousingCapacity() ? -10 : 0;
         int modifiers = extra.modifiers(settlement.getId()).stream().mapToInt(value -> value.prosperity).sum();
-        int result = Math.max(0, Math.min(100, economicFlow + reserve + foodSecurity + stability + housing + modifiers));
+        int result = Math.max(0, Math.min(100, economicFlow + foodSecurity + stability + housing + modifiers));
         extra.setProsperity(settlement.getId(), result);
         return result;
     }
@@ -99,7 +98,7 @@ public final class CampaignSystemsManager {
             updateReligiousUnrest(server, settlement, extra, settlements);
             updateRulerDevotionBenefit(settlement, extra, settlements);
             refreshTaxPolicyModifier(settlement, extra);
-            processTaxes(settlement, extra, day);
+            processTaxes(server.overworld(), settlement, extra, day);
             int prosperity = recalculateProsperity(settlement, extra, day);
             applyDailyModifierEffects(settlement, extra, day);
             updateSettlementTier(server.overworld(), settlement, prosperity, extra);
@@ -126,7 +125,7 @@ public final class CampaignSystemsManager {
         updateReligiousUnrest(server, settlement, extra, settlements);
         updateRulerDevotionBenefit(settlement, extra, settlements);
         refreshTaxPolicyModifier(settlement, extra);
-        processTaxes(settlement, extra, simulatedDay);
+        processTaxes(server.overworld(), settlement, extra, simulatedDay);
         int prosperity = recalculateProsperity(settlement, extra, simulatedDay);
         applyDailyModifierEffects(settlement, extra, simulatedDay);
         updateSettlementTier(server.overworld(), settlement, prosperity, extra);
@@ -134,39 +133,40 @@ public final class CampaignSystemsManager {
     }
 
     public static void refreshTaxPolicyModifier(SettlementData.SettlementRecord settlement, CampaignSystemsData extra) {
-        CampaignSystemsData.TaxPolicy policy = extra.taxPolicy(settlement.getId());
         String modifierId = "tax_policy";
-        if (policy == CampaignSystemsData.TaxPolicy.NORMAL || settlement.getCivilianPopulation() <= 0) {
+        int rate = extra.taxRatePercent(settlement.getId());
+        int stability = extra.taxStabilityPerDay(settlement.getId());
+        int prosperity = extra.taxProsperityModifier(settlement.getId());
+        if ((stability == 0 && prosperity == 0) || settlement.getCivilianPopulation() <= 0) {
             extra.removeModifier(settlement.getId(), modifierId);
             return;
         }
-        String tone = policy == CampaignSystemsData.TaxPolicy.LOW ? "POSITIVE" : "NEGATIVE";
-        String icon = policy == CampaignSystemsData.TaxPolicy.LOW ? "minecraft:emerald" : "minecraft:gold_ingot";
-        String detail = policy == CampaignSystemsData.TaxPolicy.LOW
-                ? "Low taxes leave more wealth in private hands, improving stability and local economic activity at the cost of treasury income."
-                : "High taxes increase treasury income but strain household wealth, reducing stability and prosperity.";
+        String tone = rate < 100 ? "POSITIVE" : "NEGATIVE";
+        String detail = rate < 100
+                ? "Lighter taxation leaves more wealth in private hands, improving public order and local economic activity at the cost of State Treasury income."
+                : "Heavier taxation raises State Treasury income but strains households and the local economy.";
         extra.addModifier(settlement.getId(), new CampaignSystemsData.ModifierRecord(
-                modifierId, policy.displayName() + " Taxation", icon, tone, "Tax policy", detail,
-                policy.stabilityPerDay(), policy.prosperityModifier(), 0, 0L));
+                modifierId, extra.taxDisplayName(settlement.getId()) + " Taxation (" + rate + "%)",
+                "settlements:textures/gui/icons/wealth.png", tone, "Tax policy", detail,
+                stability, prosperity, 0, 0L));
     }
 
-    private static void processTaxes(SettlementData.SettlementRecord settlement, CampaignSystemsData extra, long day) {
+    private static void processTaxes(ServerLevel level, SettlementData.SettlementRecord settlement, CampaignSystemsData extra, long day) {
         if (!extra.beginTaxDay(settlement.getId(), day)) return;
         int population = Math.max(0, settlement.getCivilianPopulation());
         if (population <= 0) {
             extra.setLastTaxIncome(settlement.getId(), 0);
             return;
         }
-        CampaignSystemsData.TaxPolicy policy = extra.taxPolicy(settlement.getId());
         int populationPerWealth = Math.max(1, SettlementConfig.TAX_POPULATION_PER_WEALTH.get());
         int base = Math.max(1, (population + populationPerWealth - 1) / populationPerWealth);
         int prosperity = extra.prosperity(settlement.getId());
         int minimumEfficiency = SettlementConfig.TAX_MIN_COLLECTION_EFFICIENCY_PERCENT.get();
         int efficiency = minimumEfficiency + (int)Math.round((100 - minimumEfficiency) * (prosperity / 100.0D));
-        int income = (int)Math.round(base * (policy.ratePercent() / 100.0D) * (efficiency / 100.0D));
+        int income = (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D) * (efficiency / 100.0D));
         income = Math.max(0, income);
         if (income > 0) {
-            settlement.addWealth(income, "");
+            StateTreasury.change(level, settlement, income);
             extra.recordWealthDeposit(settlement.getId(), income, day);
         }
         extra.setLastTaxIncome(settlement.getId(), income);
@@ -174,13 +174,12 @@ public final class CampaignSystemsManager {
 
     public static int projectedTaxIncome(SettlementData.SettlementRecord settlement, CampaignSystemsData extra) {
         if (settlement == null || extra == null || settlement.getCivilianPopulation() <= 0) return 0;
-        CampaignSystemsData.TaxPolicy policy = extra.taxPolicy(settlement.getId());
         int populationPerWealth = Math.max(1, SettlementConfig.TAX_POPULATION_PER_WEALTH.get());
         int base = Math.max(1, (settlement.getCivilianPopulation() + populationPerWealth - 1) / populationPerWealth);
         int prosperity = extra.prosperity(settlement.getId());
         int minimumEfficiency = SettlementConfig.TAX_MIN_COLLECTION_EFFICIENCY_PERCENT.get();
         int efficiency = minimumEfficiency + (int)Math.round((100 - minimumEfficiency) * (prosperity / 100.0D));
-        return Math.max(0, (int)Math.round(base * (policy.ratePercent() / 100.0D) * (efficiency / 100.0D)));
+        return Math.max(0, (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D) * (efficiency / 100.0D)));
     }
 
     private static void updateRulerDevotionBenefit(SettlementData.SettlementRecord settlement, CampaignSystemsData extra, SettlementData settlements) {
@@ -281,7 +280,8 @@ public final class CampaignSystemsManager {
         if (settlement.getRank() == SettlementData.SettlementRank.CAPITAL) return;
         if (settlement.getRank() == SettlementData.SettlementRank.VILLAGE
                 && settlement.getCivilianPopulation() >= 100 && prosperity >= 35
-                && settlement.getStability() >= 45 && settlement.getHousingCapacity() >= settlement.getVillagerCount()) {
+                && settlement.getStability() >= 45 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
+                && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.TOWN)) {
             settlement.setRank(SettlementData.SettlementRank.TOWN);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 2L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The settlement grew into a Town. Civic Pride spread through the population.");
@@ -294,7 +294,8 @@ public final class CampaignSystemsManager {
         }
         if (settlement.getRank() == SettlementData.SettlementRank.TOWN && settlement.getFactionTeam().isBlank()
                 && settlement.getCivilianPopulation() >= 250 && prosperity >= 60 && settlement.getStability() >= 60
-                && settlement.getHousingCapacity() >= settlement.getVillagerCount()) {
+                && settlement.getHousingCapacity() >= settlement.getVillagerCount()
+                && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.CITY_STATE)) {
             settlement.setRank(SettlementData.SettlementRank.CITY_STATE);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 3L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The independent settlement emerged as a City-State.");

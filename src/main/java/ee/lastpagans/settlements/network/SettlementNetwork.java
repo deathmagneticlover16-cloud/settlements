@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SettlementNetwork {
-    private static final String PROTOCOL = "35";
+    private static final String PROTOCOL = "36";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Settlements.MOD_ID, "main"),
@@ -41,6 +41,7 @@ public final class SettlementNetwork {
         CHANNEL.messageBuilder(ResearchSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(ResearchSnapshotPacket::encode).decoder(ResearchSnapshotPacket::decode).consumerMainThread(ResearchSnapshotPacket::handle).add();
         CHANNEL.messageBuilder(ResearchActionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(ResearchActionPacket::encode).decoder(ResearchActionPacket::decode).consumerMainThread(ResearchActionPacket::handle).add();
         CHANNEL.messageBuilder(MercenaryRosterSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(MercenaryRosterSnapshotPacket::encode).decoder(MercenaryRosterSnapshotPacket::decode).consumerMainThread(MercenaryRosterSnapshotPacket::handle).add();
-        CHANNEL.messageBuilder(MercenaryRosterActionPacket.class, id, NetworkDirection.PLAY_TO_SERVER).encoder(MercenaryRosterActionPacket::encode).decoder(MercenaryRosterActionPacket::decode).consumerMainThread(MercenaryRosterActionPacket::handle).add();
+        CHANNEL.messageBuilder(MercenaryRosterActionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(MercenaryRosterActionPacket::encode).decoder(MercenaryRosterActionPacket::decode).consumerMainThread(MercenaryRosterActionPacket::handle).add();
+        CHANNEL.messageBuilder(CaptureZoneSnapshotPacket.class, id, NetworkDirection.PLAY_TO_CLIENT).encoder(CaptureZoneSnapshotPacket::encode).decoder(CaptureZoneSnapshotPacket::decode).consumerMainThread(CaptureZoneSnapshotPacket::handle).add();
     }
 }

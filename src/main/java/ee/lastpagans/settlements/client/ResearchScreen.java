@@ -84,7 +84,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         graphics.fill(left + 4, top + 4, left + W - 4, top + 56, 0xFF3B3023);
         graphics.drawCenteredString(font, "RESEARCH — " + snapshot.polityName(), left + W / 2, top + 13, 0xFFFFE2A3);
         graphics.drawCenteredString(font, snapshot.historyStagesInstalled()
-                        ? "History Stages · Settlement research tier " + roman(snapshot.researchTier()) + " · " + snapshot.speedPercent() + "% speed"
+                        ? "History Stages · " + tierName(snapshot.researchTier()) + " (Tier " + roman(snapshot.researchTier()) + ") · " + snapshot.speedPercent() + "% speed"
                         : "History Stages not installed — research unavailable",
                 left + W / 2, top + 33, snapshot.historyStagesInstalled() ? 0xFFA8E39D : 0xFFFFA27A);
 
@@ -184,7 +184,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         graphics.drawString(font, entry.completed() ? "Completed" : entry.available() ? "Available" : "Locked", x, y + 48,
                 entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFE2A3 : 0xFFFF8A8A, false);
         graphics.drawString(font, "Base time: " + duration(entry.durationSeconds()), x, y + 64, 0xFFCCCCCC, false);
-        String tier = "Settlement tier gate: " + roman(entry.requiredTier()) + ("EXACT".equalsIgnoreCase(entry.tierMode()) ? " exactly" : "+");
+        String tier = "Settlement gate: " + tierName(entry.requiredTier()) + " (Tier " + roman(entry.requiredTier()) + ")" + ("EXACT".equalsIgnoreCase(entry.tierMode()) ? " exactly" : "+");
         boolean tierAllowed = "EXACT".equalsIgnoreCase(entry.tierMode())
                 ? snapshot.researchTier() == entry.requiredTier()
                 : snapshot.researchTier() >= entry.requiredTier();
@@ -248,6 +248,10 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         if (h > 0) return h + "h " + m + "m";
         if (m > 0) return m + "m " + s + "s";
         return s + "s";
+    }
+
+    private static String tierName(int value) {
+        return switch (value) { case 1 -> "Village"; case 2 -> "Town"; case 3 -> "City"; default -> "Major City"; };
     }
 
     private static String roman(int value) {

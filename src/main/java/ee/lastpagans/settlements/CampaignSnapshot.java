@@ -49,7 +49,7 @@ public record CampaignSnapshot(
         }
 
         int population = holdings.stream().mapToInt(SettlementData.SettlementRecord::getDisplayedPopulation).sum();
-        int wealth = holdings.stream().mapToInt(SettlementData.SettlementRecord::getWealth).sum();
+        int wealth = holdings.isEmpty() ? 0 : StateTreasury.balance(player.serverLevel(), holdings.get(0));
         int food = holdings.stream().mapToInt(SettlementData.SettlementRecord::getFood).sum();
         int maximum = holdings.stream().mapToInt(SettlementData.SettlementRecord::getMaximumManpower).sum();
         int available = holdings.stream().mapToInt(SettlementData.SettlementRecord::getAvailableManpower).sum();

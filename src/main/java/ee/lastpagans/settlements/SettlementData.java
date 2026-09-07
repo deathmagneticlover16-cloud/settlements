@@ -382,7 +382,6 @@ public final class SettlementData extends SavedData {
         private int pendingContracts;
         private long lastFoodDay = Long.MIN_VALUE;
         private long lastPlagueCheckDay = Long.MIN_VALUE;
-        private long lastBardStabilityDay = Long.MIN_VALUE;
         private long lastContractGameTime = Long.MIN_VALUE;
         private String notice = "";
 
@@ -442,7 +441,6 @@ public final class SettlementData extends SavedData {
             pendingContracts = Math.max(0, tag.getInt("PendingContracts"));
             lastFoodDay = tag.getLong("LastFoodDay");
             lastPlagueCheckDay = tag.contains("LastPlagueCheckDay") ? tag.getLong("LastPlagueCheckDay") : Long.MIN_VALUE;
-            lastBardStabilityDay = tag.contains("LastBardStabilityDay") ? tag.getLong("LastBardStabilityDay") : Long.MIN_VALUE;
             lastContractGameTime = tag.contains("LastContractGameTime", Tag.TAG_LONG) ? tag.getLong("LastContractGameTime") : Long.MIN_VALUE;
             notice = cleanText(tag.getString("Notice"), "", 160);
             factionTeam = tag.getString("FactionTeam");
@@ -525,7 +523,6 @@ public final class SettlementData extends SavedData {
             tag.putInt("PendingContracts", pendingContracts);
             tag.putLong("LastFoodDay", lastFoodDay);
             tag.putLong("LastPlagueCheckDay", lastPlagueCheckDay);
-            tag.putLong("LastBardStabilityDay", lastBardStabilityDay);
             if (lastContractGameTime != Long.MIN_VALUE) tag.putLong("LastContractGameTime", lastContractGameTime);
             tag.putString("Notice", notice);
             tag.putString("FactionTeam", factionTeam);
@@ -1062,14 +1059,7 @@ public final class SettlementData extends SavedData {
             return true;
         }
 
-        public boolean applyBardStability(long day, int amount) {
-            if (amount <= 0 || lastBardStabilityDay == day) return false;
-            lastBardStabilityDay = day;
-            changeStability(amount);
-            addChronicle("Music at the Town Square lifted local spirits (Stability +" + amount + ").");
-            dirty();
-            return true;
-        }
+
 
         public void processDaily(long day) {
             processDaily(day, null);

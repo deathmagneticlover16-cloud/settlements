@@ -48,6 +48,7 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_RESERVE;
     public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_COST;
     public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_MAX_PENDING;
+    public static final ForgeConfigSpec.IntValue SETTLEMENT_FOUNDING_COOLDOWN_MINUTES;
     public static final ForgeConfigSpec.IntValue RESEARCH_FALLBACK_HOURS;
     public static final ForgeConfigSpec.IntValue SCHOLARLY_RESEARCH_BONUS_PERCENT;
     public static final ForgeConfigSpec.IntValue RESEARCH_MAX_PROSPERITY_BONUS_PERCENT;
@@ -55,11 +56,15 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue PLAGUE_DAILY_CHANCE_PER_10000;
     public static final ForgeConfigSpec.IntValue HEALTHY_PLAGUE_CHANCE_PERCENT;
     public static final ForgeConfigSpec.IntValue PLAGUE_DURATION_HOURS;
-    public static final ForgeConfigSpec.IntValue BARD_MORALE_BONUS;
-    public static final ForgeConfigSpec.IntValue BARD_MAX_MORALE_STACKS;
-    public static final ForgeConfigSpec.IntValue BARD_FIELD_RADIUS;
-    public static final ForgeConfigSpec.IntValue BARD_TOWN_SQUARE_RADIUS;
-    public static final ForgeConfigSpec.IntValue BARD_STABILITY_BONUS;
+    public static final ForgeConfigSpec.IntValue CAPTURE_ZONE_MIN_SIZE;
+    public static final ForgeConfigSpec.IntValue CAPTURE_ZONE_MIN_SPACING;
+    public static final ForgeConfigSpec.IntValue CAPTURE_SECONDARY_SECONDS;
+    public static final ForgeConfigSpec.IntValue CAPTURE_MAIN_SECONDS;
+    public static final ForgeConfigSpec.IntValue CAPTURE_MAIN_MAJOR_CITY_SECONDS;
+    public static final ForgeConfigSpec.IntValue CAPTURE_MAX_SPEED_TROOPS;
+    public static final ForgeConfigSpec.IntValue MAJOR_CITY_MIN_POPULATION;
+    public static final ForgeConfigSpec.IntValue MAJOR_CITY_MIN_STABILITY;
+    public static final ForgeConfigSpec.IntValue MAJOR_CITY_MIN_PROSPERITY;
     public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_ENABLED;
     public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_REQUIRE_TOWN;
     public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_POPULATION;
@@ -175,6 +180,8 @@ public final class SettlementConfig {
                 .defineInRange("settlerContractFoodCost", 10, 0, 1000000);
         SETTLER_CONTRACT_MAX_PENDING = builder.comment("Maximum unclaimed Settler Contracts that one settlement can accumulate.")
                 .defineInRange("settlerContractMaxPending", 3, 1, 64);
+        SETTLEMENT_FOUNDING_COOLDOWN_MINUTES = builder.comment("Active-server minutes one player must wait between founding settlements. Prevents joke-spam without imposing a hard daily limit.")
+                .defineInRange("settlementFoundingCooldownMinutes", 10, 0, 1440);
         builder.pop();
 
         builder.push("character_traits");
@@ -184,17 +191,29 @@ public final class SettlementConfig {
                 .defineInRange("healthyPlagueChancePercent", 50, 0, 100);
         builder.pop();
 
-        builder.push("bards");
-        BARD_MORALE_BONUS = builder.comment("Recruit morale bonus supplied by each qualifying town or nearby field Bard source.")
-                .defineInRange("moraleBonusPerBard", 4, 0, 50);
-        BARD_MAX_MORALE_STACKS = builder.comment("Maximum number of unique Bard morale sources that can stack for one recruit.")
-                .defineInRange("maximumMoraleStacks", 3, 1, 16);
-        BARD_FIELD_RADIUS = builder.comment("Radius in blocks for a designated field Bard to support nearby managed soldiers while campaigning outside town.")
-                .defineInRange("fieldMoraleRadius", 32, 4, 128);
-        BARD_TOWN_SQUARE_RADIUS = builder.comment("Radius around the Town Square within which an instrument-holding Bard counts as performing.")
-                .defineInRange("townSquarePerformanceRadius", 12, 2, 64);
-        BARD_STABILITY_BONUS = builder.comment("Daily Stability gained while a designated Bard is performing at the Town Square.")
-                .defineInRange("townSquareStabilityBonus", 1, 0, 10);
+
+        builder.push("capture_zones");
+        CAPTURE_ZONE_MIN_SIZE = builder.comment("Minimum width and depth of a settlement Capture Zone.")
+                .defineInRange("minimumSize", 12, 6, 128);
+        CAPTURE_ZONE_MIN_SPACING = builder.comment("Minimum horizontal distance between Capture Zone centres in the same settlement.")
+                .defineInRange("minimumSpacing", 24, 0, 512);
+        CAPTURE_SECONDARY_SECONDS = builder.comment("Base uncontested seconds required to capture a secondary objective.")
+                .defineInRange("secondaryCaptureSeconds", 120, 10, 3600);
+        CAPTURE_MAIN_SECONDS = builder.comment("Base uncontested seconds required to capture a normal Main objective after secondaries fall.")
+                .defineInRange("mainCaptureSeconds", 180, 10, 7200);
+        CAPTURE_MAIN_MAJOR_CITY_SECONDS = builder.comment("Base uncontested seconds required to capture a Major City's Main objective.")
+                .defineInRange("majorCityMainCaptureSeconds", 420, 10, 14400);
+        CAPTURE_MAX_SPEED_TROOPS = builder.comment("Attacker count at which extra troops stop accelerating a Capture Zone.")
+                .defineInRange("maximumCaptureSpeedTroops", 20, 1, 200);
+        builder.pop();
+
+        builder.push("major_city");
+        MAJOR_CITY_MIN_POPULATION = builder.comment("Minimum civilian population for Research Tier IV / Major City status.")
+                .defineInRange("minimumPopulation", 500, 0, 1000000);
+        MAJOR_CITY_MIN_STABILITY = builder.comment("Minimum Stability for Major City research status.")
+                .defineInRange("minimumStability", 65, 0, 100);
+        MAJOR_CITY_MIN_PROSPERITY = builder.comment("Minimum Prosperity for Major City research status.")
+                .defineInRange("minimumProsperity", 70, 0, 100);
         builder.pop();
 
         builder.push("events");

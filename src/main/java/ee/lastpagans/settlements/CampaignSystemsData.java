@@ -30,6 +30,7 @@ public final class CampaignSystemsData extends SavedData {
     private final Map<UUID, Long> lastHolyVisitDay = new HashMap<>();
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<UUID, Integer> divorceCount = new HashMap<>();
+    private final Map<UUID, Long> lastSettlementFoundingGameTime = new HashMap<>();
     private final Map<String, Integer> prosperity = new HashMap<>();
     /** Settlement tax policy and daily collection history. */
     private final Map<String, Integer> taxPolicies = new HashMap<>();
@@ -78,6 +79,7 @@ public final class CampaignSystemsData extends SavedData {
         readUuidLongMap(tag, "LastHolyVisitDay", data.lastHolyVisitDay);
         readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
         readUuidIntMap(tag, "DivorceCount", data.divorceCount);
+        readUuidLongMap(tag, "LastSettlementFoundingGameTime", data.lastSettlementFoundingGameTime);
         readStringIntMap(tag, "Prosperity", data.prosperity);
         readStringIntMap(tag, "TaxPolicies", data.taxPolicies);
         readStringLongMap(tag, "LastTaxDay", data.lastTaxDay);
@@ -199,6 +201,7 @@ public final class CampaignSystemsData extends SavedData {
         writeUuidLongMap(tag, "LastHolyVisitDay", lastHolyVisitDay);
         writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
         writeUuidIntMap(tag, "DivorceCount", divorceCount);
+        writeUuidLongMap(tag, "LastSettlementFoundingGameTime", lastSettlementFoundingGameTime);
         writeStringIntMap(tag, "Prosperity", prosperity);
         writeStringIntMap(tag, "TaxPolicies", taxPolicies);
         writeStringLongMap(tag, "LastTaxDay", lastTaxDay);
@@ -273,21 +276,49 @@ public final class CampaignSystemsData extends SavedData {
     public void markHolyVisit(UUID player, long day) { if (player != null) { lastHolyVisitDay.put(player, day); setDirty(); } }
     public void markPrayer(UUID player, long day) { if (player != null) { lastPrayerDay.put(player, day); setDirty(); } }
     public int divorceCount(UUID player) { return divorceCount.getOrDefault(player, 0); }
+    public long lastSettlementFoundingGameTime(UUID player) { return player == null ? Long.MIN_VALUE / 4 : lastSettlementFoundingGameTime.getOrDefault(player, Long.MIN_VALUE / 4); }
+    public void markSettlementFounded(UUID player, long gameTime) { if (player != null) { lastSettlementFoundingGameTime.put(player, Math.max(0L, gameTime)); setDirty(); } }
     public int incrementDivorceCount(UUID player) { if (player == null) return 0; int value = divorceCount(player) + 1; divorceCount.put(player, value); setDirty(); return value; }
 
     public int prosperity(String settlement) { return prosperity.getOrDefault(SettlementData.normalizeId(settlement), 0); }
     public void setProsperity(String settlement, int value) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
 
-    public TaxPolicy taxPolicy(String settlement) {
+    /** Continuous taxation policy from 50% (low) through 100% (normal) to 150% (high). */
+    public int taxRatePercent(String settlement) {
         String id = SettlementData.normalizeId(settlement);
-        return TaxPolicy.fromOrdinal(taxPolicies.getOrDefault(id, TaxPolicy.NORMAL.ordinal()));
+        return clamp(taxPolicies.getOrDefault(id, 100), 50, 150);
     }
-    public void setTaxPolicy(String settlement, TaxPolicy policy) {
+    public void setTaxRatePercent(String settlement, int percent) {
         String id = SettlementData.normalizeId(settlement);
         if (id.isBlank()) return;
-        TaxPolicy safe = policy == null ? TaxPolicy.NORMAL : policy;
-        if (safe == TaxPolicy.NORMAL) taxPolicies.remove(id); else taxPolicies.put(id, safe.ordinal());
+        int safe = clamp(percent, 50, 150);
+        if (safe == 100) taxPolicies.remove(id); else taxPolicies.put(id, safe);
         setDirty();
+    }
+    public String taxDisplayName(String settlement) {
+        int rate = taxRatePercent(settlement);
+        if (rate <= 75) return "Low";
+        if (rate >= 125) return "High";
+        return "Normal";
+    }
+    public int taxStabilityPerDay(String settlement) {
+        int rate = taxRatePercent(settlement);
+        if (rate <= 70) return 1;
+        if (rate >= 140) return -2;
+        if (rate >= 120) return -1;
+        return 0;
+    }
+    public int taxProsperityModifier(String settlement) {
+        return clamp((int)Math.round((100 - taxRatePercent(settlement)) / 10.0D), -5, 5);
+    }
+    /** Legacy helper retained for old call sites while the frontend migrates to the slider. */
+    public TaxPolicy taxPolicy(String settlement) {
+        int rate = taxRatePercent(settlement);
+        return rate <= 75 ? TaxPolicy.LOW : rate >= 125 ? TaxPolicy.HIGH : TaxPolicy.NORMAL;
+    }
+    public void setTaxPolicy(String settlement, TaxPolicy policy) {
+        TaxPolicy safe = policy == null ? TaxPolicy.NORMAL : policy;
+        setTaxRatePercent(settlement, safe.ratePercent());
     }
     public boolean beginTaxDay(String settlement, long day) {
         String id = SettlementData.normalizeId(settlement);

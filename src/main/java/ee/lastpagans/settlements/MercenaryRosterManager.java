@@ -35,7 +35,7 @@ public final class MercenaryRosterManager {
 
     private static void send(ServerPlayer player, SettlementData.SettlementRecord settlement, String message) {
         String factionId = settlement.getFactionTeam();
-        int wealth = factionId.isBlank() ? settlement.getWealth() : CampaignSystemsData.get(player.serverLevel()).factionWealth(factionId);
+        int wealth = StateTreasury.balance(player.serverLevel(), settlement);
         int reliability = factionId.isBlank() ? 0 : CampaignData.get(player.serverLevel()).getFactionReliability(factionId);
         String employerKey = employerKey(settlement);
         MercenaryCompanyData companyData = MercenaryCompanyData.get(player.serverLevel());
@@ -57,7 +57,7 @@ public final class MercenaryRosterManager {
             else if (contract != null && !yours && refusesPoaching(player.serverLevel(), definition, contract, loyalty)) {
                 canHire = false; reason = "The company refuses to break loyalty with " + employer + ".";
             } else if (!yours && wealth < price) {
-                canHire = false; reason = "Requires " + price + " Wealth; available " + wealth + ".";
+                canHire = false; reason = "Requires " + price + " State Treasury; available " + wealth + ".";
             }
             entries.add(new MercenaryRosterSnapshot.Entry(definition.id(), definition.name(), definition.iconItem(), definition.composition(),
                     definition.size(), definition.hireCost(), price, definition.upkeep(), definition.paymentIntervalDays(), loyalty,
@@ -92,8 +92,8 @@ public final class MercenaryRosterManager {
         }
         int price = effectiveHireCost(player.serverLevel(), definition, existing, settlement, currentLoyalty);
         String factionId = settlement.getFactionTeam();
-        int available = factionId.isBlank() ? settlement.getWealth() : CampaignSystemsData.get(player.serverLevel()).factionWealth(factionId);
-        if (available < price) return "Hiring " + definition.name() + " costs " + price + " Wealth; only " + available + " is available.";
+        int available = StateTreasury.balance(player.serverLevel(), settlement);
+        if (available < price) return "Hiring " + definition.name() + " costs " + price + " State Treasury; only " + available + " is available.";
 
         ServerLevel level = SettlementManager.resolveMusterGroundLevel(player.getServer(), settlement);
         if (level == null) return "The Muster Ground dimension is unavailable.";
@@ -133,7 +133,7 @@ public final class MercenaryRosterManager {
             }
         }
 
-        boolean paid = factionId.isBlank() ? settlement.spendWealth(price) : CampaignSystemsData.get(level).spendFactionWealth(factionId, price);
+        boolean paid = StateTreasury.spend(level, settlement, price);
         if (!paid) { spawned.forEach(Entity::discard); return "The treasury changed before the contract completed; no company was hired."; }
 
         if (existing != null) terminateContract(player.getServer(), existing, false, "The company accepted a rival contract.");
@@ -202,7 +202,7 @@ public final class MercenaryRosterManager {
             if (day >= next) {
                 int cycles = (int)Math.min(64L, 1L + Math.max(0L, day - next) / definition.paymentIntervalDays());
                 for (int i = 0; i < cycles; i++) {
-                    boolean paid = contract.factionId().isBlank() ? settlement.spendWealth(definition.upkeep()) : systems.spendFactionWealth(contract.factionId(), definition.upkeep());
+                    boolean paid = StateTreasury.spend(level, settlement, definition.upkeep());
                     if (paid) {
                         missed = 0; data.changeTrust(definition.id(), contract.employerKey(), 2, definition.startingLoyalty());
                         if (!contract.factionId().isBlank()) CampaignManager.changeReliability(server.overworld(), campaign, contract.factionId(), 1);

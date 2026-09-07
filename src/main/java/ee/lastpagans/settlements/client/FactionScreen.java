@@ -386,8 +386,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
         stat(graphics, "Members", snapshot.members().size(), 24, 110);
         stat(graphics, "Settlements", snapshot.settlements().size(), 24, 130);
         stat(graphics, "Realm population", snapshot.realmPopulation(), 24, 150);
-        stat(graphics, "Settlement wealth", snapshot.realmWealth(), 24, 170);
-        stat(graphics, "Faction treasury", snapshot.factionTreasury(), 24, 190);
+        stat(graphics, "Daily settlement income", snapshot.realmWealth(), 24, 170);
+        stat(graphics, "State Treasury", snapshot.factionTreasury(), 24, 190);
         stat(graphics, "Military roster", fit(snapshot.rosterName(), 150), 24, 210);
         stat(graphics, "Active wars", snapshot.activeWars(), 24, 230);
         graphics.drawString(font, "Allies", left + 300, top + 110, 0xFFE7D8B0, false);
@@ -437,7 +437,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             String capital = settlement.capital() ? " ◆ CAPITAL" : "";
             graphics.drawString(font, fit(settlement.name() + " — " + settlement.rank() + capital, 250), left + 24, y, 0xFFFFFFFF, false);
             graphics.drawString(font, "Pop " + settlement.population() + " · Stability " + settlement.stability()
-                    + "% · Wealth " + settlement.wealth(), left + 300, y, 0xFFAAAAAA, false);
+                    + "% · Tax income " + settlement.wealth() + "/day", left + 300, y, 0xFFAAAAAA, false);
         }
         if (snapshot.settlements().isEmpty()) graphics.drawString(font, "This faction owns no registered settlements.", left + 24, top + 132, 0xFFAAAAAA, false);
     }

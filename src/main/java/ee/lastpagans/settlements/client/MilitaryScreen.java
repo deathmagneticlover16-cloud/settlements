@@ -115,8 +115,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Mercenary Rosters"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MERCENARIES)))
                 .bounds(left + 40, top + 196, 180, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Toggle Nearby Bard"), button -> send(SettlementManager.SettlementAction.TOGGLE_NEARBY_BARD))
-                .bounds(left + 320, top + 250, 180, 20).build());
+
     }
 
     private List<SettlementSnapshot.UnitTemplateEntry> professionalTemplates() {
@@ -239,11 +238,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                 "Paid".equals(snapshot.mercenaryStatus()) ? 0xFFA9D18E : snapshot.mercenaries() <= 0 ? 0xFFAAAAAA : 0xFFFFA080, false);
 
         graphics.drawString(font, "BARDS", left + 286, top + 104, 0xFFE7D8B0, false);
-        graphics.drawString(font, "Designated Bards: " + snapshot.bards(), left + 286, top + 126, 0xFFFFFFFF, false);
-        graphics.drawString(font, snapshot.bardPerforming() ? "Town Square performance active" : "No Town Square performance", left + 286, top + 144,
-                snapshot.bardPerforming() ? 0xFFA9D18E : 0xFFAAAAAA, false);
-        graphics.drawWordWrap(font, Component.literal("Bards can support army morale in the field. A Bard performing with an instrument at the Town Square also improves settlement Stability."),
-                left + 286, top + 168, 220, 0xFFAAAAAA);
+
 
         graphics.fill(left + 270, top + 104, left + 271, top + 286, 0xFF3E3E3E);
     }

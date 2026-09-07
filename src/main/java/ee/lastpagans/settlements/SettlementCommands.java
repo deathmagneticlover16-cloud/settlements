@@ -703,8 +703,8 @@ public final class SettlementCommands {
     private static int addWealth(CommandSourceStack source, String id, int value) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         SettlementData.SettlementRecord settlement = SettlementData.get(player(source).serverLevel()).getSettlement(id);
         if (settlement == null) return 0;
-        settlement.addWealth(value, "Administrator");
-        source.sendSuccess(() -> Component.literal("Added " + value + " wealth."), true);
+        StateTreasury.change(player(source).serverLevel(), settlement, value);
+        source.sendSuccess(() -> Component.literal("Added " + value + " to the State Treasury."), true);
         return 1;
     }
 
@@ -824,7 +824,7 @@ public final class SettlementCommands {
                         + " population=" + settlement.getDisplayedPopulation()
                         + " stability=" + settlement.getStability()
                         + " food=" + settlement.getFood()
-                        + " wealth=" + settlement.getWealth()
+                        + " treasury=" + StateTreasury.balance(player.serverLevel(), settlement)
                         + " MP=" + settlement.getAvailableManpower() + "/" + settlement.getMaximumManpower()
         ), false);
         return 1;
@@ -1050,7 +1050,7 @@ public final class SettlementCommands {
         switch (stat) {
             case "stability" -> { if (add) settlement.changeStability(value); else settlement.setStability(value); }
             case "food" -> { if (add) settlement.changeFood(value); else settlement.setFood(value); }
-            case "wealth" -> { if (add) settlement.changeWealth(value); else settlement.setWealth(value); }
+            case "wealth", "treasury" -> { if (add) StateTreasury.change(source.getLevel(), settlement, value); else StateTreasury.set(source.getLevel(), settlement, value); }
             case "housing", "housing_capacity" -> { if (add) settlement.changeHousingCapacity(value); else settlement.setHousingCapacity(value); }
             case "maximum_manpower", "max_manpower", "manpower_max" -> { if (add) settlement.changeMaximumManpower(value); else settlement.setMaximumManpower(value); }
             case "available_manpower", "manpower", "manpower_available" -> { if (add) settlement.changeAvailableManpower(value); else settlement.setAvailableManpower(value); }
@@ -1059,13 +1059,13 @@ public final class SettlementCommands {
             case "levy_tradition", "tradition" -> { CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel()); extra.setLevyTradition(settlement.getId(), add ? extra.levyTradition(settlement.getId()) + value : value); }
             case "foreign_manpower", "foreign_mp" -> { CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel()); extra.setForeignManpower(settlement.getId(), add ? extra.foreignManpower(settlement.getId()) + value : value); if (extra.foreignManpower(settlement.getId()) > 0) extra.addModifier(settlement.getId(), CampaignSystemsManager.standardModifier(source.getLevel(), settlement.getId(), "foreign_soldiers", 0)); else extra.removeModifier(settlement.getId(), "foreign_soldiers"); }
             default -> {
-                source.sendFailure(Component.literal("Unknown stat. Use stability, food, wealth, prosperity, levy_tradition, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
+                source.sendFailure(Component.literal("Unknown stat. Use stability, food, treasury, prosperity, levy_tradition, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
                 return 0;
             }
         }
         source.sendSuccess(() -> Component.literal((add ? "Adjusted " : "Set ") + stat + " for " + settlement.getName()
                 + ". Current values: stability=" + settlement.getStability() + ", food=" + settlement.getFood()
-                + ", wealth=" + settlement.getWealth() + ", housing=" + settlement.getHousingCapacity()
+                + ", treasury=" + StateTreasury.balance(source.getLevel(), settlement) + ", housing=" + settlement.getHousingCapacity()
                 + ", manpower=" + settlement.getAvailableManpower() + "/" + settlement.getMaximumManpower()
                 + ", foreignMP=" + CampaignSystemsData.get(source.getLevel()).foreignManpower(settlement.getId())
                 + ", levyTradition=" + CampaignSystemsData.get(source.getLevel()).levyTradition(settlement.getId())
@@ -1304,7 +1304,7 @@ public final class SettlementCommands {
         int activeLevyUnits = activeLevies.stream().mapToInt(value -> Math.max(0, value.initialUnits - value.returnedUnits)).sum();
         source.sendSuccess(() -> Component.literal("[Settlement inspect] " + s.getName() + " [" + s.getId() + "] | faction=" + (s.getFactionTeam().isBlank() ? "Independent" : s.getFactionTeam())
                 + " | rank=" + s.getRank().displayName() + " | pop=" + s.getDisplayedPopulation() + " | villagers=" + s.getVillagerCount() + " | housing=" + s.getHousingCapacity()
-                + " | stability=" + s.getStability() + " | prosperity=" + extra.prosperity(s.getId()) + " | food=" + s.getFood() + " | wealth=" + s.getWealth()
+                + " | stability=" + s.getStability() + " | prosperity=" + extra.prosperity(s.getId()) + " | food=" + s.getFood() + " | treasury=" + StateTreasury.balance(source.getLevel(), s)
                 + " | manpower=" + s.getAvailableManpower() + "/" + s.getMaximumManpower() + " used=" + s.getUsedManpower() + " levyReserved=" + s.getLevyReservedManpower()
                 + " | levyTradition=" + extra.levyTradition(s.getId()) + "/50 | activeLevyBatches=" + activeLevies.size() + " units≈" + activeLevyUnits
                 + " | claims=" + s.getClaimCount() + " | protected=" + extra.settlementProtected(s.getId()) + " | modifiers=" + modifiers), false); return 1;

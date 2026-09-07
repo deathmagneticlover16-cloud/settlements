@@ -4,6 +4,8 @@ import com.talhanation.recruits.client.gui.component.BannerRenderer;
 import com.talhanation.recruits.world.RecruitsFaction;
 import ee.lastpagans.settlements.SettlementManager;
 import ee.lastpagans.settlements.SettlementSnapshot;
+import ee.lastpagans.settlements.CaptureZoneData;
+import ee.lastpagans.settlements.client.api.ClientCaptureZoneApi;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.SettlementActionPacket;
@@ -35,6 +37,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private int effectScroll;
     private EditBox renameBox, transferBox;
     private DropdownWidget memberDropdown, memberCandidateDropdown;
+    private TaxRateSlider taxSlider;
     private final Map<String, String> memberIdsByLabel = new LinkedHashMap<>();
     private final Map<String, String> candidateIdsByLabel = new LinkedHashMap<>();
 
@@ -99,30 +102,24 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     }
 
     private void treasuryButtons() {
+        taxSlider = null;
         if (snapshot.canManage()) {
-            Button low = addRenderableWidget(Button.builder(Component.literal("Low"), button -> send(SettlementManager.SettlementAction.SET_TAX_POLICY, "LOW"))
-                    .bounds(left + 20, top + 222, 100, 18).build());
-            Button normal = addRenderableWidget(Button.builder(Component.literal("Normal"), button -> send(SettlementManager.SettlementAction.SET_TAX_POLICY, "NORMAL"))
-                    .bounds(left + 126, top + 222, 100, 18).build());
-            Button high = addRenderableWidget(Button.builder(Component.literal("High"), button -> send(SettlementManager.SettlementAction.SET_TAX_POLICY, "HIGH"))
-                    .bounds(left + 232, top + 222, 100, 18).build());
-            low.active = !"Low".equalsIgnoreCase(snapshot.taxPolicy());
-            normal.active = !"Normal".equalsIgnoreCase(snapshot.taxPolicy());
-            high.active = !"High".equalsIgnoreCase(snapshot.taxPolicy());
+            taxSlider = addRenderableWidget(new TaxRateSlider(left + 20, top + 220, 312, 18, snapshot.taxRatePercent(),
+                    rate -> send(SettlementManager.SettlementAction.SET_TAX_POLICY, Integer.toString(rate))));
         }
         if (snapshot.canContribute()) {
             addRenderableWidget(Button.builder(Component.literal("Deposit Held Food"), button -> send(SettlementManager.SettlementAction.DEPOSIT_FOOD))
-                    .bounds(left + 20, top + 242, 154, 20).build());
+                    .bounds(left + 20, top + 258, 154, 18).build());
             addRenderableWidget(Button.builder(Component.literal("Deposit Held Currency"), button -> send(SettlementManager.SettlementAction.DEPOSIT_CURRENCY))
-                    .bounds(left + 180, top + 242, 154, 20).build());
+                    .bounds(left + 180, top + 258, 154, 18).build());
         }
         if (snapshot.canManage()) {
-            if (snapshot.upkeepChestSet()) addRenderableWidget(Button.builder(Component.literal("Clear Upkeep Chest"), button -> send(SettlementManager.SettlementAction.CLEAR_UPKEEP_CHEST))
-                    .bounds(left + 356, top + 266, 154, 20).build());
             addRenderableWidget(Button.builder(Component.literal("Withdraw 1 Currency"), button -> send(SettlementManager.SettlementAction.WITHDRAW_CURRENCY_ONE))
-                    .bounds(left + 20, top + 266, 154, 20).build());
+                    .bounds(left + 20, top + 280, 154, 18).build());
             addRenderableWidget(Button.builder(Component.literal("Withdraw 10 Currency"), button -> send(SettlementManager.SettlementAction.WITHDRAW_CURRENCY_TEN))
-                    .bounds(left + 180, top + 266, 154, 20).build());
+                    .bounds(left + 180, top + 280, 154, 18).build());
+            if (snapshot.upkeepChestSet()) addRenderableWidget(Button.builder(Component.literal("Clear Upkeep Chest"), button -> send(SettlementManager.SettlementAction.CLEAR_UPKEEP_CHEST))
+                    .bounds(left + 356, top + 280, 154, 18).build());
         }
     }
 
@@ -133,20 +130,19 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
     private void managementButtons() {
         if (!snapshot.canManage()) return;
-
-        addRenderableWidget(Button.builder(Component.literal("Locations"), b -> { managePage = ManagePage.LOCATIONS; confirmDeleteSettlement = false; buildWidgets(); })
-                .bounds(left + 20, top + 102, 112, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Identity"), b -> { managePage = ManagePage.IDENTITY; buildWidgets(); })
-                .bounds(left + 138, top + 102, 112, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Claims"), b -> { managePage = ManagePage.CLAIMS; confirmDeleteSettlement = false; buildWidgets(); })
-                .bounds(left + 256, top + 102, 112, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Members"), b -> { managePage = ManagePage.MEMBERS; confirmDeleteSettlement = false; buildWidgets(); })
-                .bounds(left + 374, top + 102, 112, 18).build());
-
+        String[] labels = {"Locations", "Identity", "Claims", "Capture", "Members"};
+        ManagePage[] pages = {ManagePage.LOCATIONS, ManagePage.IDENTITY, ManagePage.CLAIMS, ManagePage.CAPTURE_ZONES, ManagePage.MEMBERS};
+        for (int i = 0; i < labels.length; i++) {
+            ManagePage page = pages[i];
+            addRenderableWidget(Button.builder(Component.literal(labels[i]), b -> {
+                managePage = page; confirmDeleteSettlement = false; confirmClearClaims = false; buildWidgets();
+            }).bounds(left + 20 + i * 98, top + 102, 92, 18).build());
+        }
         switch (managePage) {
             case LOCATIONS -> locationManagementButtons();
             case IDENTITY -> identityManagementButtons();
             case CLAIMS -> claimManagementButtons();
+            case CAPTURE_ZONES -> captureManagementButtons();
             case MEMBERS -> memberManagementButtons();
         }
     }
@@ -221,6 +217,19 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 }).bounds(left + 30, top + 248, 150, 20).build());
     }
 
+
+    private void captureManagementButtons() {
+        addRenderableWidget(Button.builder(Component.literal("Main Pos 1"), b -> send(SettlementManager.SettlementAction.CAPTURE_MAIN_POS1))
+                .bounds(left + 30, top + 166, 108, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Main Pos 2"), b -> send(SettlementManager.SettlementAction.CAPTURE_MAIN_POS2))
+                .bounds(left + 144, top + 166, 108, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Secondary Pos 1"), b -> send(SettlementManager.SettlementAction.CAPTURE_SECONDARY_POS1))
+                .bounds(left + 30, top + 214, 108, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Secondary Pos 2"), b -> send(SettlementManager.SettlementAction.CAPTURE_SECONDARY_POS2))
+                .bounds(left + 144, top + 214, 108, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Remove Nearest"), b -> send(SettlementManager.SettlementAction.REMOVE_CAPTURE_ZONE))
+                .bounds(left + 30, top + 262, 222, 18).build());
+    }
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
         SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target));
@@ -298,6 +307,12 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         }
     }
 
+    @Override public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        boolean result = super.mouseReleased(mouseX, mouseY, button);
+        if (tab == Tab.TREASURY && taxSlider != null) taxSlider.commitIfChanged();
+        return result;
+    }
+
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         if (tab == Tab.EFFECTS && snapshot.effects().size() > 7) {
             int maximumScroll = snapshot.effects().size() - 7;
@@ -353,12 +368,12 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         }
         stat(graphics, "Population", snapshot.totalPopulation(), 22, 108);
         stat(graphics, "Registered villagers", snapshot.villagerCount(), 22, 128);
-        stat(graphics, "Stability", snapshot.stability() + "%", 22, 148);
+        statWithIcon(graphics, "stability", "Stability", snapshot.stability() + "%", 22, 148);
         stat(graphics, "Food", snapshot.food(), 22, 168);
         stat(graphics, "Claims", snapshot.claimLinked() ? snapshot.claimCount() + " linked" : "none", 22, 188);
         if (snapshot.claimLinked()) graphics.drawString(font, fit(snapshot.claimName(), 220), left + 22, top + 206, 0xFFAAAAAA, false);
 
-        stat(graphics, "Wealth", snapshot.wealth(), 292, 108);
+        statWithIcon(graphics, "wealth", "State Treasury", snapshot.wealth(), 292, 108);
         stat(graphics, "Housing", snapshot.villagerCount() + " / " + snapshot.housingCapacity(), 292, 128);
         status(graphics, "Town Square", snapshot.townSquareSet(), 292, 148);
         status(graphics, "Muster Ground", snapshot.musterGroundSet(), 292, 168);
@@ -384,28 +399,23 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void renderTreasury(GuiGraphics graphics) {
         if (isLimitedView()) { renderPrivateTabNotice(graphics, "Treasury"); return; }
         stat(graphics, "Food stockpile", snapshot.food(), 22, 110);
-        stat(graphics, "Settlement wealth", snapshot.wealth(), 22, 132);
-        stat(graphics, "Prosperity", snapshot.prosperity() + "/100", 22, 154);
+        statWithIcon(graphics, "wealth", "State Treasury", snapshot.wealth(), 22, 132);
+        statWithIcon(graphics, "prosperity", "Prosperity", snapshot.prosperity() + "/100", 22, 154);
         stat(graphics, "Mercenary wage cycle", snapshot.mercenaryWages(), 22, 176);
         graphics.drawString(font, "City upkeep: " + (snapshot.upkeepChestSet() ? "automatic chest linked" : "manual food deposits"), left + 356, top + 246, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
 
         graphics.drawString(font, "TAXATION", left + 22, top + 194, 0xFFE7D8B0, false);
-        String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " wealth/day · Last +" + snapshot.lastTaxIncome()
+        String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " treasury/day · Last +" + snapshot.lastTaxIncome()
                 + " · Stability " + signed(snapshot.taxStabilityPerDay()) + "/day · Prosperity " + signed(snapshot.taxProsperityModifier());
-        graphics.drawString(font, fit(snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, 0xFFAAAAAA, false);
-        renderTaxBar(graphics, left + 20, top + 216, 312, snapshot.taxPolicy());
+        graphics.drawString(font, fit(snapshot.taxRatePercent() + "% " + snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, 0xFFAAAAAA, false);
+        graphics.drawString(font, "Low", left + 20, top + 240, 0xFFAAAAAA, false);
+        graphics.drawCenteredString(font, "Normal", left + 176, top + 240, 0xFFAAAAAA);
+        graphics.drawString(font, "High", left + 304, top + 240, 0xFFAAAAAA, false);
 
         graphics.drawString(font, "RECENT CONTRIBUTIONS", left + 356, top + 110, 0xFFE7D8B0, false);
         for (int i = 0; i < Math.min(9, snapshot.contributions().size()); i++) {
             graphics.drawString(font, fit(snapshot.contributions().get(i), 164), left + 356, top + 130 + i * 15, 0xFFBBBBBB, false);
         }
-    }
-
-    private void renderTaxBar(GuiGraphics graphics, int x, int y, int width, String policy) {
-        graphics.fill(x, y, x + width, y + 5, 0xFF111111);
-        graphics.fill(x + 1, y + 1, x + width - 1, y + 4, 0xFF6E5A38);
-        int position = "Low".equalsIgnoreCase(policy) ? x + 2 : "High".equalsIgnoreCase(policy) ? x + width - 3 : x + width / 2;
-        graphics.fill(position - 2, y - 2, position + 3, y + 7, 0xFFFFD27A);
     }
 
     private void renderEffects(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -450,6 +460,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             case LOCATIONS -> renderLocationManagement(graphics);
             case IDENTITY -> renderIdentityManagement(graphics);
             case CLAIMS -> renderClaimManagement(graphics);
+            case CAPTURE_ZONES -> renderCaptureManagement(graphics);
             case MEMBERS -> renderMemberManagement(graphics);
         }
     }
@@ -503,6 +514,31 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 left + 198, top + 246, 306, confirmClearClaims ? 0xFFFF8080 : 0xFFAAAAAA);
     }
 
+    private void renderCaptureManagement(GuiGraphics graphics) {
+        List<ee.lastpagans.settlements.api.CaptureZoneView> zones = ClientCaptureZoneApi.zonesFor(snapshot.settlementId());
+        int requiredSecondary = switch (snapshot.rank().toLowerCase(Locale.ROOT)) {
+            case "village" -> 0;
+            case "town" -> 1;
+            default -> 2;
+        };
+        long mains = zones.stream().filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).count();
+        long secondaries = zones.stream().filter(z -> z.type() == CaptureZoneData.ZoneType.SECONDARY).count();
+        graphics.drawString(font, "CAPTURE ZONES", left + 30, top + 128, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Required: 1 Main + " + requiredSecondary + " Secondary", left + 30, top + 142, 0xFFAAAAAA, false);
+        graphics.drawString(font, "Current: " + mains + " Main + " + secondaries + " Secondary", left + 292, top + 142,
+                mains >= 1 && secondaries >= requiredSecondary ? 0xFFA9D18E : 0xFFFFA080, false);
+        graphics.drawString(font, "MAIN OBJECTIVE", left + 30, top + 154, 0xFFE7D8B0, false);
+        graphics.drawWordWrap(font, Component.literal("The Main objective decides military occupation. Secondary objectives must fall before it can be captured."), left + 270, top + 164, 240, 0xFFAAAAAA);
+        graphics.drawString(font, "SECONDARY OBJECTIVES", left + 30, top + 202, 0xFFE7D8B0, false);
+        graphics.drawWordWrap(font, Component.literal("Zones must stay inside linked claims, meet the minimum size, never overlap, and be spread across the settlement."), left + 270, top + 212, 240, 0xFFAAAAAA);
+        int y = top + 258;
+        for (int i = 0; i < Math.min(3, zones.size()); i++) {
+            var zone = zones.get(i);
+            graphics.drawString(font, zone.type().name() + " · " + zone.state().name() + " · " + Math.round(zone.progress() * 100D) + "%",
+                    left + 270, y + i * 12, 0xFFBBBBBB, false);
+        }
+    }
+
     private void renderMemberManagement(GuiGraphics graphics) {
         graphics.drawString(font, "SETTLEMENT MEMBERS", left + 30, top + 128, 0xFFE7D8B0, false);
         graphics.drawString(font, "Current members", left + 30, top + 140, 0xFFAAAAAA, false);
@@ -528,6 +564,16 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, label + ": " + value, left + x, top + y, 0xFFFFFFFF, false);
     }
 
+    private void statWithIcon(GuiGraphics graphics, String icon, String label, Object value, int x, int y) {
+        ResourceLocation texture = new ResourceLocation("settlements", "textures/gui/icons/" + icon + ".png");
+        graphics.pose().pushPose();
+        graphics.pose().translate(left + x, top + y - 4, 0);
+        graphics.pose().scale(0.5F, 0.5F, 1.0F);
+        graphics.blit(texture, 0, 0, 0, 0, 32, 32, 32, 32);
+        graphics.pose().popPose();
+        graphics.drawString(font, label + ": " + value, left + x + 19, top + y, 0xFFFFFFFF, false);
+    }
+
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
 
     private void status(GuiGraphics graphics, String label, boolean set, int x, int y) {
@@ -546,5 +592,5 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
     @Override public boolean isPauseScreen() { return false; }
     private enum Tab { OVERVIEW, RESIDENTS, TREASURY, EFFECTS, MANAGEMENT }
-    private enum ManagePage { LOCATIONS, IDENTITY, CLAIMS, MEMBERS }
+    private enum ManagePage { LOCATIONS, IDENTITY, CLAIMS, CAPTURE_ZONES, MEMBERS }
 }

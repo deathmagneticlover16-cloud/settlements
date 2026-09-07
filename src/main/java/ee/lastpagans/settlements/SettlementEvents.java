@@ -34,6 +34,7 @@ public final class SettlementEvents {
     private static int residentBoundaryTicks;
     private static int firstSettlerTicks;
     private static int researchTicks;
+    private static int captureZoneTicks;
 
     private SettlementEvents() {
     }
@@ -194,6 +195,7 @@ public final class SettlementEvents {
             PENDING_CHARACTER_SCREENS.put(player.getUUID(), 40);
         }
         ResearchManager.syncCompletedResearch(player);
+        CaptureZoneManager.sync(player);
     }
 
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
@@ -251,6 +253,12 @@ public final class SettlementEvents {
         if (researchTicks >= 20) {
             researchTicks = 0;
             ResearchManager.processResearch(server);
+        }
+
+        captureZoneTicks++;
+        if (captureZoneTicks >= 20) {
+            captureZoneTicks = 0;
+            CaptureZoneManager.process(server);
         }
 
         residentBoundaryTicks++;

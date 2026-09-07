@@ -23,11 +23,11 @@ public record SettlementSnapshot(
         String bannerMode, CompoundTag settlementBannerStack, String rosterName, List<UnitTemplateEntry> unitTemplates,
         int villagerCount, double populationMultiplier, int civilianPopulation, int militaryPopulation, int totalPopulation,
         int housingCapacity, int freeHousing, int stability, int food, int wealth, int prosperity,
-        String taxPolicy, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay, int taxProsperityModifier,
+        String taxPolicy, int taxRatePercent, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay, int taxProsperityModifier,
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
         int professionals, int levymen, int pendingContracts, String settlerGrowthStatus,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet, boolean upkeepChestSet,
-        int barracksRadius, int barracksCapacity, int averageMorale, int bards, boolean bardPerforming, int mercenaries, int mercenaryWages, long mercenaryNextPaymentDay, String mercenaryStatus, LevyStatusEntry levyStatus,
+        int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, long mercenaryNextPaymentDay, String mercenaryStatus, LevyStatusEntry levyStatus,
         String factionTeam, boolean claimLinked, int claimCount, String claimName,
         String notice, List<EffectEntry> effects, List<String> chronicle, List<String> contributions,
         List<MemberEntry> members, List<PlayerChoice> memberCandidates, String message
@@ -57,7 +57,6 @@ public record SettlementSnapshot(
         boolean limitedView = !player.createCommandSourceStack().hasPermission(2)
                 && settlement.getRole(player.getUUID()) == SettlementData.SettlementRole.OUTSIDER;
         MilitarySummary military = limitedView ? new MilitarySummary(0, 0, 0, -1L, "Hidden") : militarySummary(player, settlement);
-        SettlementManager.BardStatus bard = limitedView ? new SettlementManager.BardStatus(0, false) : SettlementManager.bardStatus(player.getServer(), settlement);
         LevyStatusEntry levyStatus = limitedView ? new LevyStatusEntry(0, 0, 0, 0, 0, 0, 0L, 0L, "Hidden") : levyStatus(player, settlement);
         List<EffectEntry> effects = limitedView ? List.of() : buildEffects(player, settlement, campaign, military.averageMorale());
         List<MemberEntry> members = SettlementManager.canManage(player, settlement) ? memberEntries(player, settlement) : List.of();
@@ -69,16 +68,17 @@ public record SettlementSnapshot(
                 factionId, factionName, factionBanner, visual.getBannerMode().name(), settlementBanner,
                 limitedView ? "Hidden" : campaign.assignedRosterName(settlement), limitedView ? List.of() : templates,
                 limitedView ? 0 : settlement.getVillagerCount(), limitedView ? 0.0D : settlement.getPopulationMultiplier(), limitedView ? 0 : settlement.getCivilianPopulation(), limitedView ? 0 : settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
-                limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : settlement.getWealth(), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).prosperity(settlement.getId()),
-                limitedView ? "Hidden" : CampaignSystemsData.get(player.serverLevel()).taxPolicy(settlement.getId()).displayName(),
+                limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : StateTreasury.balance(player.serverLevel(), settlement), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).prosperity(settlement.getId()),
+                limitedView ? "Hidden" : CampaignSystemsData.get(player.serverLevel()).taxDisplayName(settlement.getId()),
+                limitedView ? 100 : CampaignSystemsData.get(player.serverLevel()).taxRatePercent(settlement.getId()),
                 limitedView ? 0 : CampaignSystemsManager.projectedTaxIncome(settlement, CampaignSystemsData.get(player.serverLevel())),
                 limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
-                limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxPolicy(settlement.getId()).stabilityPerDay(),
-                limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxPolicy(settlement.getId()).prosperityModifier(),
+                limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxStabilityPerDay(settlement.getId()),
+                limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxProsperityModifier(settlement.getId()),
                 limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
                 limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(), limitedView ? "Hidden" : settlement.getSettlerGrowthStatus(player.serverLevel().getGameTime()),
                 !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null, !limitedView && settlement.getUpkeepChest() != null,
-                limitedView ? 0 : settlement.getBarracksRadius(), limitedView ? 0 : settlement.getBarracksCapacity(), military.averageMorale(), bard.count(), bard.performing(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
+                limitedView ? 0 : settlement.getBarracksRadius(), limitedView ? 0 : settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
                 settlement.getFactionTeam(), !limitedView && settlement.hasClaim(), limitedView ? 0 : settlement.getClaimCount(), limitedView ? "" : settlement.getClaimSummary(), settlement.getNotice(), effects,
                 limitedView ? List.of() : settlement.getChronicle().stream().limit(8).toList(), limitedView ? List.of() : settlement.getContributions().stream().limit(8).toList(),
                 members, memberCandidates, message == null ? "" : message
@@ -323,11 +323,11 @@ public record SettlementSnapshot(
         writeList(buffer, unitTemplates, UnitTemplateEntry::encode);
         buffer.writeVarInt(villagerCount); buffer.writeDouble(populationMultiplier); buffer.writeVarInt(civilianPopulation); buffer.writeVarInt(militaryPopulation); buffer.writeVarInt(totalPopulation);
         buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(wealth); buffer.writeVarInt(prosperity);
-        buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay); buffer.writeInt(taxProsperityModifier);
+        buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(taxRatePercent); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay); buffer.writeInt(taxProsperityModifier);
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
         buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts); buffer.writeUtf(settlerGrowthStatus, 128);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet); buffer.writeBoolean(upkeepChestSet);
-        buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(bards); buffer.writeBoolean(bardPerforming); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
+        buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
         writeList(buffer, effects, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions);
         writeList(buffer, members, MemberEntry::encode); writeList(buffer, memberCandidates, PlayerChoice::encode); buffer.writeUtf(message, 256);
@@ -340,11 +340,11 @@ public record SettlementSnapshot(
                 readList(buffer, UnitTemplateEntry::decode, 16),
                 buffer.readVarInt(), buffer.readDouble(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
-                buffer.readUtf(16), buffer.readVarInt(), buffer.readVarInt(), buffer.readInt(), buffer.readInt(),
+                buffer.readUtf(16), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readInt(), buffer.readInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readUtf(128),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),
                 buffer.readUtf(64), buffer.readBoolean(), buffer.readVarInt(), buffer.readUtf(180), buffer.readUtf(160),
                 readList(buffer, EffectEntry::decode, 32), readStrings(buffer), readStrings(buffer),
                 readList(buffer, MemberEntry::decode, 64), readList(buffer, PlayerChoice::decode, 64), buffer.readUtf(256)

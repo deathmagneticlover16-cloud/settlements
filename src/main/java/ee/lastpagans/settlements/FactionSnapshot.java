@@ -86,7 +86,7 @@ public record FactionSnapshot(
                 .toList();
         List<SettlementEntry> settlements = owned.stream().map(settlement -> new SettlementEntry(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(),
-                settlement.getDisplayedPopulation(), settlement.getStability(), settlement.getWealth(),
+                settlement.getDisplayedPopulation(), settlement.getStability(), CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
                 settlement.getRank() == SettlementData.SettlementRank.CAPITAL
         )).toList();
 
@@ -117,8 +117,8 @@ public record FactionSnapshot(
                 viewerTier,
                 viewerRank,
                 owned.isEmpty() ? campaign.getDefaultRosterId() : campaign.assignedRosterName(owned.get(0)),
-                owned.stream().mapToInt(SettlementData.SettlementRecord::getWealth).sum(),
-                CampaignSystemsData.get(player.serverLevel()).factionWealth(factionId),
+                owned.stream().mapToInt(settlement -> CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId())).sum(),
+                owned.isEmpty() ? CampaignSystemsData.get(player.serverLevel()).factionWealth(factionId) : StateTreasury.balance(player.serverLevel(), owned.get(0)),
                 owned.stream().mapToInt(SettlementData.SettlementRecord::getDisplayedPopulation).sum(),
                 campaign.activeWarsFor(factionId).size(),
                 members,

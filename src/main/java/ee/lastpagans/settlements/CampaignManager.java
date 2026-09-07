@@ -199,28 +199,7 @@ public final class CampaignManager {
                     }
                 }
             }
-            case "TREASURY_DEPOSIT" -> {
-                SettlementData.SettlementRecord target = SettlementData.get(player.serverLevel()).getSettlement(value);
-                int amount = Math.max(1, tier);
-                if (!leader) result = "Only the faction leader may manage the faction treasury.";
-                else if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
-                else if (!SettlementManager.canManage(player, target)) result = "You must manage that settlement to move its wealth into the faction treasury.";
-                else if (!target.spendWealth(amount)) result = target.getName() + " does not have " + amount + " wealth available.";
-                else { CampaignSystemsData.get(player.serverLevel()).changeFactionWealth(factionId, amount); result = amount + " wealth moved from " + target.getName() + " to the faction treasury."; }
-            }
-            case "TREASURY_WITHDRAW" -> {
-                SettlementData.SettlementRecord target = SettlementData.get(player.serverLevel()).getSettlement(value);
-                int amount = Math.max(1, tier);
-                CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
-                if (!leader) result = "Only the faction leader may manage the faction treasury.";
-                else if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
-                else if (!extra.spendFactionWealth(factionId, amount)) result = "The faction treasury does not contain " + amount + " wealth.";
-                else {
-                    target.changeWealth(amount);
-                    extra.recordWealthDeposit(target.getId(), amount, player.serverLevel().getDayTime() / 24000L);
-                    result = amount + " wealth moved from the faction treasury to " + target.getName() + ".";
-                }
-            }
+            case "TREASURY_DEPOSIT", "TREASURY_WITHDRAW" -> result = "Settlement wallets were retired in 2.6. All income and spending now use the State Treasury directly.";
             default -> result = "Unknown faction action.";
         }
         openFaction(player, result);
@@ -776,7 +755,7 @@ public final class CampaignManager {
         }
         target.changeAvailableManpower(manpower);
         target.changeFood(food);
-        target.changeWealth(wealth);
+        StateTreasury.change(level, target, wealth);
         if (wealth > 0) extra.recordWealthDeposit(target.getId(), wealth, level.getDayTime() / 24000L);
         return null;
     }
@@ -1102,7 +1081,7 @@ public final class CampaignManager {
             }
         }
 
-        int availableWealth = !loserFaction.isBlank() ? extra.factionWealth(loserFaction) : loserSettlement == null ? 0 : loserSettlement.getWealth();
+        int availableWealth = loserSettlement != null ? StateTreasury.balance(level, loserSettlement) : !loserFaction.isBlank() ? extra.factionWealth(loserFaction) : 0;
         int availableMp = !loserFaction.isBlank() ? settlements.settlementsForFaction(loserFaction).stream().mapToInt(SettlementData.SettlementRecord::getAvailableManpower).sum()
                 : loserSettlement == null ? 0 : loserSettlement.getAvailableManpower();
         if (wealthNeed > availableWealth) return "the losing side no longer has the demanded wealth";
@@ -1141,8 +1120,8 @@ public final class CampaignManager {
         for (CampaignSystemsData.PeaceTerm term : offer.terms()) {
             switch (term.type()) {
                 case "WEALTH" -> {
-                    takeWealth(extra, loserFaction, loserSettlement, term.amount());
-                    giveWealth(extra, winnerFaction, winnerSettlement, term.amount());
+                    takeWealth(level, extra, loserFaction, loserSettlement, term.amount());
+                    giveWealth(level, extra, winnerFaction, winnerSettlement, term.amount());
                 }
                 case "MANPOWER" -> {
                     int moved = takeManpower(settlements, loserFaction, loserSettlement, term.amount());
@@ -1164,11 +1143,15 @@ public final class CampaignManager {
         }
     }
 
-    private static void takeWealth(CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
-        if (amount <= 0) return; if (!faction.isBlank()) extra.changeFactionWealth(faction, -amount); else if (settlement != null) settlement.changeWealth(-amount);
+    private static void takeWealth(ServerLevel level, CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
+        if (amount <= 0) return;
+        if (settlement != null) StateTreasury.change(level, settlement, -amount);
+        else if (!faction.isBlank()) extra.changeFactionWealth(faction, -amount);
     }
-    private static void giveWealth(CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
-        if (amount <= 0) return; if (!faction.isBlank()) extra.changeFactionWealth(faction, amount); else if (settlement != null) settlement.changeWealth(amount);
+    private static void giveWealth(ServerLevel level, CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
+        if (amount <= 0) return;
+        if (settlement != null) StateTreasury.change(level, settlement, amount);
+        else if (!faction.isBlank()) extra.changeFactionWealth(faction, amount);
     }
     private static int takeManpower(SettlementData settlements, String faction, SettlementData.SettlementRecord settlement, int amount) {
         int left = Math.max(0, amount); if (!faction.isBlank()) {
@@ -1587,6 +1570,14 @@ public final class CampaignManager {
 
     private static String createSettlementFromGui(ServerPlayer player, String id, String name) {
         SettlementData data = SettlementData.get(player.serverLevel());
+        CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
+        long gameTime = player.serverLevel().getGameTime();
+        long cooldownTicks = Math.max(0L, SettlementConfig.SETTLEMENT_FOUNDING_COOLDOWN_MINUTES.get()) * 60L * 20L;
+        long elapsed = gameTime - systems.lastSettlementFoundingGameTime(player.getUUID());
+        if (cooldownTicks > 0L && elapsed >= 0L && elapsed < cooldownTicks) {
+            long seconds = Math.max(1L, (cooldownTicks - elapsed + 19L) / 20L);
+            return "You recently founded a settlement. You may found another in " + (seconds / 60L) + "m " + (seconds % 60L) + "s.";
+        }
         if (id.isBlank()) return "Settlement creation failed: enter a short settlement ID.";
         if (factionId(player).isBlank() && data.getSettlements().stream()
                 .filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
@@ -1600,13 +1591,15 @@ public final class CampaignManager {
         else settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
         SettlementCommands.linkClaimAtPlayer(player, settlement, false);
         SettlementManager.scheduleFirstSettlers(player, settlement);
+        CaptureZoneManager.ensureVillageMainZone(player, settlement);
         data.selectSettlement(player.getUUID(), settlement.getId());
         settlement.addChronicle("Settlement founded by " + SettlementManager.characterOrAccountName(player) + ".");
         CampaignData.get(player.serverLevel()).addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.NORMAL,
                 "Settlement founded", settlement.getName() + " was founded as a Village.",
                 player.serverLevel().getDayTime() / 24000L, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
+        systems.markSettlementFounded(player.getUUID(), gameTime);
         broadcastMapMarkers(player.getServer());
-        return "Founded " + settlement.getName() + " as a Village. Its Town Square was set to your current position.";
+        return "Founded " + settlement.getName() + " as a Village. Its Town Square and initial Capture Zone were prepared at your current position.";
     }
 
     public static String createFaction(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor) {
@@ -1637,8 +1630,9 @@ public final class CampaignManager {
             return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get() + " Prosperity; " + foundingSeat.getName() + " has " + prosperity + ".";
         }
         int wealthCost = SettlementConfig.FACTION_FOUNDING_WEALTH_COST.get();
-        if (foundingSeat.getWealth() < wealthCost) {
-            return "Faction founding costs " + wealthCost + " Wealth from " + foundingSeat.getName() + "; its treasury contains " + foundingSeat.getWealth() + ".";
+        int foundingTreasury = StateTreasury.balance(player.serverLevel(), foundingSeat);
+        if (foundingTreasury < wealthCost) {
+            return "Faction founding costs " + wealthCost + " from the State Treasury; the independent polity currently has " + foundingTreasury + ".";
         }
 
         ItemStack held = player.getMainHandItem();
@@ -1675,7 +1669,7 @@ public final class CampaignManager {
         if (created == null) {
             return "Faction creation failed: Recruits did not confirm creation. Check its configured creation requirements/cost and try again.";
         }
-        foundingSeat.spendWealth(wealthCost);
+        StateTreasury.spend(player.serverLevel(), foundingSeat, wealthCost);
         foundingSeat.addChronicle("The settlement treasury contributed " + wealthCost + " Wealth to the founding of " + displayName + ".");
         BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, factionId);
         CampaignData campaign = CampaignData.get(player.serverLevel());
