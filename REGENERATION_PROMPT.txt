@@ -1,0 +1,56 @@
+SETTLEMENTS 2.6.0 DEVELOPMENT RECOVERY CHECKPOINT
+Minecraft Forge 1.20.1
+Branch: settlements-2.6.0-foundations
+Checkpoint created: 2026-09-07
+
+IMPORTANT
+- This source is a development checkpoint, not a proven compiled release.
+- Full .git history is included. Resume from HEAD; do not restart from 2.5.4.
+- Old-world backwards compatibility is not required.
+- Product name is Settlements; do not reintroduce Prototype naming.
+
+BASELINE
+- Parent release line: Settlements 2.5.4 (3ce7253).
+- Current 2.6 commits after that baseline:
+  654f5c0 Build 2.6 capture, treasury, tax and map foundations
+  17b9028 Separate political capitals from settlement tiers
+  27bdcec Revamp faction creation foundations
+  2cd8a7f Harden faction banner pattern validation
+
+IMPLEMENTED/IN-PROGRESS IN 2.6
+- Capture Zone data/manager, public API, client API/cache, state/occupation events and sync packet.
+- Settlement campaign-map read-only API groundwork.
+- StateTreasury abstraction and migration away from settlement-local Wealth.
+- Continuous TaxRateSlider groundwork.
+- Settlement founding cooldown/config foundations.
+- Research tier separation: Capital is political; Tier IV should require Major City development.
+- Dynamic faction color groundwork via DyeColor values; intended to support Dye Depot without a hard dependency.
+- Faction creation packet/screen foundations including government/capital/banner validation work.
+- User-supplied wealth/prosperity/stability GUI icons added.
+- Bard tag removed; broader Bard removal was part of the 2.6 cleanup direction.
+
+CURRENT DESIGN DECISIONS
+- Capture zones: Village=1 Main; Town=1 Main+1 Secondary; larger city=1 Main+2 Secondaries.
+- Capture zones need minimum size, spacing, no overlap/nesting, must belong to linked claims.
+- Secondary capture should be exposed to RTS for morale effects; Main + secondaries leads to occupation, not immediate legal transfer.
+- State Treasury is the spendable polity fund; settlement Wealth as a separate stockpile is being retired.
+- Taxation should be a real draggable slider, not Low/Normal/High buttons.
+- Research tiers: I Village, II Town, III City, IV Major City. Capital alone must never grant Tier IV.
+- Administrative Capacity is deferred to future Government/Faction overhaul.
+- Dye Depot 1.3.0 extends DyeColor with extra colors; Settlements should enumerate DyeColor.values() dynamically and remain Dye Depot optional.
+- Faction creation target UI: faction name, dynamic faction color, dynamic unit color, government type, capital, loom-like banner editor.
+
+STILL OUTSTANDING BEFORE A 2.6 TEST RELEASE
+- Finish/validate faction creation frontend and dynamic color persistence/mapping.
+- Finish loom-like banner editor if not already complete.
+- Finish State Treasury replacement audit so no live feature still spends obsolete local Wealth incorrectly.
+- Finish Bard code removal audit.
+- Finish Capture Zone GUI/advancement enforcement/runtime consistency audit.
+- Finish Major City research requirement implementation/config and UI messaging.
+- Add/finish Year + Serene Seasons Plus integration, League Alliances, Culture and Trade Agreements only if chosen for this release; these were discussed but not yet guaranteed complete.
+- Update root README/CHANGELOG/TESTING/build helper from 2.5.4 naming to 2.6.0.
+- Run source validation, then user must run ForgeGradle locally because this environment may not reach services.gradle.org.
+
+RELATED ECOSYSTEM
+- Separate Recruits RTS Camera/Commander source exists and future Capture Zone API is meant for its glowing zone barriers/morale integration.
+- Do not merge RTS camera/battle controls into Settlements itself.
