@@ -655,6 +655,20 @@ public final class CampaignData extends SavedData {
         setDirty();
     }
 
+    public void setFactionGovernment(String factionId, GovernmentType government) {
+        if (factionId == null || factionId.isBlank()) return;
+        factionProfile(factionId).government = government == null ? GovernmentType.MONARCHY : government;
+        setDirty();
+    }
+
+    public void setFactionColors(String factionId, String teamDye, String unitDye) {
+        if (factionId == null || factionId.isBlank()) return;
+        FactionProfile profile = factionProfile(factionId);
+        profile.teamDye = SettlementData.cleanText(teamDye, "white", 32).toLowerCase(Locale.ROOT);
+        profile.unitDye = SettlementData.cleanText(unitDye, "white", 32).toLowerCase(Locale.ROOT);
+        setDirty();
+    }
+
     public void addNews(NewsCategory category, NewsImportance importance, String headline, String body,
                         long day, String factionId, String settlementId, NewsVisibility visibility) {
         worldNews.add(0, new WorldNewsEntry(UUID.randomUUID(), category, importance,
@@ -791,6 +805,26 @@ public final class CampaignData extends SavedData {
         if (wealth != 0) parts.add((wealth > 0 ? "+" : "") + wealth + " daily wealth");
         if (morale != 0) parts.add((morale > 0 ? "+" : "") + morale + " recruit morale");
         return parts.isEmpty() ? "No direct settlement modifier" : String.join(", ", parts);
+    }
+
+    public enum GovernmentType {
+        MONARCHY("Monarchy"),
+        REPUBLIC("Republic"),
+        TRIBAL("Tribal"),
+        ELECTIVE_MONARCHY("Elective Monarchy"),
+        THEOCRACY("Theocracy");
+
+        private final String displayName;
+        GovernmentType(String displayName) { this.displayName = displayName; }
+        public String displayName() { return displayName; }
+
+        public static GovernmentType parse(String value) {
+            if (value != null) {
+                try { return valueOf(value.trim().toUpperCase(Locale.ROOT)); }
+                catch (IllegalArgumentException ignored) {}
+            }
+            return MONARCHY;
+        }
     }
 
     public enum UnitType {
@@ -1532,6 +1566,9 @@ public final class CampaignData extends SavedData {
         private final String factionId;
         private final Map<Integer, String> rankTitles = new HashMap<>();
         private final Map<UUID, Integer> memberRanks = new HashMap<>();
+        private GovernmentType government = GovernmentType.MONARCHY;
+        private String teamDye = "white";
+        private String unitDye = "white";
 
         private FactionProfile(String factionId) {
             this.factionId = factionId == null ? "" : factionId;
@@ -1541,6 +1578,9 @@ public final class CampaignData extends SavedData {
         private CompoundTag toNBT() {
             CompoundTag tag = new CompoundTag();
             tag.putString("Faction", factionId);
+            tag.putString("Government", government.name());
+            tag.putString("TeamDye", teamDye);
+            tag.putString("UnitDye", unitDye);
             ListTag titles = new ListTag();
             rankTitles.forEach((tier, title) -> {
                 CompoundTag entry = new CompoundTag();
@@ -1562,6 +1602,11 @@ public final class CampaignData extends SavedData {
 
         private static FactionProfile fromNBT(CompoundTag tag) {
             FactionProfile profile = new FactionProfile(tag.getString("Faction"));
+            profile.government = GovernmentType.parse(tag.getString("Government"));
+            String teamDye = tag.getString("TeamDye");
+            String unitDye = tag.getString("UnitDye");
+            if (!teamDye.isBlank()) profile.teamDye = teamDye;
+            if (!unitDye.isBlank()) profile.unitDye = unitDye;
             for (Tag raw : tag.getList("RankTitles", Tag.TAG_COMPOUND)) {
                 CompoundTag entry = (CompoundTag) raw;
                 int tier = clamp(entry.getInt("Tier"), 0, 4);
@@ -1575,6 +1620,9 @@ public final class CampaignData extends SavedData {
         }
 
         public String factionId() { return factionId; }
+        public GovernmentType government() { return government; }
+        public String teamDye() { return teamDye; }
+        public String unitDye() { return unitDye; }
         public Map<Integer, String> rankTitles() { return Map.copyOf(rankTitles); }
         public Map<UUID, Integer> memberRanks() { return Map.copyOf(memberRanks); }
     }

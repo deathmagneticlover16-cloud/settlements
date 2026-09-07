@@ -237,7 +237,6 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Status: " + timing, left + 24, top + 162,
                 "Paid".equals(snapshot.mercenaryStatus()) ? 0xFFA9D18E : snapshot.mercenaries() <= 0 ? 0xFFAAAAAA : 0xFFFFA080, false);
 
-        graphics.drawString(font, "BARDS", left + 286, top + 104, 0xFFE7D8B0, false);
 
 
         graphics.fill(left + 270, top + 104, left + 271, top + 286, 0xFF3E3E3E);

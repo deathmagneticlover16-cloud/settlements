@@ -10,6 +10,7 @@ import com.talhanation.recruits.world.RecruitsPlayerInfo;
 import ee.lastpagans.settlements.network.CampaignSnapshotPacket;
 import ee.lastpagans.settlements.network.DiplomacySnapshotPacket;
 import ee.lastpagans.settlements.network.FactionSnapshotPacket;
+import ee.lastpagans.settlements.network.FactionCreatePacket;
 import ee.lastpagans.settlements.network.FamilySnapshotPacket;
 import ee.lastpagans.settlements.network.MapMarkersPacket;
 import ee.lastpagans.settlements.network.MilitarySnapshotPacket;
@@ -1602,6 +1603,45 @@ public final class CampaignManager {
 
     public static String createFaction(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor) {
         if (player == null) return "No player supplied.";
+        SettlementData data = SettlementData.get(player.serverLevel());
+        SettlementData.SettlementRecord foundingSeat = foundingSettlement(player, data);
+        ItemStack held = player.getMainHandItem();
+        if (!(held.getItem() instanceof BannerItem)) return "Faction creation failed: You are not holding a banner!";
+        return createFactionInternal(player, rawName, teamColor, unitColor, foundingSeat, held.copy(),
+                CampaignData.GovernmentType.MONARCHY, "white", "white");
+    }
+
+    public static void createFactionFromGui(ServerPlayer player, FactionCreatePacket packet) {
+        if (player == null || packet == null) return;
+        SettlementData data = SettlementData.get(player.serverLevel());
+        SettlementData.SettlementRecord foundingSeat = data.getSettlement(packet.capitalSettlementId());
+        if (foundingSeat == null || !player.getUUID().equals(foundingSeat.getOwnerId()) || !foundingSeat.getFactionTeam().isBlank()) {
+            openFaction(player, "Choose one of your independent settlements as the faction capital.");
+            return;
+        }
+        ItemStack banner = packet.banner() == null ? ItemStack.EMPTY : packet.banner().copy();
+        if (!(banner.getItem() instanceof BannerItem)) {
+            openFaction(player, "Design a valid faction banner before creating the faction.");
+            return;
+        }
+        banner.setCount(1);
+        if (RecruitsFactionManager.isBannerBlank(banner)) {
+            openFaction(player, "Faction banner must contain at least one pattern layer.");
+            return;
+        }
+        net.minecraft.world.item.DyeColor teamDye = FactionColorUtil.dye(packet.teamDye());
+        net.minecraft.world.item.DyeColor unitDye = FactionColorUtil.dye(packet.unitDye());
+        CampaignData.GovernmentType government = CampaignData.GovernmentType.parse(packet.government());
+        String result = createFactionInternal(player, packet.name(), FactionColorUtil.closestChatFormatting(teamDye),
+                FactionColorUtil.closestRecruitsUnitColor(unitDye), foundingSeat, banner, government,
+                teamDye.getName(), unitDye.getName());
+        openFaction(player, result);
+    }
+
+    private static String createFactionInternal(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor,
+                                                SettlementData.SettlementRecord foundingSeat, ItemStack banner,
+                                                CampaignData.GovernmentType government, String teamDye, String unitDye) {
+        if (player == null) return "No player supplied.";
         if (!SettlementConfig.FACTION_FOUNDING_ENABLED.get()) return "Faction founding is disabled by the server configuration.";
         String currentPoliticalFaction = factionId(player);
         if (!currentPoliticalFaction.isBlank()) return "Leave your current faction before creating another one.";
@@ -1610,75 +1650,65 @@ public final class CampaignManager {
         if (displayName.isBlank()) return "Enter a faction name.";
 
         SettlementData settlementData = SettlementData.get(player.serverLevel());
-        SettlementData.SettlementRecord foundingSeat = foundingSettlement(player, settlementData);
-        if (foundingSeat == null) return "Found and develop an independent settlement before creating a political faction.";
+        if (foundingSeat == null || !player.getUUID().equals(foundingSeat.getOwnerId()) || !foundingSeat.getFactionTeam().isBlank())
+            return "Found and develop an independent settlement before creating a political faction.";
         CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
         int population = foundingSeat.getCivilianPopulation();
         int prosperity = systems.prosperity(foundingSeat.getId());
         if (SettlementConfig.FACTION_FOUNDING_REQUIRE_TOWN.get() && foundingSeat.getRank() == SettlementData.SettlementRank.VILLAGE) {
-            return "A full faction requires an established Town or City-State. " + foundingSeat.getName() + " is still a Village.";
+            return "A full faction requires an established Town or City. " + foundingSeat.getName() + " is still a Village.";
         }
-        if (population < SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get()) {
+        if (population < SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get())
             return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get() + " population; " + foundingSeat.getName() + " has " + population + ".";
-        }
-        if (foundingSeat.getStability() < SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get()) {
+        if (foundingSeat.getStability() < SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get())
             return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get() + " Stability; " + foundingSeat.getName() + " has " + foundingSeat.getStability() + ".";
-        }
-        if (prosperity < SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get()) {
+        if (prosperity < SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get())
             return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get() + " Prosperity; " + foundingSeat.getName() + " has " + prosperity + ".";
-        }
         int wealthCost = SettlementConfig.FACTION_FOUNDING_WEALTH_COST.get();
         int foundingTreasury = StateTreasury.balance(player.serverLevel(), foundingSeat);
-        if (foundingTreasury < wealthCost) {
+        if (foundingTreasury < wealthCost)
             return "Faction founding costs " + wealthCost + " from the State Treasury; the independent polity currently has " + foundingTreasury + ".";
-        }
 
-        ItemStack held = player.getMainHandItem();
-        if (!(held.getItem() instanceof BannerItem)) return "Faction creation failed: You are not holding a banner!";
-        ItemStack banner = held.copy();
+        if (banner == null || !(banner.getItem() instanceof BannerItem)) return "Faction creation failed: design a banner first.";
+        banner = banner.copy();
         banner.setCount(1);
-        if (RecruitsFactionManager.isBannerBlank(banner)) {
-            return "Faction creation failed: Your faction banner must contain at least one pattern.";
-        }
-        if (FactionEvents.recruitsFactionManager.isDisplayNameInUse(displayName)) {
-            return "Faction creation failed: that faction display name is already in use.";
-        }
-        if (FactionEvents.recruitsFactionManager.isBannerInUse(banner.serializeNBT())) {
-            return "Faction creation failed: that banner is already used by another faction.";
-        }
+        if (RecruitsFactionManager.isBannerBlank(banner)) return "Faction creation failed: Your faction banner must contain at least one pattern.";
+        if (FactionEvents.recruitsFactionManager.isDisplayNameInUse(displayName)) return "Faction creation failed: that faction display name is already in use.";
+        if (FactionEvents.recruitsFactionManager.isBannerInUse(banner.serializeNBT())) return "Faction creation failed: that banner is already used by another faction.";
         String baseId = SettlementData.normalizeId(displayName);
         if (baseId.isBlank()) return "That faction name cannot produce a valid internal ID.";
-        String factionId = baseId;
+        String newFactionId = baseId;
         int suffix = 2;
-        while (FactionEvents.recruitsFactionManager.getFactionByStringID(factionId) != null
-                || player.getServer().getScoreboard().getPlayerTeam(factionId) != null) {
-            factionId = baseId + "_" + suffix++;
+        while (FactionEvents.recruitsFactionManager.getFactionByStringID(newFactionId) != null
+                || player.getServer().getScoreboard().getPlayerTeam(newFactionId) != null) {
+            newFactionId = baseId + "_" + suffix++;
             if (suffix > 99) return "Too many factions already use that name.";
         }
         try {
-            // Preserve the base Recruits faction-creation rules (including its configured emerald cost)
-            // rather than bypassing them just because Settlements provides the replacement GUI.
-            FactionEvents.createTeam(true, player, player.serverLevel(), factionId, displayName,
+            FactionEvents.createTeam(true, player, player.serverLevel(), newFactionId, displayName,
                     player.getScoreboardName(), banner, teamColor == null ? ChatFormatting.WHITE : teamColor, unitColor);
         } catch (RuntimeException exception) {
             return "Faction creation failed: " + exception.getClass().getSimpleName();
         }
-        RecruitsFaction created = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
-        if (created == null) {
-            return "Faction creation failed: Recruits did not confirm creation. Check its configured creation requirements/cost and try again.";
-        }
+        RecruitsFaction created = FactionEvents.recruitsFactionManager.getFactionByStringID(newFactionId);
+        if (created == null) return "Faction creation failed: Recruits did not confirm creation. Check its configured creation requirements/cost and try again.";
+
         StateTreasury.spend(player.serverLevel(), foundingSeat, wealthCost);
-        foundingSeat.addChronicle("The settlement treasury contributed " + wealthCost + " Wealth to the founding of " + displayName + ".");
-        BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, factionId);
+        foundingSeat.addChronicle("The State Treasury contributed " + wealthCost + " to the founding of " + displayName + ".");
+        BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, newFactionId);
         CampaignData campaign = CampaignData.get(player.serverLevel());
-        campaign.factionProfile(factionId);
+        campaign.setFactionGovernment(newFactionId, government);
+        campaign.setFactionColors(newFactionId, teamDye, unitDye);
+        for (SettlementData.SettlementRecord settlement : settlementData.getSettlements()) {
+            if (newFactionId.equals(settlement.getFactionTeam())) settlement.setCapital(settlement.getId().equals(foundingSeat.getId()));
+        }
         long day = player.serverLevel().getDayTime() / 24000L;
         campaign.addNews(CampaignData.NewsCategory.FACTIONS, CampaignData.NewsImportance.MAJOR,
                 "Faction founded", displayName + " was founded by " + SettlementManager.characterOrAccountName(player) + ".",
-                day, factionId, "", CampaignData.NewsVisibility.PUBLIC);
+                day, newFactionId, foundingSeat.getId(), CampaignData.NewsVisibility.PUBLIC);
         SettlementManager.broadcastProfiles(player.getServer());
         CampaignToastSender.factionFounded(player, displayName);
-        return "Created faction " + displayName + " (" + factionId + ").";
+        return "Created " + government.displayName() + " " + displayName + " with " + foundingSeat.getName() + " as its capital.";
     }
 
     private static SettlementData.SettlementRecord foundingSettlement(ServerPlayer player, SettlementData data) {
