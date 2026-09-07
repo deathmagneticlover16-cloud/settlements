@@ -18,6 +18,8 @@ import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.WorldNewsSnapshotPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -1627,6 +1629,12 @@ public final class CampaignManager {
         banner.setCount(1);
         if (RecruitsFactionManager.isBannerBlank(banner)) {
             openFaction(player, "Faction banner must contain at least one pattern layer.");
+            return;
+        }
+        CompoundTag blockEntityTag = banner.getTagElement("BlockEntityTag");
+        int patternCount = blockEntityTag == null ? 0 : blockEntityTag.getList("Patterns", Tag.TAG_COMPOUND).size();
+        if (patternCount < 1 || patternCount > 6) {
+            openFaction(player, "Faction banners must contain between 1 and 6 pattern layers.");
             return;
         }
         net.minecraft.world.item.DyeColor teamDye = FactionColorUtil.dye(packet.teamDye());
