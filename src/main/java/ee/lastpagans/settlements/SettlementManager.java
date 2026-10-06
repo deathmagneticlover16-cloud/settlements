@@ -406,7 +406,14 @@ public final class SettlementManager {
             recruit.setUpkeepPos(upkeep);
         }
         if (levy) { recruit.setCustomName(Component.literal("Levyman")); recruit.setCustomNameVisible(false); }
+        if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank())
+            MercenaryRosterManager.markPendingSpawn(recruit);
         if (!level.addFreshEntity(recruit)) return null;
+        if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank()
+                && !MercenaryRosterManager.activateSpawnedRecruit(recruit, actor)) {
+            recruit.discard();
+            return null;
+        }
         if (team != null) {
             try { FactionEvents.addRecruitToTeam(recruit, team, level); }
             catch (RuntimeException exception) { level.getScoreboard().addPlayerToTeam(recruit.getScoreboardName(), team); }
@@ -428,14 +435,25 @@ public final class SettlementManager {
         };
     }
 
-    private static void sanitizeTemplate(CompoundTag root) {
+    static void sanitizeTemplate(CompoundTag root) {
         if (!root.contains("EntityTag", net.minecraft.nbt.Tag.TAG_COMPOUND)) return;
         CompoundTag entity = root.getCompound("EntityTag");
-        entity.remove("UUID"); entity.remove("UUIDMost"); entity.remove("UUIDLeast"); entity.remove("Pos");
-        entity.remove("Motion"); entity.remove("Rotation"); entity.remove("Passengers"); entity.remove("Team");
-        entity.remove("Owner"); entity.remove("OwnerUUID"); entity.remove("isOwned");
-        entity.remove("Group"); entity.remove("MountUUID"); entity.remove("ProtectUUID"); entity.remove("UpkeepUUID");
-        entity.remove("UpkeepPosX"); entity.remove("UpkeepPosY"); entity.remove("UpkeepPosZ");
+        // A configured spawn egg is an equipment/appearance template, not a snapshot of a live
+        // recruit. Copying command, navigation, ownership or physics state creates inert entities
+        // that Recruits cannot control and can leave a "running" animation suspended in mid-air.
+        for (String key : List.of(
+                "UUID", "UUIDMost", "UUIDLeast", "Pos", "Motion", "Rotation", "Passengers", "Team",
+                "NoAI", "NoGravity", "Invulnerable", "Silent", "Glowing", "OnGround", "FallDistance",
+                "PortalCooldown", "Leash", "Brain", "Owner", "OwnerUUID", "isOwned", "Group",
+                "MountUUID", "ProtectUUID", "UpkeepUUID", "UpkeepPosX", "UpkeepPosY", "UpkeepPosZ",
+                "despawnTimer", "AggroState", "FollowState", "ShouldFollow", "ShouldMount",
+                "ShouldProtect", "ShouldBlock", "Listen", "Fleeing", "isFollowing", "mountTimer",
+                "upkeepTimer", "UpkeepTimer", "MaxFallDistance", "formationPos", "ShouldRest",
+                "isInFormation", "holdFormation", "paymentTimer", "HoldPosX", "HoldPosY", "HoldPosZ",
+                "ShouldHoldPos", "MovePosX", "MovePosY", "MovePosZ", "ShouldMovePos",
+                "SettlementsMercenaryLifecycle", "SettlementsMercenaryPendingSpawn")) {
+            entity.remove(key);
+        }
         entity.remove(TAG_SETTLEMENT); entity.remove(TAG_BATCH); entity.remove(TAG_MANAGED); entity.remove(TAG_KIND);
         entity.remove(TAG_UNIT_TYPE);
         if (entity.contains("ForgeData", net.minecraft.nbt.Tag.TAG_COMPOUND)) {

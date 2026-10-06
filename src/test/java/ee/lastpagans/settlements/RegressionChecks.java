@@ -25,6 +25,7 @@ public final class RegressionChecks {
         dyeNames();
         researchTiers();
         capturePacket();
+        recruitTemplateSanitization();
         System.out.println("Settlements regression checks passed: " + assertions + " assertions");
     }
 
@@ -133,6 +134,32 @@ public final class RegressionChecks {
             check(decoded.zones().equals(zones), "capture packet retains more than 256 zones and contested control");
             check(buffer.readableBytes() == 0, "capture packet consumes its complete payload");
         } finally { buffer.release(); }
+    }
+
+    private static void recruitTemplateSanitization() {
+        CompoundTag root = new CompoundTag();
+        CompoundTag entity = new CompoundTag();
+        entity.putBoolean("NoAI", true);
+        entity.putBoolean("NoGravity", true);
+        entity.putBoolean("Invulnerable", true);
+        entity.putBoolean("Fleeing", true);
+        entity.putBoolean("ShouldHoldPos", true);
+        entity.putBoolean("ShouldMovePos", true);
+        entity.putUUID("OwnerUUID", UUID.randomUUID());
+        entity.putInt("FollowState", 4);
+        entity.putInt("SettlementsMercenaryLifecycle", 1);
+        entity.putBoolean("SettlementsMercenaryPendingSpawn", true);
+        entity.putInt("Variant", 3);
+        entity.put("ArmorItems", new ListTag());
+        root.put("EntityTag", entity);
+        SettlementManager.sanitizeTemplate(root);
+        CompoundTag clean = root.getCompound("EntityTag");
+        for (String unsafe : java.util.List.of("NoAI", "NoGravity", "Invulnerable", "Fleeing",
+                "ShouldHoldPos", "ShouldMovePos", "OwnerUUID", "FollowState",
+                "SettlementsMercenaryLifecycle", "SettlementsMercenaryPendingSpawn"))
+            check(!clean.contains(unsafe), "runtime recruit template state removed: " + unsafe);
+        check(clean.getInt("Variant") == 3, "template appearance is preserved");
+        check(clean.contains("ArmorItems", Tag.TAG_LIST), "template equipment is preserved");
     }
 
     private static void check(boolean condition, String message) {

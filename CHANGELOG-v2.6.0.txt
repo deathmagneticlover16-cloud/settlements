@@ -31,3 +31,12 @@ Recovery continuation fixes
   obsolete Capital/Tier IV documentation and clipped research requirement text.
 - Updated root build/release documentation; preserved 2.5.4 docs in docs/legacy.
 - Added executable regression checks to the normal Gradle build.
+- Fixed named Mercenary Roster soldiers spawning as inert template snapshots.
+  Runtime AI, gravity, command, ownership and navigation state is now stripped
+  from roster templates before the soldier is created.
+- Named mercenaries now enter and leave through Recruits' normal hire/disband
+  lifecycle, keeping interaction, debug controls and player-unit accounting valid.
+- Existing active 2.6 mercenaries are repaired once when loaded; ended contracts
+  cleanly unregister and despawn their units instead of leaving floating runners.
+- Protected in-progress company spawns from premature retirement during Forge's
+  entity-join event and made failed company hires roll back Recruits bookkeeping.

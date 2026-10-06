@@ -1,6 +1,7 @@
 package ee.lastpagans.settlements;
 
 import com.talhanation.recruits.FactionEvents;
+import com.talhanation.recruits.RecruitEvents;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import ee.lastpagans.settlements.network.MercenaryRosterSnapshotPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
@@ -9,11 +10,13 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.scores.PlayerTeam;
 import net.minecraftforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +25,9 @@ import java.util.UUID;
 
 /** Named, polity-level mercenary companies layered over Villager Recruits entities. */
 public final class MercenaryRosterManager {
+    private static final String TAG_LIFECYCLE_VERSION = "SettlementsMercenaryLifecycle";
+    private static final String TAG_PENDING_SPAWN = "SettlementsMercenaryPendingSpawn";
+    private static final int LIFECYCLE_VERSION = 1;
     private MercenaryRosterManager() {}
 
     public static void open(ServerPlayer player, String message) {
@@ -113,7 +119,7 @@ public final class MercenaryRosterManager {
             for (int i = 0; i < unit.count(); i++, index++) {
                 AbstractRecruitEntity recruit = SettlementManager.spawnRecruitFromTemplate(level, player, settlement, unit.type(), index, team, false, null, template, definition.id());
                 if (recruit == null) {
-                    spawned.forEach(Entity::discard);
+                    rollbackSpawnedRecruits(player.getServer(), spawned);
                     return "Mercenary spawning failed; no Wealth was charged.";
                 }
                 // Company contracts are paid once per company, not once per soldier. Strip any legacy
@@ -125,16 +131,15 @@ public final class MercenaryRosterManager {
                 recruit.getPersistentData().remove(SettlementManager.TAG_MERCENARY_MISSED_PAYMENTS);
                 recruit.getPersistentData().putBoolean(SettlementManager.TAG_MERCENARY, true);
                 recruit.getPersistentData().putString(SettlementManager.TAG_MERCENARY_COMPANY, definition.id());
-                recruit.setOwnerUUID(Optional.of(player.getUUID()));
-                recruit.setIsOwned(true);
-                recruit.setFollowState(2);
-                recruit.setAggroState(0);
                 spawned.add(recruit);
             }
         }
 
         boolean paid = StateTreasury.spend(level, settlement, price);
-        if (!paid) { spawned.forEach(Entity::discard); return "The treasury changed before the contract completed; no company was hired."; }
+        if (!paid) {
+            rollbackSpawnedRecruits(player.getServer(), spawned);
+            return "The treasury changed before the contract completed; no company was hired.";
+        }
 
         if (existing != null) terminateContract(player.getServer(), existing, false, "The company accepted a rival contract.");
         Set<UUID> units = new HashSet<>();
@@ -182,6 +187,10 @@ public final class MercenaryRosterManager {
                 continue;
             }
             MercenaryCompanyData.CompanyContract contract = original;
+            for (UUID unit : contract.unitIds()) {
+                AbstractRecruitEntity recruit = findLoaded(server, unit);
+                if (recruit != null) repairLegacyRecruit(server, contract, recruit);
+            }
             String currentFaction = settlement.getFactionTeam();
             if (!currentFaction.equals(contract.factionId())) {
                 // Founding a proper faction should not throw away an independent ruler's existing company.
@@ -262,12 +271,113 @@ public final class MercenaryRosterManager {
 
     public static boolean handleRetiredEntityJoin(ServerLevel level, Entity entity) {
         if (!(entity instanceof AbstractRecruitEntity recruit)) return false;
+        if (recruit.getPersistentData().getBoolean(TAG_PENDING_SPAWN)) return false;
         MercenaryCompanyData data = MercenaryCompanyData.get(level);
         String company = recruit.getPersistentData().getString(SettlementManager.TAG_MERCENARY_COMPANY);
         if (data.consumeRetiredUnit(recruit.getUUID()) || (!company.isBlank() && !data.isActiveUnit(recruit.getUUID()))) {
             recruit.discard(); return true;
         }
+        MercenaryCompanyData.CompanyContract contract = data.contractForUnit(recruit.getUUID());
+        if (contract != null) repairLegacyRecruit(level.getServer(), contract, recruit);
         return false;
+    }
+
+    /** Completes Recruits' normal hire lifecycle for a newly spawned named-company soldier. */
+    static boolean activateSpawnedRecruit(AbstractRecruitEntity recruit, ServerPlayer owner) {
+        if (recruit == null || owner == null) return false;
+        try {
+            resetRuntimeState(recruit);
+            recruit.setIsOwned(false);
+            recruit.setOwnerUUID(Optional.empty());
+            if (!recruit.hire(owner, null, false)) return false;
+            resetOrdersAfterHire(recruit);
+            recruit.getPersistentData().putInt(TAG_LIFECYCLE_VERSION, LIFECYCLE_VERSION);
+            return true;
+        } finally {
+            recruit.getPersistentData().remove(TAG_PENDING_SPAWN);
+        }
+    }
+
+    static void markPendingSpawn(AbstractRecruitEntity recruit) {
+        if (recruit != null) recruit.getPersistentData().putBoolean(TAG_PENDING_SPAWN, true);
+    }
+
+    private static void rollbackSpawnedRecruits(MinecraftServer server, Collection<AbstractRecruitEntity> recruits) {
+        for (AbstractRecruitEntity recruit : recruits) {
+            if (recruit == null) continue;
+            if (recruit.getPersistentData().getInt(TAG_LIFECYCLE_VERSION) >= LIFECYCLE_VERSION) {
+                UUID ownerId = recruit.getOwnerUUID();
+                ServerPlayer owner = ownerId == null || server == null ? null : server.getPlayerList().getPlayer(ownerId);
+                recruit.disband(owner, false, false);
+            }
+            recruit.discard();
+        }
+    }
+
+    /** Repairs companies spawned before the Recruits hire lifecycle was used. Runs once per unit. */
+    private static void repairLegacyRecruit(MinecraftServer server, MercenaryCompanyData.CompanyContract contract,
+                                            AbstractRecruitEntity recruit) {
+        if (server == null || contract == null || recruit == null
+                || recruit.getPersistentData().getInt(TAG_LIFECYCLE_VERSION) >= LIFECYCLE_VERSION) return;
+        UUID ownerId = contract.hiringPlayer();
+        resetRuntimeState(recruit);
+        if (ownerId != null) {
+            recruit.setOwnerUUID(Optional.of(ownerId));
+            recruit.setIsOwned(true);
+            if (RecruitEvents.recruitsPlayerUnitManager != null)
+                RecruitEvents.recruitsPlayerUnitManager.addRecruits(ownerId, 1);
+        }
+        resetOrdersAfterHire(recruit);
+        SettlementData.SettlementRecord settlement = SettlementData.get(server.overworld()).getSettlement(contract.settlementId());
+        if (settlement != null && recruit.level() instanceof ServerLevel level) {
+            PlayerTeam expected = level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
+            if (expected != null && !expected.equals(recruit.getTeam())) {
+                try { FactionEvents.addRecruitToTeam(recruit, expected, level); }
+                catch (RuntimeException exception) { level.getScoreboard().addPlayerToTeam(recruit.getScoreboardName(), expected); }
+            }
+        }
+        recruit.getPersistentData().putBoolean(SettlementManager.TAG_MERCENARY, true);
+        recruit.getPersistentData().putString(SettlementManager.TAG_MERCENARY_COMPANY, contract.companyId());
+        recruit.getPersistentData().putInt(TAG_LIFECYCLE_VERSION, LIFECYCLE_VERSION);
+    }
+
+    private static void resetRuntimeState(AbstractRecruitEntity recruit) {
+        recruit.setNoAi(false);
+        recruit.setNoGravity(false);
+        recruit.setInvulnerable(false);
+        recruit.setSilent(false);
+        recruit.setFleeing(false);
+        recruit.setDeltaMovement(Vec3.ZERO);
+        recruit.clearTarget();
+        recruit.getNavigation().stop();
+        recruit.clearHoldPos();
+        recruit.clearMovePos();
+        recruit.setShouldHoldPos(false);
+        recruit.setShouldMovePos(false);
+        recruit.setShouldProtect(false);
+        recruit.setProtectUUID(Optional.empty());
+        recruit.setShouldMount(false);
+        recruit.setMountUUID(Optional.empty());
+        recruit.setMountTimer(0);
+        recruit.setShouldBlock(false);
+        recruit.setListen(true);
+        recruit.setGroupUUID(null);
+        recruit.setShouldRest(false);
+        recruit.clearUpkeepEntity();
+        recruit.setUpkeepTimer(0);
+        recruit.resetPaymentTimer();
+        recruit.despawnTimer = -1;
+        recruit.formationPos = -1;
+        recruit.isInFormation = false;
+        recruit.holdFormation = false;
+        recruit.setPersistenceRequired();
+    }
+
+    private static void resetOrdersAfterHire(AbstractRecruitEntity recruit) {
+        recruit.setFollowState(2);
+        recruit.setAggroState(0);
+        recruit.setShouldFollow(false);
+        recruit.setIsFollowing(false);
     }
 
     private static void terminateContract(MinecraftServer server, MercenaryCompanyData.CompanyContract contract, boolean depart, String reason) {
@@ -279,19 +389,30 @@ public final class MercenaryRosterManager {
             if (settlement != null) settlement.removeMercenaryCompanyUnit(unit);
             AbstractRecruitEntity recruit = findLoaded(server, unit);
             if (recruit == null) { unavailable.add(unit); continue; }
-            recruit.setIsOwned(false); recruit.setOwnerUUID(Optional.empty()); recruit.clearUpkeepPos(); recruit.setShouldRest(false);
-            PlayerTeam team = recruit.getTeam() instanceof PlayerTeam playerTeam ? playerTeam : null;
-            if (team != null && recruit.level() instanceof ServerLevel level) {
-                try { FactionEvents.removeRecruitFromTeam(recruit, team, level); }
-                catch (RuntimeException exception) { level.getScoreboard().removePlayerFromTeam(recruit.getScoreboardName(), team); }
-            }
             CompoundTag tag = recruit.getPersistentData();
+            boolean registered = tag.getInt(TAG_LIFECYCLE_VERSION) >= LIFECYCLE_VERSION;
+            if (registered) {
+                ServerPlayer owner = recruit.getOwnerUUID() == null ? null : server.getPlayerList().getPlayer(recruit.getOwnerUUID());
+                recruit.disband(owner, false, false);
+            } else {
+                recruit.setIsOwned(false);
+                recruit.setOwnerUUID(Optional.empty());
+                PlayerTeam team = recruit.getTeam() instanceof PlayerTeam playerTeam ? playerTeam : null;
+                if (team != null && recruit.level() instanceof ServerLevel level) {
+                    try { FactionEvents.removeRecruitFromTeam(recruit, team, level); }
+                    catch (RuntimeException exception) { level.getScoreboard().removePlayerFromTeam(recruit.getScoreboardName(), team); }
+                }
+            }
+            recruit.clearUpkeepPos();
+            recruit.setShouldRest(false);
             tag.remove(SettlementManager.TAG_MANAGED); tag.remove(SettlementManager.TAG_SETTLEMENT);
             tag.remove(SettlementManager.TAG_MERCENARY); tag.remove(SettlementManager.TAG_MERCENARY_COMPANY);
             tag.remove(SettlementManager.TAG_MERCENARY_WAGE); tag.remove(SettlementManager.TAG_MERCENARY_INTERVAL_DAYS);
             tag.remove(SettlementManager.TAG_MERCENARY_NEXT_PAYMENT_DAY); tag.remove(SettlementManager.TAG_MERCENARY_MISSED_PAYMENTS);
-            if (depart) { recruit.setFleeing(true); }
-            else recruit.discard();
+            tag.remove(TAG_LIFECYCLE_VERSION);
+            // A named company leaving is a roster transaction, not a new unowned ambient recruit.
+            // Remove the entity after Recruits has unregistered ownership to avoid zombie/floating units.
+            recruit.discard();
         }
         if (!unavailable.isEmpty()) data.retireUnits(unavailable);
         data.remove(contract.companyId());

@@ -4,7 +4,8 @@ AUTOMATED
 Run gradlew.bat build (or regressionChecks alone). Checks exercise actual mapped
 Minecraft classes: banner sanitization, capture geometry/control persistence,
 treasury accounting, dye-name persistence, capital/rank research separation,
-and network round trips with more than 256 capture objectives.
+mercenary template-state sanitization, and network round trips with more than
+256 capture objectives.
 
 MANUAL — FRESH TEST WORLD, MATCHING CLIENT/SERVER BUILDS
 1. Found an independent settlement in linked Recruits claims. Check its initial
@@ -29,6 +30,11 @@ MANUAL — FRESH TEST WORLD, MATCHING CLIENT/SERVER BUILDS
 7. Deposit/withdraw physical currency, recruit professionals, hire mercenaries,
    process upkeep, send aid and resolve treasury payments. Two settlements in one
    polity must show the same balance; no action should spend a separate local wallet.
+   Interact with every named-company recruit and open Recruits' debug controls.
+   They must move normally and obey orders. End the contract and verify every unit
+   disappears without floating/running in place and the Recruits unit count drops.
+   In a copy of an affected pre-fix world, leave the company loaded for 30 seconds
+   (or reload its chunks) and verify its surviving units become interactive again.
 8. Capture placement: reject undersized, unlinked, nested, overlapping and too-close
    zones. Replace Main using an overlapping old footprint. Add a spare Secondary,
    remove the old one, and verify tier minimums remain satisfied. Editing must fail

@@ -1,13 +1,16 @@
-SETTLEMENTS 2.6.0 CONTINUATION CHECKPOINT — 2026-09-07
+SETTLEMENTS 2.6.0 CONTINUATION CHECKPOINT — UPDATED 2026-10-06
 
 CURRENT CONTINUATION STATUS
 - Continued directly from 6e24ea4 on settlements-2.6.0-foundations.
 - Use current Git HEAD; preserve this history when continuing.
 - The three checkpoint compile errors are fixed. ForgeGradle build/reobfJar and
-  62 regression assertions passed; see VALIDATION-v2.6.0.txt for exact limits.
+  74 regression assertions passed; see VALIDATION-v2.6.0.txt for exact limits.
 - Faction drafts, banner validation, dye persistence/display, treasury transfer,
   tax keyboard controls, capture recovery/control persistence and API packets
   have been corrected. Network protocol is now 38.
+- Named mercenary soldiers now use Recruits' real hire/disband lifecycle. Spawn
+  templates cannot restore stale AI/physics/order state, active pre-fix units are
+  repaired once when loaded, and contract termination unregisters then despawns.
 - Root release/build/test documentation now targets 2.6.0.
 - The immediate remaining work is in-game testing from TESTING-v2.6.0.txt,
   especially client/server capture, Dye Depot banner rendering, GUI scale and

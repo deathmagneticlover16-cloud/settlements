@@ -79,6 +79,9 @@ public final class MercenaryCompanyData extends SavedData {
     public void retireUnits(Collection<UUID> units) { if (units != null && retiredUnits.addAll(units)) setDirty(); }
     public boolean consumeRetiredUnit(UUID unit) { boolean removed = unit != null && retiredUnits.remove(unit); if (removed) setDirty(); return removed; }
     public boolean isActiveUnit(UUID unit) { return unit != null && contracts.values().stream().anyMatch(value -> value.unitIds().contains(unit)); }
+    public CompanyContract contractForUnit(UUID unit) {
+        return unit == null ? null : contracts.values().stream().filter(value -> value.unitIds().contains(unit)).findFirst().orElse(null);
+    }
 
     private static int clamp(int value) { return Math.max(0, Math.min(100, value)); }
 

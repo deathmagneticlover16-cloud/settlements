@@ -1,4 +1,4 @@
-SETTLEMENTS 2.6.0 — VALIDATION, 2026-09-07
+SETTLEMENTS 2.6.0 — VALIDATION, updated 2026-10-06
 
 RECOVERY
 Started from 6e24ea43623ff7cb314bbb1d22cdf5c864bebe46 on the existing branch
@@ -10,11 +10,16 @@ excluded from the continuation commit; their content remains unchanged.
 PASSED
 - ForgeGradle build including Java compilation, resources, JAR and reobfJar.
 - Final offline build after resolving the initially missing Forge runtime dependency.
-- 62 executable regression assertions against actual mapped Minecraft classes.
+- 74 executable regression assertions against actual mapped Minecraft classes.
   Covers geometry, captured/contested save/load, occupation cleanup on deletion,
   invalid banner patterns/colors/layer counts, NBT sanitization, treasury spending/
   overflow, vanilla dye mapping, optional dye-name persistence, capital/rank tier
   separation and capture-network round trips for 257 objectives.
+- Mercenary roster templates are regression-checked to remove unsafe physics,
+  ownership and order state while preserving appearance and equipment data.
+- Mercenary lifecycle repair was compiled against Recruits 1.15.2: new units use
+  normal hire/disband registration, failed spawns roll it back, and pre-fix active
+  units receive a one-time loaded-entity repair.
 - Source audit: no live Bard references; direct legacy settlement get/set Wealth
   access is confined to the transitional StateTreasury migration. Live expenses
   use State Treasury or the corresponding shared polity account.
@@ -27,6 +32,8 @@ NOT RUN
 - Regression checks run on the mapped Java classpath, not a full mod-loader session;
   they cannot prove mixin application, multiplayer behavior or GUI rendering.
 - The compiled JAR has not been installed into the user's PrismLauncher instance.
+- Mercenary interaction, movement, debug-menu access and old-world recovery still
+  require the focused in-game checks in TESTING-v2.6.0.txt.
 
 Treat this as a compiled test build. Follow TESTING-v2.6.0.txt before release.
 Optional Year/Seasons, Leagues, Culture and Trade Agreements remain deferred.
