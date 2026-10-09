@@ -63,7 +63,9 @@ public final class CampaignSystemsManager {
             for (int x = region.min().getX(); x <= region.max().getX(); x++) {
                 for (int y = region.min().getY(); y <= region.max().getY(); y++) {
                     for (int z = region.min().getZ(); z <= region.max().getZ(); z++) {
-                        BlockState state = regionLevel.getBlockState(new BlockPos(x, y, z));
+                        BlockPos pos = new BlockPos(x, y, z);
+                        if (!region.contains(region.dimension(), pos)) continue;
+                        BlockState state = regionLevel.getBlockState(pos);
                         if (state.getBlock() instanceof BedBlock && state.hasProperty(BedBlock.PART)
                                 && state.getValue(BedBlock.PART) == BedPart.HEAD) beds++;
                     }
@@ -970,6 +972,7 @@ public final class CampaignSystemsManager {
         int capacity = 0;
         for (int x = area.min().getX(); x <= area.max().getX(); x++) {
             for (int z = area.min().getZ(); z <= area.max().getZ(); z++) {
+                if (!area.containsHorizontal(new BlockPos(x, area.min().getY(), z))) continue;
                 int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
                 if (surface < area.min().getY() - 4 || surface > area.max().getY() + 8) continue;
                 BlockPos feet = new BlockPos(x, surface, z);
@@ -996,12 +999,15 @@ public final class CampaignSystemsManager {
             int slot = Math.floorMod(index + attempt, total);
             int x = area.min().getX() + (slot % width);
             int z = area.min().getZ() + ((slot / width) % depth);
+            if (!area.containsHorizontal(new BlockPos(x, area.min().getY(), z))) continue;
             int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
             int y = Math.max(area.min().getY(), Math.min(area.max().getY() + 2, surface));
             BlockPos pos = new BlockPos(x, y, z);
             if (isSafeStanding(level, pos)) return pos;
         }
-        return oldGridSafe(level, area.min(), index);
+        BlockPos center = new BlockPos((area.min().getX() + area.max().getX()) / 2, area.min().getY(),
+                (area.min().getZ() + area.max().getZ()) / 2);
+        return oldGridSafe(level, center, index);
     }
 
     private static BlockPos oldGridSafe(ServerLevel level, BlockPos base, int index) {

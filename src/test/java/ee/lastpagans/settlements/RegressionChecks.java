@@ -24,6 +24,7 @@ public final class RegressionChecks {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
         capturePersistenceAndGeometry();
+        areaSelectionGeometry();
         bannerValidation();
         treasuryAccounting();
         dyeNames();
@@ -61,6 +62,39 @@ public final class RegressionChecks {
         check(restored.occupyingTeam("test").equals("invaders"), "occupation persists");
         restored.removeSettlement("test");
         check(restored.allZones().isEmpty() && restored.occupyingTeam("test").isEmpty(), "deletion clears objectives and occupation");
+    }
+
+    private static void areaSelectionGeometry() {
+        BlockPos min = BlockPos.ZERO, max = new BlockPos(8, 4, 8);
+        check(AreaSelection.contains(AreaSelection.Shape.BOX, min, max, new BlockPos(0, 2, 0), true),
+                "box selection includes its corner");
+        check(!AreaSelection.contains(AreaSelection.Shape.CYLINDER, min, max, new BlockPos(0, 2, 0), true),
+                "cylinder selection excludes bounding-box corners");
+        check(AreaSelection.contains(AreaSelection.Shape.CYLINDER, min, max, new BlockPos(4, 2, 4), true),
+                "cylinder selection includes its centre");
+        check(!AreaSelection.contains(AreaSelection.Shape.CYLINDER, min, max, new BlockPos(4, 8, 4), true)
+                        && AreaSelection.contains(AreaSelection.Shape.CYLINDER, min, max, new BlockPos(4, 8, 4), false),
+                "horizontal selections ignore height while volume selections enforce it");
+        long cylinderArea = AreaSelection.horizontalArea(AreaSelection.Shape.CYLINDER, min, max);
+        check(cylinderArea > 0 && cylinderArea < AreaSelection.horizontalArea(AreaSelection.Shape.BOX, min, max),
+                "cylinder capacity uses its actual footprint");
+
+        CaptureZoneData data = new CaptureZoneData();
+        CaptureZoneData.CaptureZoneRecord cylinder = new CaptureZoneData.CaptureZoneRecord(UUID.randomUUID(), "shape_test",
+                CaptureZoneData.ZoneType.MAIN, "minecraft:overworld", min, max, AreaSelection.Shape.CYLINDER);
+        data.put(cylinder);
+        CaptureZoneData.CaptureZoneRecord restored = CaptureZoneData.load(data.save(new CompoundTag())).get(cylinder.id());
+        check(restored.shape() == AreaSelection.Shape.CYLINDER && !restored.contains(new BlockPos(0, 200, 0)),
+                "capture zone shape persists and controls its horizontal footprint");
+
+        net.minecraft.network.FriendlyByteBuf buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            var packet = new ee.lastpagans.settlements.network.AreaSelectionPacket("shape_test", AreaSelection.Type.MUSTER,
+                    AreaSelection.Shape.CYLINDER, min, max);
+            ee.lastpagans.settlements.network.AreaSelectionPacket.encode(packet, buffer);
+            check(ee.lastpagans.settlements.network.AreaSelectionPacket.decode(buffer).equals(packet) && buffer.readableBytes() == 0,
+                    "area selection packet preserves type, shape, and both corners");
+        } finally { buffer.release(); }
     }
 
     private static void bannerValidation() {

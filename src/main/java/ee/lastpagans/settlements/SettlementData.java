@@ -399,6 +399,7 @@ public final class SettlementData extends SavedData {
         private BlockPos upkeepChest;
         private int barracksRadius = 12;
         private int barracksCapacity = 64;
+        private AreaSelection.Shape barracksShape = AreaSelection.Shape.CYLINDER;
         /** Political faction. Blank means this settlement is independent in Settlements diplomacy. */
         private String factionTeam = "";
         /** Hidden Recruits faction used only to make independent claims/units function correctly. */
@@ -483,6 +484,8 @@ public final class SettlementData extends SavedData {
                 if (point.contains("Chest", Tag.TAG_LONG)) barracksChest = BlockPos.of(point.getLong("Chest"));
                 barracksRadius = point.contains("Radius", Tag.TAG_INT) ? Math.max(2, point.getInt("Radius")) : 12;
                 barracksCapacity = point.contains("Capacity", Tag.TAG_INT) ? Math.max(1, point.getInt("Capacity")) : 64;
+                barracksShape = point.contains("Shape", Tag.TAG_STRING)
+                        ? AreaSelection.Shape.parse(point.getString("Shape")) : AreaSelection.Shape.CYLINDER;
             }
 
             readUuidSet(tag, "Villagers", villagerResidents);
@@ -568,6 +571,7 @@ public final class SettlementData extends SavedData {
                 if (barracksChest != null) point.putLong("Chest", barracksChest.asLong());
                 point.putInt("Radius", barracksRadius);
                 point.putInt("Capacity", barracksCapacity);
+                point.putString("Shape", barracksShape.name());
                 tag.put("Barracks", point);
             }
 
@@ -617,6 +621,7 @@ public final class SettlementData extends SavedData {
         public BlockPos getUpkeepChest() { return upkeepChest; }
         public int getBarracksRadius() { return barracksRadius; }
         public int getBarracksCapacity() { return barracksCapacity; }
+        public AreaSelection.Shape getBarracksShape() { return barracksShape; }
         public String getFactionTeam() { return factionTeam; }
         public String getBackingFactionTeam() { return backingFactionTeam; }
         /** Recruits-facing team. Political faction wins; independents use their hidden backing faction. */
@@ -821,6 +826,17 @@ public final class SettlementData extends SavedData {
         public void setBarracksSettings(int radius, int capacity) {
             barracksRadius = Math.max(2, Math.min(64, radius));
             barracksCapacity = Math.max(1, Math.min(512, capacity));
+            dirty();
+        }
+
+        public void setBarracksArea(String dimension, BlockPos first, BlockPos second, AreaSelection.Shape shape) {
+            BlockPos min = AreaSelection.min(first, second);
+            BlockPos max = AreaSelection.max(first, second);
+            BlockPos center = new BlockPos((min.getX() + max.getX()) / 2, min.getY(), (min.getZ() + max.getZ()) / 2);
+            int radius = Math.max(2, Math.min(64, Math.max(max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1) / 2));
+            setBarracks(dimension, center);
+            barracksRadius = radius;
+            barracksShape = shape == null ? AreaSelection.Shape.BOX : shape;
             dirty();
         }
 

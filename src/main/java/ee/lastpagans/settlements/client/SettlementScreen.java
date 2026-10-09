@@ -5,6 +5,7 @@ import com.talhanation.recruits.world.RecruitsFaction;
 import ee.lastpagans.settlements.SettlementManager;
 import ee.lastpagans.settlements.SettlementSnapshot;
 import ee.lastpagans.settlements.CaptureZoneData;
+import ee.lastpagans.settlements.AreaSelection;
 import ee.lastpagans.settlements.client.api.ClientCaptureZoneApi;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
@@ -152,24 +153,18 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 .bounds(left + 30, top + 146, 150, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Set Upkeep Chest"), b -> send(SettlementManager.SettlementAction.SET_UPKEEP_CHEST))
                 .bounds(left + 195, top + 146, 150, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Set Barracks Here"), b -> send(SettlementManager.SettlementAction.SET_BARRACKS))
+        addRenderableWidget(Button.builder(Component.literal("Edit Barracks Area"), b -> beginArea(AreaSelection.Type.BARRACKS))
                 .bounds(left + 360, top + 146, 150, 18).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Housing Pos 1"), b -> send(SettlementManager.SettlementAction.HOUSING_POS1))
-                .bounds(left + 30, top + 200, 104, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Housing Pos 2"), b -> send(SettlementManager.SettlementAction.HOUSING_POS2))
-                .bounds(left + 140, top + 200, 104, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Edit Housing Area"), b -> beginArea(AreaSelection.Type.HOUSING))
+                .bounds(left + 30, top + 200, 214, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Recalculate"), b -> send(SettlementManager.SettlementAction.RECALCULATE_HOUSING))
                 .bounds(left + 250, top + 200, 92, 18).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Muster Pos 1"), b -> send(SettlementManager.SettlementAction.MUSTER_POS1))
-                .bounds(left + 30, top + 244, 104, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Muster Pos 2"), b -> send(SettlementManager.SettlementAction.MUSTER_POS2))
-                .bounds(left + 140, top + 244, 104, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Prayer Pos 1"), b -> send(SettlementManager.SettlementAction.PRAYER_POS1))
-                .bounds(left + 300, top + 244, 104, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Prayer Pos 2"), b -> send(SettlementManager.SettlementAction.PRAYER_POS2))
-                .bounds(left + 410, top + 244, 104, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Edit Muster Ground"), b -> beginArea(AreaSelection.Type.MUSTER))
+                .bounds(left + 30, top + 244, 214, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Edit Prayer Site"), b -> beginArea(AreaSelection.Type.PRAYER))
+                .bounds(left + 300, top + 244, 214, 18).build());
     }
 
     private void identityManagementButtons() {
@@ -219,20 +214,20 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
 
     private void captureManagementButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Main Pos 1"), b -> send(SettlementManager.SettlementAction.CAPTURE_MAIN_POS1))
-                .bounds(left + 30, top + 166, 108, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Main Pos 2"), b -> send(SettlementManager.SettlementAction.CAPTURE_MAIN_POS2))
-                .bounds(left + 144, top + 166, 108, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Secondary Pos 1"), b -> send(SettlementManager.SettlementAction.CAPTURE_SECONDARY_POS1))
-                .bounds(left + 30, top + 214, 108, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Secondary Pos 2"), b -> send(SettlementManager.SettlementAction.CAPTURE_SECONDARY_POS2))
-                .bounds(left + 144, top + 214, 108, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Edit Main Capture Zone"), b -> beginArea(AreaSelection.Type.CAPTURE_MAIN))
+                .bounds(left + 30, top + 166, 222, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Add Secondary Capture Zone"), b -> beginArea(AreaSelection.Type.CAPTURE_SECONDARY))
+                .bounds(left + 30, top + 214, 222, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Remove Nearest"), b -> send(SettlementManager.SettlementAction.REMOVE_CAPTURE_ZONE))
                 .bounds(left + 30, top + 262, 222, 18).build());
     }
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
         SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target));
+    }
+
+    private void beginArea(AreaSelection.Type type) {
+        AreaSelectionEditor.begin(snapshot.settlementId(), type);
     }
 
     private void memberManagementButtons() {

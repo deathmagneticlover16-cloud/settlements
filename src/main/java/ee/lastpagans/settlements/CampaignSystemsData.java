@@ -647,9 +647,11 @@ public final class CampaignSystemsData extends SavedData {
         }
     }
 
-    public record RegionRecord(String dimension, BlockPos min, BlockPos max) {
+    public record RegionRecord(String dimension, BlockPos min, BlockPos max, AreaSelection.Shape shape) {
+        public RegionRecord(String dimension, BlockPos min, BlockPos max) { this(dimension, min, max, AreaSelection.Shape.BOX); }
         public RegionRecord {
             dimension = dimension == null ? "" : dimension;
+            shape = shape == null ? AreaSelection.Shape.BOX : shape;
             if (min != null && max != null) {
                 BlockPos a = min; BlockPos b = max;
                 min = new BlockPos(Math.min(a.getX(), b.getX()), Math.min(a.getY(), b.getY()), Math.min(a.getZ(), b.getZ()));
@@ -657,11 +659,12 @@ public final class CampaignSystemsData extends SavedData {
             }
         }
         public boolean valid() { return !dimension.isBlank() && min != null && max != null; }
-        public long horizontalArea() { if (!valid()) return 0; return (long) (max.getX() - min.getX() + 1) * (max.getZ() - min.getZ() + 1); }
+        public long horizontalArea() { return valid() ? AreaSelection.horizontalArea(shape, min, max) : 0L; }
         public long volume() { if (!valid()) return 0; return horizontalArea() * (max.getY() - min.getY() + 1L); }
-        public boolean contains(String dim, BlockPos pos) { return valid() && dimension.equals(dim) && pos != null && pos.getX() >= min.getX() && pos.getX() <= max.getX() && pos.getY() >= min.getY() && pos.getY() <= max.getY() && pos.getZ() >= min.getZ() && pos.getZ() <= max.getZ(); }
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putString("Dimension", dimension); if (min != null) tag.putLong("Min", min.asLong()); if (max != null) tag.putLong("Max", max.asLong()); return tag; }
-        private static RegionRecord fromNBT(CompoundTag tag) { return new RegionRecord(tag.getString("Dimension"), tag.contains("Min", Tag.TAG_LONG) ? BlockPos.of(tag.getLong("Min")) : null, tag.contains("Max", Tag.TAG_LONG) ? BlockPos.of(tag.getLong("Max")) : null); }
+        public boolean contains(String dim, BlockPos pos) { return valid() && dimension.equals(dim) && AreaSelection.contains(shape, min, max, pos, true); }
+        public boolean containsHorizontal(BlockPos pos) { return valid() && AreaSelection.contains(shape, min, max, pos, false); }
+        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putString("Dimension", dimension); tag.putString("Shape", shape.name()); if (min != null) tag.putLong("Min", min.asLong()); if (max != null) tag.putLong("Max", max.asLong()); return tag; }
+        private static RegionRecord fromNBT(CompoundTag tag) { return new RegionRecord(tag.getString("Dimension"), tag.contains("Min", Tag.TAG_LONG) ? BlockPos.of(tag.getLong("Min")) : null, tag.contains("Max", Tag.TAG_LONG) ? BlockPos.of(tag.getLong("Max")) : null, AreaSelection.Shape.parse(tag.getString("Shape"))); }
     }
 
     public record HolySiteRecord(String id, String name, String faith, RegionRecord region, int devotionGain) {

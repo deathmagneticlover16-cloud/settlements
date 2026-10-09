@@ -34,6 +34,10 @@ public final class ClientCampaignEvents {
     }
 
     public static void onScreenOpening(ScreenEvent.Opening event) {
+        if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.PauseScreen && AreaSelectionEditor.consumePauseScreen()) {
+            event.setCanceled(true);
+            return;
+        }
         if (event.getNewScreen() != null && ClientCharacterBodyState.blocksWildfireScreens()
                 && (event.getNewScreen() instanceof WardrobeBrowserScreen
                 || event.getNewScreen() instanceof WildfireCharacterSettingsScreen
@@ -68,6 +72,7 @@ public final class ClientCampaignEvents {
     }
 
     public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        AreaSelectionEditor.cancel();
         SettlementsWildfirePreviewSession.cancel();
         ClientCharacterBodyState.clear(null);
     }

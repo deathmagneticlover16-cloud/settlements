@@ -13,6 +13,7 @@ import ee.lastpagans.settlements.character.CharacterBodyData;
 import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
 import ee.lastpagans.settlements.network.ProfileSyncPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
+import ee.lastpagans.settlements.network.AreaSelectionPacket;
 import ee.lastpagans.settlements.network.SnapshotPacket;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -246,6 +247,49 @@ public final class SettlementManager {
         };
         sendSnapshot(player, settlement, false, result);
         CampaignManager.sendMapMarkers(player);
+    }
+
+    public static void handleAreaSelection(ServerPlayer player, AreaSelectionPacket packet) {
+        if (player == null || packet == null || packet.type() == null || packet.shape() == null
+                || packet.first() == null || packet.second() == null) return;
+        SettlementData.SettlementRecord settlement = SettlementData.get(player.serverLevel()).getSettlement(packet.settlementId());
+        if (settlement == null) { player.sendSystemMessage(Component.literal("That settlement no longer exists.")); return; }
+        String result;
+        if (!canManage(player, settlement)) result = "You cannot manage this settlement.";
+        else result = applyAreaSelection(player, settlement, packet.type(), packet.shape(), packet.first(), packet.second());
+        sendSnapshot(player, settlement, false, result);
+    }
+
+    private static String applyAreaSelection(ServerPlayer player, SettlementData.SettlementRecord settlement, AreaSelection.Type type,
+                                             AreaSelection.Shape shape, BlockPos first, BlockPos second) {
+        if (type.horizontalOnly()) second = new BlockPos(second.getX(), first.getY(), second.getZ());
+        BlockPos min = AreaSelection.min(first, second), max = AreaSelection.max(first, second);
+        int width = max.getX() - min.getX() + 1, height = max.getY() - min.getY() + 1, depth = max.getZ() - min.getZ() + 1;
+        if (width > 128 || depth > 128 || height > 128) return "Selections may be at most 128 blocks on each axis.";
+        if (min.getY() < player.serverLevel().getMinBuildHeight() || max.getY() >= player.serverLevel().getMaxBuildHeight()) return "That selection extends outside the buildable world.";
+        if (min.distSqr(player.blockPosition()) > 192D * 192D && max.distSqr(player.blockPosition()) > 192D * 192D) return "Move within 192 blocks of the area before confirming it.";
+        String dimension = player.serverLevel().dimension().location().toString();
+        CampaignSystemsData.RegionRecord region = new CampaignSystemsData.RegionRecord(dimension, min, max, shape);
+        CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
+        return switch (type) {
+            case HOUSING -> {
+                extra.addHousingArea(settlement.getId(), region);
+                int beds = CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement);
+                yield shape.label() + " dwelling registered: " + beds + " total housing bed(s).";
+            }
+            case MUSTER -> {
+                extra.setMusterArea(settlement.getId(), region);
+                settlement.setMusterGround(dimension, min);
+                yield shape.label() + " Muster Ground registered with capacity for about " + region.horizontalArea() + " soldiers.";
+            }
+            case PRAYER -> { extra.setPrayerSite(settlement.getId(), region); yield shape.label() + " Prayer Site registered."; }
+            case BARRACKS -> {
+                settlement.setBarracksArea(dimension, min, max, shape);
+                yield shape.label() + " Barracks registered with a " + settlement.getBarracksRadius() + " block radius.";
+            }
+            case CAPTURE_MAIN -> CaptureZoneManager.setArea(player, settlement, CaptureZoneData.ZoneType.MAIN, min, max, shape);
+            case CAPTURE_SECONDARY -> CaptureZoneManager.setArea(player, settlement, CaptureZoneData.ZoneType.SECONDARY, min, max, shape);
+        };
     }
 
     private static void cycleSettlement(ServerPlayer player, SettlementData data, SettlementData.SettlementRecord current,
@@ -1284,8 +1328,12 @@ public final class SettlementManager {
             for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(settlement.getOwnerId()))
                 target += CampaignData.scaledSpouseEffect(additional.moraleBonus(), spouseIndex++);
         }
-        if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())
-                && recruit.blockPosition().closerThan(settlement.getBarracks(), settlement.getBarracksRadius())) target += 8;
+        if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())) {
+            int radius = settlement.getBarracksRadius();
+            BlockPos center = settlement.getBarracks();
+            BlockPos min = center.offset(-radius, 0, -radius), max = center.offset(radius, 0, radius);
+            if (AreaSelection.contains(settlement.getBarracksShape(), min, max, recruit.blockPosition(), false)) target += 8;
+        }
         CampaignSystemsData extra = CampaignSystemsData.get((ServerLevel) recruit.level());
         for (CampaignSystemsData.ModifierRecord modifier : extra.modifiers(settlement.getId())) target += modifier.morale;
         if (recruit.getPersistentData().getBoolean(TAG_MERCENARY)) {

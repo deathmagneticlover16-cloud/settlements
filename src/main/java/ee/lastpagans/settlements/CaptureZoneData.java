@@ -90,17 +90,22 @@ public final class CaptureZoneData extends SavedData {
         private final String dimension;
         private final BlockPos pos1;
         private final BlockPos pos2;
+        private final AreaSelection.Shape shape;
         private double progress;
         private ZoneState state;
         private String attackerTeam;
         private boolean captured;
 
         public CaptureZoneRecord(UUID id, String settlementId, ZoneType type, String dimension, BlockPos pos1, BlockPos pos2) {
-            this(id, settlementId, type, dimension, pos1, pos2, 0.0D, ZoneState.SECURE, "");
+            this(id, settlementId, type, dimension, pos1, pos2, AreaSelection.Shape.BOX);
+        }
+
+        public CaptureZoneRecord(UUID id, String settlementId, ZoneType type, String dimension, BlockPos pos1, BlockPos pos2, AreaSelection.Shape shape) {
+            this(id, settlementId, type, dimension, pos1, pos2, shape, 0.0D, ZoneState.SECURE, "");
         }
 
         private CaptureZoneRecord(UUID id, String settlementId, ZoneType type, String dimension, BlockPos first, BlockPos second,
-                                  double progress, ZoneState state, String attackerTeam) {
+                                  AreaSelection.Shape shape, double progress, ZoneState state, String attackerTeam) {
             this.id = id == null ? UUID.randomUUID() : id;
             this.settlementId = SettlementData.normalizeId(settlementId);
             this.type = type == null ? ZoneType.SECONDARY : type;
@@ -110,6 +115,7 @@ public final class CaptureZoneData extends SavedData {
             int minZ = Math.min(first.getZ(), second.getZ()), maxZ = Math.max(first.getZ(), second.getZ());
             this.pos1 = new BlockPos(minX, minY, minZ);
             this.pos2 = new BlockPos(maxX, maxY, maxZ);
+            this.shape = shape == null ? AreaSelection.Shape.BOX : shape;
             this.progress = clamp(progress);
             this.state = state == null ? ZoneState.SECURE : state;
             this.attackerTeam = attackerTeam == null ? "" : attackerTeam;
@@ -122,6 +128,7 @@ public final class CaptureZoneData extends SavedData {
         public String dimension() { return dimension; }
         public BlockPos pos1() { return pos1; }
         public BlockPos pos2() { return pos2; }
+        public AreaSelection.Shape shape() { return shape; }
         public double progress() { return progress; }
         public ZoneState state() { return state; }
         public String attackerTeam() { return attackerTeam; }
@@ -130,7 +137,7 @@ public final class CaptureZoneData extends SavedData {
         public int width() { return pos2.getX() - pos1.getX() + 1; }
         public int depth() { return pos2.getZ() - pos1.getZ() + 1; }
         public BlockPos center() { return new BlockPos((pos1.getX()+pos2.getX())/2, (pos1.getY()+pos2.getY())/2, (pos1.getZ()+pos2.getZ())/2); }
-        public boolean contains(BlockPos pos) { return pos != null && pos.getX() >= pos1.getX() && pos.getX() <= pos2.getX() && pos.getZ() >= pos1.getZ() && pos.getZ() <= pos2.getZ(); }
+        public boolean contains(BlockPos pos) { return AreaSelection.contains(shape, pos1, pos2, pos, false); }
         public boolean intersects(CaptureZoneRecord other) {
             if (other == null || !dimension.equals(other.dimension)) return false;
             return pos1.getX() <= other.pos2.getX() && pos2.getX() >= other.pos1.getX()
@@ -148,7 +155,7 @@ public final class CaptureZoneData extends SavedData {
         private CompoundTag toNBT() {
             CompoundTag tag = new CompoundTag();
             tag.putUUID("Id", id); tag.putString("Settlement", settlementId); tag.putString("Type", type.name()); tag.putString("Dimension", dimension);
-            tag.putLong("Pos1", pos1.asLong()); tag.putLong("Pos2", pos2.asLong()); tag.putDouble("Progress", progress); tag.putString("State", state.name()); tag.putString("Attacker", attackerTeam);
+            tag.putLong("Pos1", pos1.asLong()); tag.putLong("Pos2", pos2.asLong()); tag.putString("Shape", shape.name()); tag.putDouble("Progress", progress); tag.putString("State", state.name()); tag.putString("Attacker", attackerTeam);
             tag.putBoolean("Captured", captured);
             return tag;
         }
@@ -159,7 +166,7 @@ public final class CaptureZoneData extends SavedData {
                 ZoneState state; try { state = ZoneState.valueOf(tag.getString("State")); } catch (IllegalArgumentException ignored) { state=ZoneState.SECURE; }
                 String settlement = SettlementData.normalizeId(tag.getString("Settlement"));
                 if (settlement.isBlank()) return null;
-                CaptureZoneRecord record = new CaptureZoneRecord(id, settlement, type, tag.getString("Dimension"), BlockPos.of(tag.getLong("Pos1")), BlockPos.of(tag.getLong("Pos2")), tag.getDouble("Progress"), state, tag.getString("Attacker"));
+                CaptureZoneRecord record = new CaptureZoneRecord(id, settlement, type, tag.getString("Dimension"), BlockPos.of(tag.getLong("Pos1")), BlockPos.of(tag.getLong("Pos2")), AreaSelection.Shape.parse(tag.getString("Shape")), tag.getDouble("Progress"), state, tag.getString("Attacker"));
                 if (tag.contains("Captured")) record.captured = tag.getBoolean("Captured");
                 return record;
             } catch (RuntimeException ignored) { return null; }

@@ -108,6 +108,35 @@ public final class CaptureZoneManager {
         return (type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone created (" + candidate.width() + "×" + candidate.depth() + ").";
     }
 
+    public static String setArea(ServerPlayer player, SettlementData.SettlementRecord settlement, CaptureZoneData.ZoneType type,
+                                 BlockPos first, BlockPos second, AreaSelection.Shape shape) {
+        if (player == null || settlement == null || first == null || second == null) return "Invalid Capture Zone selection.";
+        if (editingBlocked(player.serverLevel(), settlement)) return "Capture Zones cannot be changed during war or occupation.";
+        String dimension = player.serverLevel().dimension().location().toString();
+        CaptureZoneData.CaptureZoneRecord candidate = new CaptureZoneData.CaptureZoneRecord(UUID.randomUUID(), settlement.getId(), type,
+                dimension, first, second, shape);
+        CaptureZoneData data = CaptureZoneData.get(player.serverLevel());
+        CaptureZoneData.CaptureZoneRecord oldMain = data.zonesFor(settlement.getId()).stream()
+                .filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).findFirst().orElse(null);
+        String invalid = validate(player.serverLevel(), settlement, candidate,
+                type == CaptureZoneData.ZoneType.MAIN && oldMain != null ? oldMain.id() : null);
+        if (invalid != null) return invalid;
+        if (type == CaptureZoneData.ZoneType.MAIN) {
+            for (CaptureZoneData.CaptureZoneRecord zone : data.zonesFor(settlement.getId())) {
+                if (zone.type() == CaptureZoneData.ZoneType.MAIN) data.remove(zone.id());
+            }
+        } else {
+            int max = Math.max(2, requirement(settlement).secondary() + 1);
+            long existing = data.zonesFor(settlement.getId()).stream().filter(z -> z.type() == CaptureZoneData.ZoneType.SECONDARY).count();
+            if (existing >= max) return "Remove a surplus Secondary before adding another. One spare objective is allowed for relocation.";
+        }
+        data.put(candidate);
+        settlement.addChronicle((type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone designated.");
+        broadcast(player.getServer());
+        return (type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone created as a "
+                + candidate.shape().label().toLowerCase(java.util.Locale.ROOT) + " (" + candidate.width() + "×" + candidate.depth() + ").";
+    }
+
     public static String removeNearest(ServerPlayer player, SettlementData.SettlementRecord settlement) {
         if (player == null || settlement == null) return "Invalid settlement.";
         if (editingBlocked(player.serverLevel(), settlement)) return "Capture Zones cannot be changed during war or occupation.";
@@ -320,10 +349,11 @@ public final class CaptureZoneManager {
         AABB box=new AABB(zone.pos1().getX(), level.getMinBuildHeight(), zone.pos1().getZ(), zone.pos2().getX()+1D, level.getMaxBuildHeight(), zone.pos2().getZ()+1D);
         int a=0,d=0;
         for (ServerPlayer player : level.players()) {
-            if (!player.isAlive() || player.isSpectator() || !box.contains(player.position())) continue;
+            if (!player.isAlive() || player.isSpectator() || !box.contains(player.position()) || !zone.contains(player.blockPosition())) continue;
             String team=teamId(player); if (attackers.contains(team)) a++; else if(defenders.contains(team)) d++;
         }
         for (AbstractRecruitEntity recruit : level.getEntitiesOfClass(AbstractRecruitEntity.class, box, Entity::isAlive)) {
+            if (!zone.contains(recruit.blockPosition())) continue;
             String team=teamId(recruit); if (attackers.contains(team)) a++; else if(defenders.contains(team)) d++;
         }
         return new CapturePresence(a,d);

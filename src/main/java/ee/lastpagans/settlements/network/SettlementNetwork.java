@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SettlementNetwork {
-    private static final String PROTOCOL = "40";
+    private static final String PROTOCOL = "41";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Settlements.MOD_ID, "main"),
@@ -20,6 +20,7 @@ public final class SettlementNetwork {
         int id = 0;
         CHANNEL.messageBuilder(SnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(SnapshotPacket::encode).decoder(SnapshotPacket::decode).consumerMainThread(SnapshotPacket::handle).add();
         CHANNEL.messageBuilder(SettlementActionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(SettlementActionPacket::encode).decoder(SettlementActionPacket::decode).consumerMainThread(SettlementActionPacket::handle).add();
+        CHANNEL.messageBuilder(AreaSelectionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(AreaSelectionPacket::encode).decoder(AreaSelectionPacket::decode).consumerMainThread(AreaSelectionPacket::handle).add();
         CHANNEL.messageBuilder(OpenCharacterCreationPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(OpenCharacterCreationPacket::encode).decoder(OpenCharacterCreationPacket::decode).consumerMainThread(OpenCharacterCreationPacket::handle).add();
         CHANNEL.messageBuilder(SubmitCharacterPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(SubmitCharacterPacket::encode).decoder(SubmitCharacterPacket::decode).consumerMainThread(SubmitCharacterPacket::handle).add();
         CHANNEL.messageBuilder(ApplyCharacterBodyPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(ApplyCharacterBodyPacket::encode).decoder(ApplyCharacterBodyPacket::decode).consumerMainThread(ApplyCharacterBodyPacket::handle).add();
