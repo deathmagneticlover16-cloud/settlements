@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.character.CharacterBodyData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -1266,6 +1267,7 @@ public final class SettlementData extends SavedData {
         private String title = "Lord";
         private String house = "";
         private String primarySeat = "";
+        private CharacterBodyData body;
         private final List<String> traits = new ArrayList<>();
 
         private CharacterRecord(UUID playerId) { this.playerId = playerId; }
@@ -1281,6 +1283,7 @@ public final class SettlementData extends SavedData {
             record.title = cleanText(tag.getString("Title"), "Lord", 32);
             record.house = cleanText(tag.getString("House"), "", 32);
             record.primarySeat = normalizeId(tag.getString("PrimarySeat"));
+            if (tag.contains("Body", Tag.TAG_COMPOUND)) record.body = CharacterBodyData.fromNBT(tag.getCompound("Body"));
             readStringList(tag, "Traits", record.traits);
             return record;
         }
@@ -1297,6 +1300,7 @@ public final class SettlementData extends SavedData {
             tag.putString("Title", title);
             tag.putString("House", house);
             tag.putString("PrimarySeat", primarySeat);
+            if (body != null) tag.put("Body", body.sanitized().toNBT());
             writeStringList(tag, "Traits", traits);
             return tag;
         }
@@ -1311,6 +1315,8 @@ public final class SettlementData extends SavedData {
         public String getTitle() { return title; }
         public String getHouse() { return house; }
         public String getPrimarySeat() { return primarySeat; }
+        public boolean hasBodyData() { return body != null; }
+        public CharacterBodyData getBody() { return body; }
         public List<String> getTraits() { return List.copyOf(traits); }
 
         public String getDisplayName() {
@@ -1339,6 +1345,7 @@ public final class SettlementData extends SavedData {
 
         public void setPrimarySeat(String value) { primarySeat = normalizeId(value); }
         public void setFaith(String value) { this.faith = normalizeLegacyFaith(cleanText(value, "Finnic Paganism", 32)); }
+        public void setBody(CharacterBodyData value) { body = value == null ? null : value.sanitized(); }
         public void setTraits(List<String> values) { traits.clear(); if (values != null) values.stream().map(CampaignDefinitions::normalize).filter(id -> CampaignDefinitions.trait(id) != null).distinct().limit(3).forEach(traits::add); }
 
         private static String normalizeLegacyFaith(String value) {

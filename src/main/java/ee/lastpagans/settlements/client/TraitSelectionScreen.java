@@ -82,7 +82,7 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen {
         if (selected.size() >= 3) {
             SettlementNetwork.CHANNEL.sendToServer(new SubmitCharacterPacket(
                     draft.first(), draft.middle(), draft.last(), draft.faith(), draft.address(), draft.title(),
-                    selected, rerollRound));
+                    draft.body(), selected, rerollRound));
             return;
         }
         round++;

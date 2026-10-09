@@ -5,6 +5,8 @@ import com.talhanation.recruits.ClaimEvents;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsClaim;
+import com.mojang.logging.LogUtils;
+import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -22,6 +24,7 @@ import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import org.slf4j.Logger;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -29,12 +32,15 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class SettlementEvents {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final Map<UUID, Integer> PENDING_CHARACTER_SCREENS = new HashMap<>();
+    private static final Map<UUID, Integer> PENDING_BODY_REASSERTIONS = new HashMap<>();
     private static int checkerTicks;
     private static int residentBoundaryTicks;
     private static int firstSettlerTicks;
     private static int researchTicks;
     private static int captureZoneTicks;
+    private static int wildfireTicks;
 
     private SettlementEvents() {
     }
@@ -193,6 +199,11 @@ public final class SettlementEvents {
         SettlementData.CharacterRecord character = SettlementData.get(player.serverLevel()).getCharacter(player.getUUID());
         if (character == null || !character.isCreated()) {
             PENDING_CHARACTER_SCREENS.put(player.getUUID(), 40);
+        } else if (character.hasBodyData()) {
+            SettlementsWildfireAuthority.reassert(player, true);
+            PENDING_BODY_REASSERTIONS.put(player.getUUID(), 40);
+        } else {
+            LOGGER.info("[Settlements/Wildfire] Legacy character {} has no Body data; authority remains disabled", player.getUUID());
         }
         ResearchManager.syncCompletedResearch(player);
         CaptureZoneManager.sync(player);
@@ -200,6 +211,15 @@ public final class SettlementEvents {
 
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         PENDING_CHARACTER_SCREENS.remove(event.getEntity().getUUID());
+        PENDING_BODY_REASSERTIONS.remove(event.getEntity().getUUID());
+    }
+
+    public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) SettlementsWildfireAuthority.reassert(player, true);
+    }
+
+    public static void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) SettlementsWildfireAuthority.reassert(player, true);
     }
 
     public static void onNameFormat(PlayerEvent.NameFormat event) {
@@ -241,6 +261,23 @@ public final class SettlementEvents {
             } else {
                 entry.setValue(remaining);
             }
+        }
+
+        Iterator<Map.Entry<UUID, Integer>> bodyIterator = PENDING_BODY_REASSERTIONS.entrySet().iterator();
+        while (bodyIterator.hasNext()) {
+            Map.Entry<UUID, Integer> entry = bodyIterator.next();
+            int remaining = entry.getValue() - 1;
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player == null) bodyIterator.remove();
+            else if (remaining <= 0) {
+                SettlementsWildfireAuthority.reassert(player, true);
+                bodyIterator.remove();
+            } else entry.setValue(remaining);
+        }
+
+        if (++wildfireTicks >= 20) {
+            wildfireTicks = 0;
+            server.getPlayerList().getPlayers().forEach(SettlementsWildfireAuthority::reassert);
         }
 
         firstSettlerTicks++;
@@ -358,6 +395,8 @@ public final class SettlementEvents {
         residentBoundaryTicks = 0;
         firstSettlerTicks = 0;
         researchTicks = 0;
+        wildfireTicks = 0;
         PENDING_CHARACTER_SCREENS.clear();
+        PENDING_BODY_REASSERTIONS.clear();
     }
 }

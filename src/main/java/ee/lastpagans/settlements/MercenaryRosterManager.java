@@ -3,6 +3,7 @@ package ee.lastpagans.settlements;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.RecruitEvents;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
+import com.talhanation.recruits.world.RecruitsGroup;
 import ee.lastpagans.settlements.network.MercenaryRosterSnapshotPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.nbt.CompoundTag;
@@ -289,7 +290,12 @@ public final class MercenaryRosterManager {
             resetRuntimeState(recruit);
             recruit.setIsOwned(false);
             recruit.setOwnerUUID(Optional.empty());
-            if (!recruit.hire(owner, null, false)) return false;
+            String companyId = recruit.getPersistentData().getString(SettlementManager.TAG_MERCENARY_COMPANY);
+            MercenaryRosterRegistry.Definition definition = MercenaryRosterRegistry.get(companyId);
+            String groupName = definition == null ? companyId : definition.name();
+            RecruitsGroup group = ensureCompanyGroup((ServerLevel) recruit.level(), owner.getUUID(),
+                    owner.getGameProfile().getName(), groupName, owner);
+            if (group == null || !recruit.hire(owner, group, false)) return false;
             resetOrdersAfterHire(recruit);
             recruit.getPersistentData().putInt(TAG_LIFECYCLE_VERSION, LIFECYCLE_VERSION);
             return true;
@@ -326,6 +332,17 @@ public final class MercenaryRosterManager {
             recruit.setIsOwned(true);
             if (RecruitEvents.recruitsPlayerUnitManager != null)
                 RecruitEvents.recruitsPlayerUnitManager.addRecruits(ownerId, 1);
+            MercenaryRosterRegistry.Definition definition = MercenaryRosterRegistry.get(contract.companyId());
+            String groupName = definition == null ? contract.companyId() : definition.name();
+            ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
+            String ownerName = owner == null ? ownerId.toString() : owner.getGameProfile().getName();
+            if (recruit.level() instanceof ServerLevel level) {
+                RecruitsGroup group = ensureCompanyGroup(level, ownerId, ownerName, groupName, owner);
+                if (group != null && RecruitEvents.recruitsGroupsManager != null) {
+                    recruit.setGroupUUID(group.getUUID());
+                    RecruitEvents.recruitsGroupsManager.addMember(group.getUUID(), recruit.getUUID(), level);
+                }
+            }
         }
         resetOrdersAfterHire(recruit);
         SettlementData.SettlementRecord settlement = SettlementData.get(server.overworld()).getSettlement(contract.settlementId());
@@ -339,6 +356,20 @@ public final class MercenaryRosterManager {
         recruit.getPersistentData().putBoolean(SettlementManager.TAG_MERCENARY, true);
         recruit.getPersistentData().putString(SettlementManager.TAG_MERCENARY_COMPANY, contract.companyId());
         recruit.getPersistentData().putInt(TAG_LIFECYCLE_VERSION, LIFECYCLE_VERSION);
+    }
+
+    private static RecruitsGroup ensureCompanyGroup(ServerLevel level, UUID ownerId, String ownerName,
+                                                     String groupName, ServerPlayer onlineOwner) {
+        if (level == null || ownerId == null || RecruitEvents.recruitsGroupsManager == null) return null;
+        String name = groupName == null || groupName.isBlank() ? "Mercenary Company" : groupName.trim();
+        RecruitsGroup existing = RecruitEvents.recruitsGroupsManager.getAllGroups().stream()
+                .filter(group -> ownerId.equals(group.getPlayerUUID()) && name.equalsIgnoreCase(group.getName()))
+                .findFirst().orElse(null);
+        if (existing != null) return existing;
+        RecruitsGroup created = new RecruitsGroup(name, ownerId,
+                ownerName == null || ownerName.isBlank() ? ownerId.toString() : ownerName, 0);
+        RecruitEvents.recruitsGroupsManager.addOrUpdateGroup(level, onlineOwner, created);
+        return created;
     }
 
     private static void resetRuntimeState(AbstractRecruitEntity recruit) {

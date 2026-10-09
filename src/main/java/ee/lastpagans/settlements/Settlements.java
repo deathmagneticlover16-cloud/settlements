@@ -28,6 +28,8 @@ public final class Settlements {
         MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onClaimUpdated);
         MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onPlayerLogin);
         MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onPlayerLogout);
+        MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onPlayerRespawn);
+        MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onPlayerChangedDimension);
         MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onNameFormat);
         MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onTabListName);
         MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onServerTick);

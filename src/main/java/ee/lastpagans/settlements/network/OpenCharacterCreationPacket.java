@@ -1,6 +1,7 @@
 package ee.lastpagans.settlements.network;
 
 import ee.lastpagans.settlements.client.SettlementClientHandler;
+import ee.lastpagans.settlements.client.wildfire.ClientCharacterBodyState;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -20,7 +21,10 @@ public final class OpenCharacterCreationPacket {
         NetworkEvent.Context context = supplier.get();
         context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
                 Dist.CLIENT,
-                () -> SettlementClientHandler::openCharacterCreation
+                () -> () -> {
+                    ClientCharacterBodyState.beginOnboarding();
+                    SettlementClientHandler.openCharacterCreation();
+                }
         ));
         context.setPacketHandled(true);
     }

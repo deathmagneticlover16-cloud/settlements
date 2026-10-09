@@ -1,6 +1,8 @@
 package ee.lastpagans.settlements.network;
 
 import ee.lastpagans.settlements.SettlementManager;
+import ee.lastpagans.settlements.character.CharacterBodyCodec;
+import ee.lastpagans.settlements.character.CharacterBodyData;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
@@ -16,6 +18,7 @@ public record SubmitCharacterPacket(
         String faith,
         String address,
         String title,
+        CharacterBodyData body,
         List<String> traits,
         int rerollRound
 ) {
@@ -30,6 +33,7 @@ public record SubmitCharacterPacket(
         buffer.writeUtf(packet.faith, 32);
         buffer.writeUtf(packet.address, 16);
         buffer.writeUtf(packet.title, 32);
+        CharacterBodyCodec.write(buffer, packet.body);
         buffer.writeVarInt(Math.min(3, packet.traits.size()));
         for (int i = 0; i < Math.min(3, packet.traits.size()); i++) buffer.writeUtf(packet.traits.get(i), 32);
         buffer.writeVarInt(packet.rerollRound + 1);
@@ -42,10 +46,11 @@ public record SubmitCharacterPacket(
         String faith = buffer.readUtf(32);
         String address = buffer.readUtf(16);
         String title = buffer.readUtf(32);
+        CharacterBodyData body = CharacterBodyCodec.read(buffer);
         int count = Math.min(3, Math.max(0, buffer.readVarInt()));
         List<String> traits = new ArrayList<>(count);
         for (int i = 0; i < count; i++) traits.add(buffer.readUtf(32));
-        return new SubmitCharacterPacket(first, middle, last, faith, address, title, traits, buffer.readVarInt() - 1);
+        return new SubmitCharacterPacket(first, middle, last, faith, address, title, body, traits, buffer.readVarInt() - 1);
     }
 
     public static void handle(SubmitCharacterPacket packet, Supplier<NetworkEvent.Context> supplier) {
@@ -60,6 +65,7 @@ public record SubmitCharacterPacket(
                     packet.faith,
                     packet.address,
                     packet.title,
+                    packet.body,
                     packet.traits,
                     packet.rerollRound
             ));

@@ -9,6 +9,10 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import ee.lastpagans.settlements.character.BreastAppearance;
+import ee.lastpagans.settlements.character.CharacterBodyCodec;
+import ee.lastpagans.settlements.character.CharacterBodyData;
+import ee.lastpagans.settlements.character.CharacterGender;
 
 import java.util.UUID;
 
@@ -26,6 +30,7 @@ public final class RegressionChecks {
         researchTiers();
         capturePacket();
         recruitTemplateSanitization();
+        characterBodyData();
         System.out.println("Settlements regression checks passed: " + assertions + " assertions");
     }
 
@@ -160,6 +165,46 @@ public final class RegressionChecks {
             check(!clean.contains(unsafe), "runtime recruit template state removed: " + unsafe);
         check(clean.getInt("Variant") == 3, "template appearance is preserved");
         check(clean.contains("ArmorItems", Tag.TAG_LIST), "template equipment is preserved");
+    }
+
+    private static void characterBodyData() {
+        BreastAppearance appearance = new BreastAppearance(true, 0.68F, 0.05F, -0.04F, -0.08F, 0.03F, false);
+        CharacterBodyData body = new CharacterBodyData(1, CharacterGender.FEMALE, appearance,
+                true, true, true, false, 0.34F, 0.75F);
+        check(body.sanitized().equals(body), "valid character body remains unchanged");
+        check(Math.abs(body.effectiveBustSize() - 0.68F) < 0.0001F, "enabled female body keeps configured bust");
+        CharacterBodyData male = body.withGender(CharacterGender.MALE);
+        check(!male.breasts().enabled() && male.effectiveBustSize() == 0.0F, "male body enforces breasts disabled");
+        CharacterBodyData disabled = body.withBreasts(appearance.withEnabled(false));
+        check(disabled.gender() == CharacterGender.FEMALE && disabled.effectiveBustSize() == 0.0F,
+                "breasts disabled does not change gender");
+        CharacterBodyData malformed = new CharacterBodyData(1, CharacterGender.OTHER,
+                new BreastAppearance(true, Float.NaN, 5.0F, -5.0F, 2.0F, 4.0F, true),
+                true, true, true, false, Float.POSITIVE_INFINITY, -4.0F);
+        check(!malformed.hasFiniteValues(), "non-finite network body is rejected before sanitization");
+        CharacterBodyData safe = malformed.sanitized();
+        check(safe.hasFiniteValues() && safe.breasts().xOffset() == 1.0F && safe.breasts().yOffset() == -1.0F
+                && safe.breasts().zOffset() == 0.0F && safe.breasts().cleavage() == 0.10F,
+                "body values use Wildfire-compatible defaults and bounds");
+        check(CharacterBodyData.fromNBT(body.toNBT()).equals(body), "body NBT round trip is exact");
+
+        net.minecraft.network.FriendlyByteBuf buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            CharacterBodyCodec.write(buffer, body);
+            check(CharacterBodyCodec.read(buffer).equals(body) && buffer.readableBytes() == 0,
+                    "body network codec consumes and preserves complete payload");
+        } finally { buffer.release(); }
+
+        UUID playerId = UUID.randomUUID();
+        SettlementData data = new SettlementData();
+        SettlementData.CharacterRecord record = data.getOrCreateCharacter(playerId);
+        record.create("Test", "", "Character", "Other", "Neutral", "Lord");
+        CompoundTag legacyTag = data.save(new CompoundTag());
+        check(!SettlementData.load(legacyTag).getCharacter(playerId).hasBodyData(),
+                "legacy character without Body remains unmanaged");
+        record.setBody(body);
+        SettlementData.CharacterRecord restored = SettlementData.load(data.save(new CompoundTag())).getCharacter(playerId);
+        check(restored.hasBodyData() && restored.getBody().equals(body), "authoritative body persists nested in CharacterRecord");
     }
 
     private static void check(boolean condition, String message) {

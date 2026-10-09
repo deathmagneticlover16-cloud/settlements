@@ -9,6 +9,8 @@ import ee.lastpagans.settlements.item.ModItems;
 import ee.lastpagans.settlements.item.SettlerContractItem;
 import ee.lastpagans.settlements.network.CharacterSheetPacket;
 import ee.lastpagans.settlements.network.OpenCharacterCreationPacket;
+import ee.lastpagans.settlements.character.CharacterBodyData;
+import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
 import ee.lastpagans.settlements.network.ProfileSyncPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.SnapshotPacket;
@@ -776,6 +778,7 @@ public final class SettlementManager {
             String faith,
             String address,
             String title,
+            CharacterBodyData submittedBody,
             List<String> selectedTraits,
             int rerollRound
     ) {
@@ -817,13 +820,22 @@ public final class SettlementManager {
             return;
         }
 
+        if (submittedBody == null || !submittedBody.hasFiniteValues()) {
+            player.sendSystemMessage(Component.literal("Invalid character body data. Reopen character creation and try again."));
+            promptCharacterCreation(player);
+            return;
+        }
+        CharacterBodyData body = submittedBody.sanitized();
+
         SettlementData.CharacterRecord character = data.getOrCreateCharacter(player.getUUID());
         character.create(cleanFirst, cleanMiddle, cleanLast, faith, address, title);
         character.setTraits(selectedTraits);
+        character.setBody(body);
         data.setDirty();
         player.refreshDisplayName();
         player.refreshTabListName();
         broadcastProfiles(player.getServer());
+        SettlementsWildfireAuthority.applyCommittedBody(player, body);
         openCharacterSheet(player);
     }
 

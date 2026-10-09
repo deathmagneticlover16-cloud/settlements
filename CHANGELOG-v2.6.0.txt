@@ -26,7 +26,7 @@ Recovery continuation fixes
 - Allowed Main recovery when secondaries are retaken; cleared occupation at peace.
 - Excluded spectators from capture and used Major City rank for capture duration.
 - Added captured control to API/network snapshots; stopped truncating snapshots at
-  256 objectives. Network protocol is now 38.
+  256 objectives. Network protocol is now 39.
 - Added server-configured Major City requirements to settlement effects and fixed
   obsolete Capital/Tier IV documentation and clipped research requirement text.
 - Updated root build/release documentation; preserved 2.5.4 docs in docs/legacy.
@@ -40,3 +40,15 @@ Recovery continuation fixes
   cleanly unregister and despawn their units instead of leaving floating runners.
 - Protected in-progress company spawns from premature retirement during Forge's
   entity-join event and made failed company hires roll back Recruits bookkeeping.
+- Hiring a named mercenary company now creates or reuses a player-owned Recruits
+  group with the company's display name and assigns every hired soldier to it.
+- Added required Wildfire Gender Mod 1.20.1 integration to character creation:
+  Male/Female/Other selection, a separate breasts toggle and Wildfire's full
+  breast customization screen embedded as a temporary draft editor.
+- Character body choices are now stored in versioned nested Body data and become
+  authoritative only after the entire character submission passes server checks.
+- Settlements applies the committed body to Wildfire, syncs owner and observers,
+  rejects later Wildfire client overrides, and reasserts it after login, respawn,
+  dimension changes and detected client/server drift.
+- Existing characters without Body data remain unmanaged for compatibility. Admin
+  character resets clear the body lock and reopen the complete creator.

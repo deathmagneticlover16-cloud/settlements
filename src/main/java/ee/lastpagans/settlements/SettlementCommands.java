@@ -890,6 +890,7 @@ public final class SettlementCommands {
         data.resetCharacter(target.getUUID());
         CampaignData.get(target.serverLevel()).clearFamilyData(target.getUUID());
         CampaignSystemsData.get(target.serverLevel()).resetCharacterData(target.getUUID());
+        ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority.clearAuthority(target);
         SettlementManager.broadcastProfiles(target.getServer());
         SettlementManager.promptCharacterCreation(target);
         source.sendSuccess(() -> Component.literal("Character reset for " + target.getGameProfile().getName()
@@ -1118,6 +1119,7 @@ public final class SettlementCommands {
         int affectedSettlements = settlements.resetPlayerData(playerId);
         CampaignData.get(target.serverLevel()).resetPlayerData(playerId);
         CampaignSystemsData.get(target.serverLevel()).resetPlayerData(playerId);
+        ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority.clearAuthority(target);
         SettlementManager.broadcastProfiles(target.getServer());
         SettlementManager.promptCharacterCreation(target);
         source.sendSuccess(() -> Component.literal("FULL Settlements data reset for " + target.getGameProfile().getName()

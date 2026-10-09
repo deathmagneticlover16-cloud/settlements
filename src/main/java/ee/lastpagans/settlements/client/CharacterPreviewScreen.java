@@ -7,7 +7,7 @@ import net.minecraft.network.chat.Component;
 
 public final class CharacterPreviewScreen extends ScaledCampaignScreen {
     private static final int W = 390;
-    private static final int H = 250;
+    private static final int H = 270;
     private final CharacterCreationScreen.CharacterDraft draft;
     private int left;
     private int top;
@@ -23,9 +23,9 @@ public final class CharacterPreviewScreen extends ScaledCampaignScreen {
         left = campaignLeft(W);
         top = campaignTop(H);
         addRenderableWidget(Button.builder(Component.literal("Go Back"), button -> minecraft.setScreen(new CharacterCreationScreen(draft)))
-                .bounds(left + 16, top + 218, 90, 20).build());
+                .bounds(left + 16, top + 238, 90, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Confirm Character"), button -> confirm())
-                .bounds(left + 238, top + 218, 136, 20).build());
+                .bounds(left + 238, top + 238, 136, 20).build());
     }
 
     private void confirm() {
@@ -40,23 +40,25 @@ public final class CharacterPreviewScreen extends ScaledCampaignScreen {
         beginCampaignRender(graphics);
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 44, 0xFF3B3023);
-        graphics.fill(left + 14, top + 54, left + 154, top + 207, 0xFF242424);
+        graphics.fill(left + 14, top + 54, left + 154, top + 227, 0xFF242424);
         graphics.drawCenteredString(font, draft.displayName().toUpperCase(), left + W / 2, top + 10, 0xFFE7D8B0);
         graphics.drawCenteredString(font, draft.title(), left + W / 2, top + 27, 0xFFC9B989);
         if (minecraft != null && minecraft.player != null) {
-            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 63, 122, 135, uiMouseX, uiMouseY);
+            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 63, 122, 155, uiMouseX, uiMouseY);
         }
         int x = left + 172;
         int y = top + 60;
         line(graphics, "Faith", draft.faith(), x, y);
         line(graphics, "Form of address", draft.address(), x, y + 25);
         line(graphics, "Title", draft.title(), x, y + 50);
+        line(graphics, "Gender", draft.body().gender().displayName(), x, y + 75);
+        line(graphics, "Breasts", draft.body().breasts().enabled() ? "Yes" : "No", x, y + 100);
         graphics.drawWordWrap(font, Component.literal(
                 "After this preview you will choose three starting traits from three random cards per round. Main House and Main Seat can be set later."
-        ), x, y + 83, 195, 0xFFAAAAAA);
+        ), x, y + 128, 195, 0xFFAAAAAA);
         graphics.drawWordWrap(font, Component.literal(
                 "This is the one-time correction screen. Use Go Back before confirming."
-        ), x, y + 133, 195, 0xFFAA9D7F);
+        ), x, y + 178, 195, 0xFFAA9D7F);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }

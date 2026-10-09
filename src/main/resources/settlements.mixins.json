@@ -6,11 +6,13 @@
   "mixins": [
     "RecruitsDiplomacyPacketMixin",
     "RecruitEventsDiplomacyMixin",
-    "LevyArmorStandTrainingMixin"
+    "LevyArmorStandTrainingMixin",
+    "WildfireGenderPacketAuthorityMixin"
   ],
   "client": [
     "RecruitsTeamKeyMixin",
-    "WorldMapScreenAccessor"
+    "WorldMapScreenAccessor",
+    "WildfirePreviewSaveMixin"
   ],
   "injectors": {
     "defaultRequire": 1

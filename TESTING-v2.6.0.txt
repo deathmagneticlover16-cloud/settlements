@@ -5,7 +5,8 @@ Run gradlew.bat build (or regressionChecks alone). Checks exercise actual mapped
 Minecraft classes: banner sanitization, capture geometry/control persistence,
 treasury accounting, dye-name persistence, capital/rank research separation,
 mercenary template-state sanitization, and network round trips with more than
-256 capture objectives.
+256 capture objectives. Character-body checks cover finite/range validation,
+Male breast disabling, NBT/network round trips and legacy records without Body.
 
 MANUAL — FRESH TEST WORLD, MATCHING CLIENT/SERVER BUILDS
 1. Found an independent settlement in linked Recruits claims. Check its initial
@@ -35,6 +36,9 @@ MANUAL — FRESH TEST WORLD, MATCHING CLIENT/SERVER BUILDS
    disappears without floating/running in place and the Recruits unit count drops.
    In a copy of an affected pre-fix world, leave the company loaded for 30 seconds
    (or reload its chunks) and verify its surviving units become interactive again.
+   Confirm the group manager contains one group named for the company (for example
+   Free Spears) and that every company soldier is a member. Rehire the same company
+   and verify Settlements reuses the group instead of making a duplicate.
 8. Capture placement: reject undersized, unlinked, nested, overlapping and too-close
    zones. Replace Main using an overlapping old footprint. Add a spare Secondary,
    remove the old one, and verify tier minimums remain satisfied. Editing must fail
@@ -48,6 +52,22 @@ MANUAL — FRESH TEST WORLD, MATCHING CLIENT/SERVER BUILDS
     not capture. Legal settlement ownership must remain separate from occupation.
 11. Open all campaign tabs at multiple GUI scales. Test dropdown overlays and long
     names; verify research edges, Major City messaging and no Bard controls.
+12. Create a Male character. The Boobs Yes/Edit controls must be disabled and the
+    final Wildfire bust must be zero. Repeat with Female and Other, testing both No
+    and Yes. In Yes, change every value in Wildfire's breast editor, return to the
+    Settlements creator, preview, go back through traits and submit. Draft values
+    must survive each page, while the live Wildfire state must not change before
+    final submission or after cancelling/leaving the editor.
+13. Force a final-submission error (duplicate/invalid name or invalid traits) after
+    editing the body. No body value may commit. Correct the error and submit; then
+    verify the saved appearance immediately, after relog, restart, respawn and a
+    dimension change. Existing characters from before this build must remain
+    unmanaged until reset/recreated.
+14. With two clients, watch a managed character submit and verify the observer sees
+    the same body. Attempt to open Wildfire wardrobe/settings/editor screens and to
+    send a changed Wildfire body; managed/onboarding characters must be blocked and
+    corrected. Run the admin character reset and verify editing is unlocked until
+    the replacement character is submitted.
 
 Existing commands are listed in docs/legacy/2.5.4/COMMANDS-v2.5.4.txt; see
 COMMANDS-v2.6.0.txt for the 2.6 context and source of truth.

@@ -11,5 +11,6 @@ public final class ClientBootstrap {
         MinecraftForge.EVENT_BUS.addListener(ClientCampaignEvents::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(ClientCampaignEvents::onScreenOpening);
         MinecraftForge.EVENT_BUS.addListener(ClientCampaignEvents::onScreenRender);
+        MinecraftForge.EVENT_BUS.addListener(ClientCampaignEvents::onClientLogout);
     }
 }

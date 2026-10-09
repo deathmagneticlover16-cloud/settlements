@@ -1,13 +1,19 @@
 package ee.lastpagans.settlements.client;
 
 import com.talhanation.recruits.client.gui.worldmap.WorldMapScreen;
+import com.wildfire.gui.screen.WardrobeBrowserScreen;
+import com.wildfire.gui.screen.WildfireBreastCustomizationScreen;
+import com.wildfire.gui.screen.WildfireCharacterSettingsScreen;
 import ee.lastpagans.settlements.MapMarkerSnapshot;
+import ee.lastpagans.settlements.client.wildfire.ClientCharacterBodyState;
+import ee.lastpagans.settlements.client.wildfire.SettlementsWildfirePreviewSession;
 import ee.lastpagans.settlements.mixin.WorldMapScreenAccessor;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.event.TickEvent;
 
 import java.util.List;
@@ -18,6 +24,7 @@ public final class ClientCampaignEvents {
 
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        ClientCharacterBodyState.onClientTick();
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null) return;
         while (ClientKeyMappings.MAIN.consumeClick()) request(OpenCampaignRequestPacket.ScreenTarget.MAIN);
@@ -26,6 +33,19 @@ public final class ClientCampaignEvents {
     }
 
     public static void onScreenOpening(ScreenEvent.Opening event) {
+        SettlementsWildfirePreviewSession.onScreenOpening(event);
+        if (event.getNewScreen() != null && ClientCharacterBodyState.blocksWildfireScreens()
+                && (event.getNewScreen() instanceof WardrobeBrowserScreen
+                || event.getNewScreen() instanceof WildfireCharacterSettingsScreen
+                || event.getNewScreen() instanceof WildfireBreastCustomizationScreen)
+                && !SettlementsWildfirePreviewSession.isAuthorized(event.getNewScreen())) {
+            event.setCanceled(true);
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null)
+                minecraft.player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                        "Body settings are managed by Settlements."), true);
+            return;
+        }
         if (redirecting || event.getNewScreen() == null) return;
         String name = event.getNewScreen().getClass().getName();
         boolean recruitsScreen = name.startsWith("com.talhanation.recruits.client.gui.");
@@ -43,6 +63,11 @@ public final class ClientCampaignEvents {
             request(target);
             Minecraft.getInstance().execute(() -> redirecting = false);
         }
+    }
+
+    public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
+        SettlementsWildfirePreviewSession.cancel();
+        ClientCharacterBodyState.clear(null);
     }
 
     public static void onScreenRender(ScreenEvent.Render.Post event) {
