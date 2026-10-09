@@ -1,5 +1,15 @@
 SETTLEMENTS 2.6.0 — CONTINUATION FROM 6e24ea4
 
+Character-draft continuation from 6bb7ddd
+- Shared character draft survives editor returns, resizing and screen navigation.
+- Independent persistent Yes/No selection and Edit button; draft-driven portraits.
+- Detached Wildfire editor/portrait objects with save, constructor-write and network
+  suppression, immediate portrait sizes, and restoration on exit/disconnect.
+- Session-correlated validation errors retain identity, body, traits and reroll state.
+- Canonical owner/observer bodies apply before cleanup and resist stale Wildfire sync.
+- Added automated state, packet and real Wildfire API regression checks.
+- Network protocol 40; Minecraft startup/gameplay tests omitted by user request.
+
 Inherited 2.6 foundations
 - Capture zones, treasury consolidation, taxation slider and campaign-map APIs.
 - Political capitals separated from urban settlement ranks.

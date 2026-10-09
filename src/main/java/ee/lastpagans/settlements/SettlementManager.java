@@ -772,6 +772,7 @@ public final class SettlementManager {
 
     public static void submitCharacter(
             ServerPlayer player,
+            UUID sessionId,
             String first,
             String middle,
             String last,
@@ -785,15 +786,15 @@ public final class SettlementManager {
         SettlementData data = SettlementData.get(player.serverLevel());
         SettlementData.CharacterRecord existingCharacter = data.getCharacter(player.getUUID());
         if (existingCharacter != null && existingCharacter.isCreated()) {
-            player.sendSystemMessage(Component.literal("Your character is already confirmed. An administrator must reset it before it can be recreated."));
+            rejectCharacter(player, sessionId, "Your character is already confirmed. An administrator must reset it before it can be recreated.");
+            SettlementsWildfireAuthority.reassert(player, true);
             openCharacterSheet(player);
             return;
         }
         if (!CampaignDefinitions.isValidReligion(faith)
                 || !allowedCharacterChoice(address, CampaignDefinitions.ADDRESSES)
                 || !allowedCharacterChoice(title, CampaignDefinitions.PERSONAL_TITLES)) {
-            player.sendSystemMessage(Component.literal("Invalid faith, form of address, or title selection."));
-            promptCharacterCreation(player);
+            rejectCharacter(player, sessionId, "Invalid faith, form of address, or title selection. Use Go Back to correct it.");
             return;
         }
         String cleanFirst = SettlementData.cleanText(first, "", 24);
@@ -801,28 +802,24 @@ public final class SettlementManager {
         String cleanLast = SettlementData.cleanText(last, "", 24);
         String proposed = (cleanFirst + " " + cleanMiddle + " " + cleanLast).replaceAll("\\s+", " ").trim();
         if (cleanFirst.isBlank() || cleanLast.isBlank()) {
-            player.sendSystemMessage(Component.literal("A first and last name are required."));
-            promptCharacterCreation(player);
+            rejectCharacter(player, sessionId, "A first and last name are required. Use Go Back to correct them.");
             return;
         }
         boolean duplicate = data.getCharacters().stream()
                 .filter(character -> !player.getUUID().equals(character.getPlayerId()))
                 .anyMatch(character -> character.isCreated() && character.getDisplayName().equalsIgnoreCase(proposed));
         if (duplicate) {
-            player.sendSystemMessage(Component.literal("That character name is already in use."));
-            promptCharacterCreation(player);
+            rejectCharacter(player, sessionId, "That character name is already in use. Use Go Back to choose another name.");
             return;
         }
 
         if (!CampaignDefinitions.validateTraitSelection(player.getUUID(), proposed, selectedTraits, rerollRound)) {
-            player.sendSystemMessage(Component.literal("Invalid character trait selection. Reopen character creation and choose from the offered cards."));
-            promptCharacterCreation(player);
+            rejectCharacter(player, sessionId, "Invalid character trait selection. Choose traits again from the offered cards.");
             return;
         }
 
-        if (submittedBody == null || !submittedBody.hasFiniteValues()) {
-            player.sendSystemMessage(Component.literal("Invalid character body data. Reopen character creation and try again."));
-            promptCharacterCreation(player);
+        if (submittedBody == null || submittedBody.version() != CharacterBodyData.CURRENT_VERSION || !submittedBody.hasFiniteValues()) {
+            rejectCharacter(player, sessionId, "Invalid character body data. Use Go Back to correct it.");
             return;
         }
         CharacterBodyData body = submittedBody.sanitized();
@@ -837,6 +834,11 @@ public final class SettlementManager {
         broadcastProfiles(player.getServer());
         SettlementsWildfireAuthority.applyCommittedBody(player, body);
         openCharacterSheet(player);
+    }
+
+    private static void rejectCharacter(ServerPlayer player, UUID sessionId, String message) {
+        SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new ee.lastpagans.settlements.network.CharacterSubmissionRejectedPacket(sessionId, message));
     }
 
     private static boolean allowedCharacterChoice(String value, List<String> allowed) {

@@ -43,6 +43,20 @@ public final class SettlementsWildfireAuthority {
         if (player == null) return;
         SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new ClearCharacterBodyPacket(player.getUUID()));
+        SettlementNetwork.CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> player),
+                new ClearCharacterBodyPacket(player.getUUID()));
+    }
+
+    public static void syncToObserver(ServerPlayer subject, ServerPlayer observer) {
+        if (!isManaged(subject)) {
+            // An observer may have cached authority while an admin reset occurred out of range.
+            SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> observer),
+                    new ClearCharacterBodyPacket(subject.getUUID()));
+            return;
+        }
+        CharacterBodyData body = SettlementData.get(subject.serverLevel()).getCharacter(subject.getUUID()).getBody();
+        SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> observer),
+                new ApplyCharacterBodyPacket(subject.getUUID(), body.sanitized()));
     }
 
     private static void apply(ServerPlayer player, CharacterBodyData body, boolean sendOwner, boolean forceObservers) {
@@ -53,6 +67,10 @@ public final class SettlementsWildfireAuthority {
             SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                     new ApplyCharacterBodyPacket(player.getUUID(), body));
         }
-        if (changed || forceObservers) WildfireSync.sendToOtherClients(player, wildfire);
+        if (changed || forceObservers) {
+            SettlementNetwork.CHANNEL.send(PacketDistributor.TRACKING_ENTITY.with(() -> player),
+                    new ApplyCharacterBodyPacket(player.getUUID(), body));
+            WildfireSync.sendToOtherClients(player, wildfire);
+        }
     }
 }

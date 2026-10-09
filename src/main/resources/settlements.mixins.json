@@ -12,7 +12,13 @@
   "client": [
     "RecruitsTeamKeyMixin",
     "WorldMapScreenAccessor",
-    "WildfirePreviewSaveMixin"
+    "WildfirePreviewSaveMixin",
+    "WildfireDraftSyncMixin",
+    "WildfireCanonicalSyncMixin",
+    "WildfirePortraitPhysicsAccessor",
+    "WildfireDraftConfigurationMixin",
+    "WildfireDraftEditorMixin",
+    "WildfireDraftLookupMixin"
   ],
   "injectors": {
     "defaultRequire": 1

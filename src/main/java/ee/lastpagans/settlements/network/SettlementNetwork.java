@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SettlementNetwork {
-    private static final String PROTOCOL = "39";
+    private static final String PROTOCOL = "40";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Settlements.MOD_ID, "main"),
@@ -45,6 +45,7 @@ public final class SettlementNetwork {
         CHANNEL.messageBuilder(MercenaryRosterSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(MercenaryRosterSnapshotPacket::encode).decoder(MercenaryRosterSnapshotPacket::decode).consumerMainThread(MercenaryRosterSnapshotPacket::handle).add();
         CHANNEL.messageBuilder(MercenaryRosterActionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(MercenaryRosterActionPacket::encode).decoder(MercenaryRosterActionPacket::decode).consumerMainThread(MercenaryRosterActionPacket::handle).add();
         CHANNEL.messageBuilder(CaptureZoneSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(CaptureZoneSnapshotPacket::encode).decoder(CaptureZoneSnapshotPacket::decode).consumerMainThread(CaptureZoneSnapshotPacket::handle).add();
-        CHANNEL.messageBuilder(FactionCreatePacket.class, id, NetworkDirection.PLAY_TO_SERVER).encoder(FactionCreatePacket::encode).decoder(FactionCreatePacket::decode).consumerMainThread(FactionCreatePacket::handle).add();
+        CHANNEL.messageBuilder(FactionCreatePacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(FactionCreatePacket::encode).decoder(FactionCreatePacket::decode).consumerMainThread(FactionCreatePacket::handle).add();
+        CHANNEL.messageBuilder(CharacterSubmissionRejectedPacket.class, id, NetworkDirection.PLAY_TO_CLIENT).encoder(CharacterSubmissionRejectedPacket::encode).decoder(CharacterSubmissionRejectedPacket::decode).consumerMainThread(CharacterSubmissionRejectedPacket::handle).add();
     }
 }

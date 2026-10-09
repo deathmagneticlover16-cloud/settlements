@@ -22,7 +22,10 @@ public final class SettlementClientHandler {
         if (packet.open() || !(minecraft.screen instanceof SettlementScreen screen)) minecraft.setScreen(new SettlementScreen(packet.snapshot()));
         else screen.updateSnapshot(packet.snapshot());
     }
-    public static void openCharacterCreation() { Minecraft.getInstance().setScreen(new CharacterCreationScreen()); }
+    public static void openCharacterCreation() {
+        ee.lastpagans.settlements.client.wildfire.ClientCharacterBodyState.beginOnboarding();
+        Minecraft.getInstance().setScreen(new CharacterCreationScreen());
+    }
     public static void openCharacterSheet(CharacterSnapshot snapshot, boolean returnToMain) { Minecraft.getInstance().setScreen(new CharacterSheetScreen(snapshot, returnToMain)); }
     public static void openCampaign(CampaignSnapshot snapshot) { Minecraft.getInstance().setScreen(new CampaignMainScreen(snapshot)); }
     public static void openDiplomacy(DiplomacySnapshot snapshot) { Minecraft.getInstance().setScreen(new CampaignDiplomacyScreen(snapshot)); }

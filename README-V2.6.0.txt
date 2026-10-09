@@ -2,7 +2,7 @@ SETTLEMENTS 2.6.0 — TEST BUILD
 Minecraft 1.20.1 / Forge 47.2.0 / Villager Recruits 1.15.2 /
 Wildfire Gender Mod 1.20.1-3.0.1 or newer / Java 17
 
-Continued from recovery HEAD 6e24ea4 on settlements-2.6.0-foundations.
+Continued from Wildfire checkpoint 6bb7ddd on settlements-2.6.0-foundations.
 The full Git history is retained. This is intended for a fresh test world;
 old development/test-world compatibility is not guaranteed.
 
@@ -13,7 +13,7 @@ libs/Female-Gender-Mod-forge-1.20.1-3.1.jar in place.
 Expected output: build/libs/settlements-2.6.0.jar.
 The build includes dependency-free regression checks via regressionChecks.
 Install the same Settlements build, Recruits and Wildfire Gender Mod on clients
-and server (Settlements network protocol 39).
+and server (Settlements network protocol 40).
 
 2.6 FEATURES
 - One spendable State Treasury per polity. Settlements contribute tax income;
@@ -34,6 +34,10 @@ and server (Settlements network protocol 39).
 - Character creation provides Male/Female/Other body types and an optional breast
   editor using Wildfire's own customization screen. The accepted body is enforced
   by the server; ordinary Wildfire body editing is locked for managed characters.
+- The character draft, trait choices and spent reroll survive screen reconstruction
+  and back navigation. Yes/No selection and the Edit button are independent.
+  Wildfire edits and portraits use isolated temporary bodies; rejected submissions
+  retain the draft and show the server's error. See CHARACTER-DRAFT-CONTINUATION.md.
 - Named mercenary companies receive matching Recruits groups automatically.
 - Bard gameplay has been removed. The old 2.5.4 documents are under docs/legacy.
 

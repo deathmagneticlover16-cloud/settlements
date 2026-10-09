@@ -24,6 +24,7 @@ public final class ClientCampaignEvents {
 
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
+        SettlementsWildfirePreviewSession.onClientTick();
         ClientCharacterBodyState.onClientTick();
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null) return;
@@ -33,7 +34,6 @@ public final class ClientCampaignEvents {
     }
 
     public static void onScreenOpening(ScreenEvent.Opening event) {
-        SettlementsWildfirePreviewSession.onScreenOpening(event);
         if (event.getNewScreen() != null && ClientCharacterBodyState.blocksWildfireScreens()
                 && (event.getNewScreen() instanceof WardrobeBrowserScreen
                 || event.getNewScreen() instanceof WildfireCharacterSettingsScreen
@@ -46,6 +46,8 @@ public final class ClientCampaignEvents {
                         "Body settings are managed by Settlements."), true);
             return;
         }
+        SettlementsWildfirePreviewSession.onScreenOpening(event);
+        ClientCharacterBodyState.onScreenOpening(event);
         if (redirecting || event.getNewScreen() == null) return;
         String name = event.getNewScreen().getClass().getName();
         boolean recruitsScreen = name.startsWith("com.talhanation.recruits.client.gui.");

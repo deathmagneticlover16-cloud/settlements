@@ -1,22 +1,20 @@
 package ee.lastpagans.settlements.client;
 
 import ee.lastpagans.settlements.CampaignDefinitions;
-import ee.lastpagans.settlements.character.BreastAppearance;
 import ee.lastpagans.settlements.character.CharacterBodyData;
 import ee.lastpagans.settlements.character.CharacterGender;
-import ee.lastpagans.settlements.client.wildfire.BreastDraftReceiver;
+import ee.lastpagans.settlements.client.wildfire.ClientCharacterBodyState;
 import ee.lastpagans.settlements.client.wildfire.SettlementsWildfirePreviewSession;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
 
-public final class CharacterCreationScreen extends ScaledCampaignScreen implements BreastDraftReceiver {
+public final class CharacterCreationScreen extends ScaledCampaignScreen implements CharacterDraftScreen {
     private static final int PANEL_WIDTH = 440;
-    private static final int PANEL_HEIGHT = 350;
+    private static final int PANEL_HEIGHT = 380;
     private static final List<String> GENDERS = List.of("Male", "Female", "Other");
 
     private int left;
@@ -31,35 +29,34 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
     private Button breastsNo;
     private Button breastsYes;
     private Button breastsEdit;
-    private CharacterBodyData body;
     private String warning = "";
-    private final CharacterDraft initial;
+    private final CharacterCreationDraftSession session;
 
-    public CharacterCreationScreen() { this(null); }
-    public CharacterCreationScreen(CharacterDraft initial) {
+    public CharacterCreationScreen() { this(ClientCharacterBodyState.draftSession()); }
+    public CharacterCreationScreen(CharacterCreationDraftSession session) {
         super(Component.literal("Create Your Character"));
-        this.initial = initial;
+        this.session = session;
     }
+
+    @Override public CharacterCreationDraftSession draftSession() { return session; }
 
     @Override
     protected void init() {
         setupCampaignScale(PANEL_WIDTH, PANEL_HEIGHT);
         left = campaignLeft(PANEL_WIDTH);
         top = campaignTop(PANEL_HEIGHT);
-        body = (initial == null || initial.body() == null ? CharacterBodyData.defaults() : initial.body()).sanitized();
+        CharacterCreationDraftSession.CharacterDraft draft = session.draft();
 
         first = field(left + 170, top + 55, 112, "First name");
         middle = field(left + 288, top + 55, 132, "Middle (optional)");
         last = field(left + 170, top + 83, 250, "Last name");
 
-        if (initial != null) {
-            first.setValue(initial.first());
-            middle.setValue(initial.middle());
-            last.setValue(initial.last());
-        }
+        first.setValue(draft.first());
+        middle.setValue(draft.middle());
+        last.setValue(draft.last());
 
         addRenderableWidget(Button.builder(Component.literal("Preview Character"), button -> preview())
-                .bounds(left + 260, top + 316, 160, 20).build());
+                .bounds(left + 260, top + 346, 160, 20).build());
 
         breastsNo = addRenderableWidget(Button.builder(Component.literal("No"), button -> setBreasts(false))
                 .bounds(left + 250, top + 274, 52, 20).build());
@@ -70,16 +67,20 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
 
         // Lower lists are added first so expanded upper lists render above them.
         gender = addRenderableWidget(new DropdownWidget(left + 250, top + 246, 170, 20, GENDERS,
-                index(GENDERS, body.gender().displayName()), this::setGender));
+                index(GENDERS, body().gender().displayName()), this::setGender));
         title = addRenderableWidget(new DropdownWidget(left + 170, top + 204, 250, 20,
                 CampaignDefinitions.PERSONAL_TITLES,
-                index(CampaignDefinitions.PERSONAL_TITLES, initial == null ? "" : initial.title()), value -> {}));
+                index(CampaignDefinitions.PERSONAL_TITLES, draft.title()), value -> saveIdentity()));
         address = addRenderableWidget(new DropdownWidget(left + 170, top + 176, 250, 20,
                 CampaignDefinitions.ADDRESSES,
-                index(CampaignDefinitions.ADDRESSES, initial == null ? "" : initial.address()), value -> {}));
+                index(CampaignDefinitions.ADDRESSES, draft.address()), value -> saveIdentity()));
         faith = addRenderableWidget(new DropdownWidget(left + 170, top + 148, 250, 20,
                 CampaignDefinitions.RELIGIONS,
-                index(CampaignDefinitions.RELIGIONS, initial == null ? "" : initial.faith()), value -> {}));
+                index(CampaignDefinitions.RELIGIONS, draft.faith()), value -> saveIdentity()));
+        first.setResponder(value -> saveIdentity());
+        middle.setResponder(value -> saveIdentity());
+        last.setResponder(value -> saveIdentity());
+        warning = session.error();
         refreshBodyButtons();
         setInitialFocus(first);
     }
@@ -102,44 +103,41 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
             warning = "A first and last name are required.";
             return;
         }
-        minecraft.setScreen(new CharacterPreviewScreen(new CharacterDraft(
-                first.getValue(), middle.getValue(), last.getValue(), faith.value(), address.value(), title.value(), body
-        )));
+        saveIdentity();
+        minecraft.setScreen(new CharacterPreviewScreen(session));
     }
+
+    private void saveIdentity() {
+        session.identity(first.getValue(), middle.getValue(), last.getValue(), faith.value(), address.value(), title.value());
+    }
+
+    private CharacterBodyData body() { return session.draft().body(); }
 
     private void setGender(String value) {
         CharacterGender selected = CharacterGender.parse(value);
-        if (selected != null) body = body.withGender(selected);
+        if (selected != null) session.gender(selected);
         refreshBodyButtons();
     }
 
     private void setBreasts(boolean enabled) {
-        if (body.gender() == CharacterGender.MALE) enabled = false;
-        body = body.withBreasts(body.breasts().withEnabled(enabled));
+        session.breasts(enabled);
         refreshBodyButtons();
-        if (enabled) editBreasts();
     }
 
     private void editBreasts() {
-        if (body.gender() != CharacterGender.MALE && body.breasts().enabled())
-            SettlementsWildfirePreviewSession.begin(this, body);
+        saveIdentity();
+        SettlementsWildfirePreviewSession.begin(this, session);
     }
 
     private void refreshBodyButtons() {
         if (breastsNo == null) return;
-        boolean supported = body.gender() != CharacterGender.MALE;
-        boolean enabled = supported && body.breasts().enabled();
+        boolean supported = body().gender() != CharacterGender.MALE;
+        boolean enabled = supported && body().breasts().enabled();
         breastsNo.setMessage(Component.literal(enabled ? "No" : "No ✓"));
         breastsYes.setMessage(Component.literal(enabled ? "Yes ✓" : "Yes"));
         breastsYes.active = supported;
         breastsEdit.active = supported && enabled;
         breastsEdit.visible = enabled;
-    }
-
-    @Override
-    public void settlements$acceptBreastDraft(BreastAppearance appearance) {
-        body = body.withBreasts(appearance.withEnabled(true));
-        refreshBodyButtons();
     }
 
     @Override
@@ -175,17 +173,18 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         graphics.drawCenteredString(font, "Your account, UUID and Recruits faction remain unchanged.", left + PANEL_WIDTH / 2, top + 28, 0xFFAA9D7F);
         graphics.drawCenteredString(font, "Character", left + 84, top + 57, 0xFFE7D8B0);
         if (minecraft != null && minecraft.player != null) {
-            PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 70, 122, 221, uiMouseX, uiMouseY);
+            SettlementsWildfirePreviewSession.renderDraft(session, () ->
+                    PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 70, 122, 221, uiMouseX, uiMouseY));
         }
         graphics.drawString(font, "Name", left + 170, top + 44, 0xFFDDDDDD, false);
         graphics.drawString(font, "Identity", left + 170, top + 132, 0xFFDDDDDD, false);
         graphics.drawString(font, "Body", left + 170, top + 232, 0xFFDDDDDD, false);
         graphics.drawString(font, "Gender", left + 170, top + 252, 0xFFAAAAAA, false);
         graphics.drawString(font, "Boobs?", left + 170, top + 280, 0xFFAAAAAA, false);
-        if (body.gender() == CharacterGender.MALE && uiMouseX >= left + 306 && uiMouseX <= left + 420
+        if (body().gender() == CharacterGender.MALE && uiMouseX >= left + 306 && uiMouseX <= left + 420
                 && uiMouseY >= top + 274 && uiMouseY <= top + 294)
             graphics.renderTooltip(font, Component.literal("Wildfire's Male body type does not support breasts."), uiMouseX, uiMouseY);
-        if (!warning.isBlank()) graphics.drawCenteredString(font, warning, left + PANEL_WIDTH / 2, top + PANEL_HEIGHT + 5, 0xFFFFC86B);
+        if (!warning.isBlank()) graphics.drawWordWrap(font, Component.literal(warning), left + 170, top + 303, 250, 0xFFFFC86B);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -193,10 +192,4 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
     @Override public boolean shouldCloseOnEsc() { return false; }
     @Override public boolean isPauseScreen() { return false; }
 
-    public record CharacterDraft(String first, String middle, String last, String faith, String address, String title,
-                                 CharacterBodyData body) {
-        public String displayName() {
-            return (first + " " + middle + " " + last).replaceAll("\\s+", " ").trim();
-        }
-    }
 }

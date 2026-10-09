@@ -31,6 +31,8 @@ public final class RegressionChecks {
         capturePacket();
         recruitTemplateSanitization();
         characterBodyData();
+        assertions += CharacterDraftChecks.run();
+        assertions += WildfireBridgeChecks.run();
         System.out.println("Settlements regression checks passed: " + assertions + " assertions");
     }
 

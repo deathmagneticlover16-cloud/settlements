@@ -1,7 +1,6 @@
 package ee.lastpagans.settlements.network;
 
 import ee.lastpagans.settlements.client.SettlementClientHandler;
-import ee.lastpagans.settlements.client.wildfire.ClientCharacterBodyState;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.DistExecutor;
@@ -22,7 +21,6 @@ public final class OpenCharacterCreationPacket {
         context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(
                 Dist.CLIENT,
                 () -> () -> {
-                    ClientCharacterBodyState.beginOnboarding();
                     SettlementClientHandler.openCharacterCreation();
                 }
         ));

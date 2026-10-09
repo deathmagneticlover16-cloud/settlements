@@ -9,9 +9,11 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Supplier;
 
 public record SubmitCharacterPacket(
+        UUID sessionId,
         String firstName,
         String middleName,
         String lastName,
@@ -27,6 +29,7 @@ public record SubmitCharacterPacket(
     }
 
     public static void encode(SubmitCharacterPacket packet, FriendlyByteBuf buffer) {
+        buffer.writeUUID(packet.sessionId);
         buffer.writeUtf(packet.firstName, 24);
         buffer.writeUtf(packet.middleName, 24);
         buffer.writeUtf(packet.lastName, 24);
@@ -40,6 +43,7 @@ public record SubmitCharacterPacket(
     }
 
     public static SubmitCharacterPacket decode(FriendlyByteBuf buffer) {
+        UUID sessionId = buffer.readUUID();
         String first = buffer.readUtf(24);
         String middle = buffer.readUtf(24);
         String last = buffer.readUtf(24);
@@ -50,7 +54,7 @@ public record SubmitCharacterPacket(
         int count = Math.min(3, Math.max(0, buffer.readVarInt()));
         List<String> traits = new ArrayList<>(count);
         for (int i = 0; i < count; i++) traits.add(buffer.readUtf(32));
-        return new SubmitCharacterPacket(first, middle, last, faith, address, title, body, traits, buffer.readVarInt() - 1);
+        return new SubmitCharacterPacket(sessionId, first, middle, last, faith, address, title, body, traits, buffer.readVarInt() - 1);
     }
 
     public static void handle(SubmitCharacterPacket packet, Supplier<NetworkEvent.Context> supplier) {
@@ -59,6 +63,7 @@ public record SubmitCharacterPacket(
         if (sender != null) {
             context.enqueueWork(() -> SettlementManager.submitCharacter(
                     sender,
+                    packet.sessionId,
                     packet.firstName,
                     packet.middleName,
                     packet.lastName,

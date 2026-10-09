@@ -5,7 +5,6 @@ import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.SubmitCharacterPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -13,33 +12,21 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /** Three rounds of three server-verifiable trait cards, with a single reroll for the whole character. */
-public final class TraitSelectionScreen extends ScaledCampaignScreen {
+public final class TraitSelectionScreen extends ScaledCampaignScreen implements CharacterDraftScreen {
     private static final int W = 570, H = 330;
-    private final CharacterCreationScreen.CharacterDraft draft;
-    private final List<String> selected;
-    private int round;
-    private boolean rerollUsed;
-    private int rerollRound;
+    private final CharacterCreationDraftSession session;
     private List<String> choices = List.of();
     private int left, top;
 
-    public TraitSelectionScreen(CharacterCreationScreen.CharacterDraft draft) {
-        this(draft, new ArrayList<>(), 0, false, -1);
+    public TraitSelectionScreen(CharacterCreationDraftSession session) {
+        super(Component.literal("Pick Your Traits"));
+        this.session = session;
     }
 
-    private TraitSelectionScreen(CharacterCreationScreen.CharacterDraft draft, List<String> selected, int round,
-                                 boolean rerollUsed, int rerollRound) {
-        super(Component.literal("Pick Your Traits"));
-        this.draft = draft;
-        this.selected = new ArrayList<>(selected);
-        this.round = round;
-        this.rerollUsed = rerollUsed;
-        this.rerollRound = rerollRound;
-    }
+    @Override public CharacterCreationDraftSession draftSession() { return session; }
 
     @Override protected void init() {
         setupCampaignScale(W, H);
@@ -51,41 +38,56 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen {
 
     private void rebuildChoices() {
         if (minecraft == null || minecraft.player == null) return;
-        choices = CampaignDefinitions.traitChoices(minecraft.player.getUUID(), draft.displayName(), round,
-                rerollRound == round, selected);
+        choices = session.choices();
     }
 
     private void rebuildButtons() {
         clearWidgets();
+        if (session.state() == CharacterCreationDraftSession.State.SUBMITTING) return;
+        addRenderableWidget(Button.builder(Component.literal("Go Back"), b -> minecraft.setScreen(new CharacterPreviewScreen(session)))
+                .bounds(left + 22, top + 292, 100, 20).build());
+        if (session.completeTraits()) {
+            addRenderableWidget(Button.builder(Component.literal("Submit Character"), b -> submit())
+                    .bounds(left + 370, top + 292, 178, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Choose traits again"), b -> {
+                session.restartTraits(); rebuildChoices(); rebuildButtons();
+            }).bounds(left + 183, top + 292, 174, 20).build());
+            return;
+        }
         for (int i = 0; i < choices.size(); i++) {
             int index = i;
             addRenderableWidget(Button.builder(Component.literal("Choose"), b -> choose(index))
                     .bounds(left + 22 + i * 180, top + 257, 166, 22).build());
         }
-        if (!rerollUsed) {
+        if (!session.rerollUsed()) {
             addRenderableWidget(Button.builder(Component.literal("Reroll these three (1 left)"), b -> reroll())
                     .bounds(left + 183, top + 292, 204, 20).build());
         }
     }
 
     private void reroll() {
-        if (rerollUsed) return;
-        rerollUsed = true;
-        rerollRound = round;
+        if (!session.reroll()) return;
         rebuildChoices();
         rebuildButtons();
     }
 
     private void choose(int index) {
         if (index < 0 || index >= choices.size()) return;
-        selected.add(choices.get(index));
-        if (selected.size() >= 3) {
-            SettlementNetwork.CHANNEL.sendToServer(new SubmitCharacterPacket(
-                    draft.first(), draft.middle(), draft.last(), draft.faith(), draft.address(), draft.title(),
-                    draft.body(), selected, rerollRound));
+        if (!session.choose(choices.get(index))) return;
+        if (session.completeTraits()) {
+            submit();
             return;
         }
-        round++;
+        rebuildChoices();
+        rebuildButtons();
+    }
+
+    private void submit() {
+        if (!session.submit()) return;
+        CharacterCreationDraftSession.CharacterDraft draft = session.draft();
+        SettlementNetwork.CHANNEL.sendToServer(new SubmitCharacterPacket(session.id(),
+                draft.first(), draft.middle(), draft.last(), draft.faith(), draft.address(), draft.title(),
+                draft.body(), session.selectedTraits(), session.rerollRound()));
         rebuildChoices();
         rebuildButtons();
     }
@@ -98,14 +100,18 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen {
         graphics.fill(left, top, left + W, top + H, 0xF0181818);
         graphics.fill(left + 3, top + 3, left + W - 3, top + 48, 0xFF3B3023);
         graphics.drawCenteredString(font, "PICK YOUR TRAITS", left + W / 2, top + 12, 0xFFE7D8B0);
-        graphics.drawCenteredString(font, "Choice " + (round + 1) + " of 3 · choose one of the three cards", left + W / 2, top + 29, 0xFFC9B989);
+        graphics.drawCenteredString(font, session.state() == CharacterCreationDraftSession.State.SUBMITTING
+                ? "Waiting for server confirmation…" : session.completeTraits() ? "Three traits selected"
+                : "Choice " + (session.round() + 1) + " of 3 · choose one of the three cards", left + W / 2, top + 29, 0xFFC9B989);
 
         for (int i = 0; i < choices.size(); i++) renderCard(graphics, choices.get(i), left + 22 + i * 180, top + 62, uiMouseX, uiMouseY);
-        if (!selected.isEmpty()) {
-            String names = selected.stream().map(CampaignDefinitions::trait).filter(java.util.Objects::nonNull)
+        if (!session.selectedTraits().isEmpty()) {
+            String names = session.selectedTraits().stream().map(CampaignDefinitions::trait).filter(java.util.Objects::nonNull)
                     .map(CampaignDefinitions.TraitDefinition::name).reduce((a,b) -> a + " · " + b).orElse("");
             graphics.drawCenteredString(font, "Chosen: " + names, left + W / 2, top + 284, 0xFFAAAAAA);
         }
+        if (!session.error().isBlank())
+            graphics.drawWordWrap(font, Component.literal(session.error()), left + 22, top + 62, W - 44, 0xFFFFC86B);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }

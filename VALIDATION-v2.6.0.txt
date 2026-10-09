@@ -1,4 +1,17 @@
-SETTLEMENTS 2.6.0 — VALIDATION, updated 2026-10-09
+SETTLEMENTS 2.6.0 — VALIDATION
+
+CURRENT CHARACTER-DRAFT CONTINUATION (2026-10-10)
+Continues 6bb7ddd. See CHARACTER-DRAFT-CONTINUATION.md for the implementation,
+automated checks and current validation limits. The new build uses protocol 40.
+Passed: Java 17 ForgeGradle build, reobfuscated production JAR, and 146
+regression assertions including draft transitions, packet round trips and the
+real Wildfire body API. Reusable cloud build setup was also executed successfully.
+Minecraft startup and gameplay checks are not required for this continuation
+and were not run, at the user's request.
+
+INHERITED CHECKPOINT REPORT (2026-10-09)
+The startup/build results below describe the supplied checkpoint, not the
+new character-draft fixes or their runtime mixin application.
 
 RECOVERY
 Started from 6e24ea43623ff7cb314bbb1d22cdf5c864bebe46 on the existing branch

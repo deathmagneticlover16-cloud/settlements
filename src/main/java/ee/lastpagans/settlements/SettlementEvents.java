@@ -222,6 +222,11 @@ public final class SettlementEvents {
         if (event.getEntity() instanceof ServerPlayer player) SettlementsWildfireAuthority.reassert(player, true);
     }
 
+    public static void onStartTracking(PlayerEvent.StartTracking event) {
+        if (event.getEntity() instanceof ServerPlayer observer && event.getTarget() instanceof ServerPlayer subject)
+            SettlementsWildfireAuthority.syncToObserver(subject, observer);
+    }
+
     public static void onNameFormat(PlayerEvent.NameFormat event) {
         if (!(event.getEntity().level() instanceof ServerLevel level)) return;
         SettlementData.CharacterRecord character = SettlementData.get(level).getCharacter(event.getEntity().getUUID());

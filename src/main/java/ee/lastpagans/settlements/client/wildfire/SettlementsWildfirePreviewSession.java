@@ -1,129 +1,149 @@
 package ee.lastpagans.settlements.client.wildfire;
 
-import com.mojang.logging.LogUtils;
 import com.wildfire.gui.screen.WildfireBreastCustomizationScreen;
 import com.wildfire.main.Breasts;
 import com.wildfire.main.GenderPlayer;
-import com.wildfire.main.networking.WildfireSync;
+import com.wildfire.main.WildfireHelper;
+import com.wildfire.physics.BreastPhysics;
 import ee.lastpagans.settlements.character.BreastAppearance;
 import ee.lastpagans.settlements.character.CharacterBodyData;
+import ee.lastpagans.settlements.client.CharacterCreationDraftSession;
 import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireBridge;
+import ee.lastpagans.settlements.mixin.WildfirePortraitPhysicsAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraftforge.client.event.ScreenEvent;
-import org.slf4j.Logger;
 
 import java.util.UUID;
 
+/** Exposes detached draft objects to Wildfire; the live object and its config are never edited. */
 public final class SettlementsWildfirePreviewSession {
-    private static final Logger LOGGER = LogUtils.getLogger();
     private static UUID playerId;
     private static Screen parent;
     private static WildfireBreastCustomizationScreen editor;
-    private static WildfireBodySnapshot snapshot;
-    private static boolean active;
+    private static CharacterCreationDraftSession session;
+    private static GenderPlayer temporary;
+    private static GenderPlayer portrait;
+    private static CharacterCreationDraftSession portraitSession;
+    private static boolean rendering;
+    private static final ThreadLocal<Boolean> constructingDraft = ThreadLocal.withInitial(() -> false);
 
     private SettlementsWildfirePreviewSession() {}
 
-    public static boolean begin(Screen parentScreen, CharacterBodyData draft) {
+    public static boolean begin(Screen parentScreen, CharacterCreationDraftSession draftSession) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (active || minecraft.player == null || parentScreen == null || draft == null) return false;
-        CharacterBodyData safe = draft.sanitized();
-        if (safe.gender() == ee.lastpagans.settlements.character.CharacterGender.MALE) return false;
-        GenderPlayer wildfire = SettlementsWildfireBridge.getPlayer(minecraft.player.getUUID());
-        if (wildfire.needsSync) {
-            WildfireSync.sendToServer(wildfire);
-            wildfire.needsSync = false;
-        }
+        if (editor != null || minecraft.player == null || parentScreen == null
+                || draftSession != ClientCharacterBodyState.draftSession() || !draftSession.beginEditor()) return false;
         playerId = minecraft.player.getUUID();
         parent = parentScreen;
-        snapshot = WildfireBodySnapshot.capture(wildfire);
-        active = true;
-        SettlementsWildfireBridge.applyInMemory(wildfire, safe.withBreasts(safe.breasts().withEnabled(true)));
-        wildfire.needsSync = false;
-        editor = new WildfireBreastCustomizationScreen(parentScreen, playerId);
-        LOGGER.info("[Settlements/Wildfire] Beginning temporary breast preview for {}", playerId);
-        minecraft.setScreen(editor);
-        return true;
+        session = draftSession;
+        try {
+            temporary = createDraftPlayer(playerId);
+            SettlementsWildfireBridge.applyInMemory(temporary, session.draft().body());
+            temporary.needsSync = false;
+            editor = new WildfireBreastCustomizationScreen(parentScreen, playerId);
+            minecraft.setScreen(editor);
+            if (minecraft.screen != editor) cancel();
+        } catch (RuntimeException | Error failure) {
+            cancel();
+            throw failure;
+        }
+        return editor != null;
     }
 
     public static boolean shouldSuppressSave(GenderPlayer player) {
-        return active && player != null && playerId != null && playerId.equals(player.uuid);
+        return Minecraft.getInstance().isSameThread() && player != null && (rendering && player == portrait || player == temporary
+                || ClientCharacterBodyState.isOnboardingPlayer(player.uuid));
     }
 
-    public static boolean isAuthorized(Screen screen) {
-        return active && screen != null && screen == editor;
+    public static GenderPlayer draftPlayerForLookup(UUID id) {
+        if (id == null || !Minecraft.getInstance().isSameThread()) return null;
+        if (rendering && portrait != null && id.equals(portrait.uuid)) return portrait;
+        return temporary != null && id.equals(playerId) ? temporary : null;
+    }
+
+    public static boolean isAuthorized(Screen screen) { return screen != null && screen == editor; }
+
+    public static void onClientTick() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (temporary == null || minecraft.player == null) return;
+        var armor = WildfireHelper.getArmorConfig(minecraft.player.getItemBySlot(EquipmentSlot.CHEST));
+        temporary.getLeftBreastPhysics().update(minecraft.player, armor);
+        temporary.getRightBreastPhysics().update(minecraft.player, armor);
     }
 
     public static void onScreenOpening(ScreenEvent.Opening event) {
-        if (!active || event.getCurrentScreen() != editor || event.getNewScreen() == editor) return;
-        GenderPlayer wildfire = SettlementsWildfireBridge.getPlayer(playerId);
-        if (event.getNewScreen() == parent && parent instanceof BreastDraftReceiver receiver && wildfire != null) {
-            Breasts breasts = wildfire.getBreasts();
-            receiver.settlements$acceptBreastDraft(new BreastAppearance(true, wildfire.getBustSize(),
-                    breasts.getXOffset(), breasts.getYOffset(), breasts.getZOffset(), breasts.getCleavage(),
-                    breasts.isUniboob()).sanitized());
-        }
-        restoreAndClear();
+        if (event.isCanceled() || editor == null || event.getCurrentScreen() != editor || event.getNewScreen() == editor) return;
+        boolean returned = event.getNewScreen() == parent;
+        CharacterBodyData edited = returned ? capture(temporary, session.draft().body()) : null;
+        session.finishEditor(edited, returned);
+        restoreEditor();
     }
 
     public static void cancel() {
-        if (active) restoreAndClear();
+        if (session != null) session.finishEditor(null, false);
+        restoreEditor();
+        portrait = null;
+        portraitSession = null;
     }
 
-    private static void restoreAndClear() {
-        UUID restoredId = playerId;
-        GenderPlayer wildfire = SettlementsWildfireBridge.getPlayer(playerId);
-        if (wildfire != null && snapshot != null) {
-            snapshot.restore(wildfire);
-            wildfire.needsSync = false;
-        }
-        active = false;
+    private static void restoreEditor() {
         playerId = null;
         parent = null;
         editor = null;
-        snapshot = null;
-        LOGGER.info("[Settlements/Wildfire] Restored pre-preview state for {}", restoredId);
+        session = null;
+        temporary = null;
     }
 
-    private record WildfireBodySnapshot(
-            GenderPlayer.Gender gender,
-            float bustSize,
-            float xOffset,
-            float yOffset,
-            float zOffset,
-            float cleavage,
-            boolean uniboob,
-            boolean hurtSounds,
-            boolean breastPhysics,
-            boolean showInArmor,
-            boolean armorPhysicsOverride,
-            float bounceMultiplier,
-            float floppiness
-    ) {
-        static WildfireBodySnapshot capture(GenderPlayer player) {
-            Breasts breasts = player.getBreasts();
-            return new WildfireBodySnapshot(player.getGender(), player.getBustSize(), breasts.getXOffset(),
-                    breasts.getYOffset(), breasts.getZOffset(), breasts.getCleavage(), breasts.isUniboob(),
-                    player.hasHurtSounds(), player.hasBreastPhysics(), player.showBreastsInArmor(),
-                    player.getArmorPhysicsOverride(), player.getBounceMultiplierRaw(), player.getFloppiness());
+    public static void renderDraft(CharacterCreationDraftSession draftSession, Runnable render) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null || draftSession.draft() == null) return;
+        UUID id = minecraft.player.getUUID();
+        if (portraitSession != draftSession || portrait == null) {
+            portrait = createDraftPlayer(id);
+            portraitSession = draftSession;
         }
+        SettlementsWildfireBridge.applyInMemory(portrait, draftSession.draft().body());
+        float size = draftSession.draft().body().effectiveBustSize();
+        if (!portrait.getArmorPhysicsOverride()) {
+            float tightness = WildfireHelper.getArmorConfig(minecraft.player.getItemBySlot(EquipmentSlot.CHEST)).tightness();
+            size *= 1.0F - 0.15F * Math.max(0.0F, Math.min(1.0F, tightness));
+        }
+        setPortraitSize(portrait.getLeftBreastPhysics(), size);
+        setPortraitSize(portrait.getRightBreastPhysics(), size);
+        portrait.needsSync = false;
+        rendering = true;
+        try {
+            render.run();
+        } finally {
+            rendering = false;
+        }
+    }
 
-        void restore(GenderPlayer player) {
-            player.updateGender(gender);
-            player.updateBustSize(bustSize);
-            Breasts breasts = player.getBreasts();
-            breasts.updateXOffset(xOffset);
-            breasts.updateYOffset(yOffset);
-            breasts.updateZOffset(zOffset);
-            breasts.updateCleavage(cleavage);
-            breasts.updateUniboob(uniboob);
-            player.updateHurtSounds(hurtSounds);
-            player.updateBreastPhysics(breastPhysics);
-            player.updateShowBreastsInArmor(showInArmor);
-            player.updateArmorPhysicsOverride(armorPhysicsOverride);
-            player.updateBounceMultiplier(bounceMultiplier);
-            player.updateFloppiness(floppiness);
+    private static void setPortraitSize(BreastPhysics physics, float size) {
+        WildfirePortraitPhysicsAccessor access = (WildfirePortraitPhysicsAccessor) physics;
+        access.settlements$setBreastSize(size);
+        access.settlements$setPreviousBreastSize(size);
+    }
+
+    public static boolean constructingDraftPlayer() { return constructingDraft.get(); }
+
+    private static GenderPlayer createDraftPlayer(UUID id) {
+        constructingDraft.set(true);
+        try {
+            return new GenderPlayer(id);
+        } finally {
+            constructingDraft.remove();
         }
+    }
+
+    private static CharacterBodyData capture(GenderPlayer player, CharacterBodyData draft) {
+        Breasts breasts = player.getBreasts();
+        return new CharacterBodyData(CharacterBodyData.CURRENT_VERSION, draft.gender(),
+                new BreastAppearance(draft.breasts().enabled(), player.getBustSize(), breasts.getXOffset(),
+                        breasts.getYOffset(), breasts.getZOffset(), breasts.getCleavage(), breasts.isUniboob()),
+                player.hasHurtSounds(), player.hasBreastPhysics(), player.showBreastsInArmor(),
+                player.getArmorPhysicsOverride(), player.getBounceMultiplierRaw(), player.getFloppiness()).sanitized();
     }
 }
