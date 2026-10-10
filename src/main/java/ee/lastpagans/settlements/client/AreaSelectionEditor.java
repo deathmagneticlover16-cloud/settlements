@@ -12,7 +12,6 @@ import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -31,12 +30,16 @@ public final class AreaSelectionEditor {
     private AreaSelectionEditor() {}
 
     public static void begin(String settlementId, AreaSelection.Type type) {
+        begin(settlementId, type, -1);
+    }
+
+    public static void begin(String settlementId, AreaSelection.Type type, int areaIndex) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.level == null) return;
         session = new Session(settlementId, type, AreaSelection.Shape.BOX,
-                minecraft.level.dimension().location().toString(), null);
+                minecraft.level.dimension().location().toString(), null, areaIndex);
         minecraft.setScreen(null);
-        minecraft.player.displayClientMessage(Component.literal("Area editor opened: left click to set the first corner."), true);
+        message("Area editor opened: left click to set the first corner.");
     }
 
     public static boolean active() { return session != null; }
@@ -46,6 +49,11 @@ public final class AreaSelectionEditor {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen != null) return;
         if (event.getButton() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+            if (!shapeToggleAllowed(session.type())) {
+                message("Only Capture Zones support cylinder selection.");
+                event.setCanceled(true);
+                return;
+            }
             session = session.withShape(session.shape().next());
             message("Selection shape: " + session.shape().label());
             event.setCanceled(true);
@@ -65,7 +73,7 @@ public final class AreaSelectionEditor {
                     : "First corner set. Aim at the opposite corner and left click again.");
         } else {
             BlockPos second = constrained(target);
-            SettlementNetwork.CHANNEL.sendToServer(new AreaSelectionPacket(session.settlementId(), session.type(), session.shape(), session.first(), second));
+            SettlementNetwork.CHANNEL.sendToServer(new AreaSelectionPacket(session.settlementId(), session.type(), session.shape(), session.first(), second, session.areaIndex()));
             message(session.type().label() + " selection submitted.");
             session = null;
         }
@@ -125,7 +133,7 @@ public final class AreaSelectionEditor {
         String title = session.type().label() + " · " + session.shape().label()
                 + (session.type().horizontalOnly() ? " · Horizontal" : " · Volume");
         String step = session.first() == null ? "Left click: first corner" : "Left click: confirm opposite corner";
-        String controls = "Right click: switch shape   Esc: exit";
+        String controls = shapeToggleAllowed(session.type()) ? "Right click: switch shape   Esc: exit" : "Box selection   Esc: exit";
         int panelWidth = Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(step), minecraft.font.width(controls))) + 18;
         int x = (width - panelWidth) / 2;
         graphics.fill(x, 8, x + panelWidth, 52, 0xB010141B);
@@ -148,8 +156,7 @@ public final class AreaSelectionEditor {
     }
 
     private static void message(String text) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.player != null) minecraft.player.displayClientMessage(Component.literal(text), true);
+        TransientAlertOverlay.show(text);
     }
 
     private static float[] color(AreaSelection.Type type) {
@@ -159,6 +166,10 @@ public final class AreaSelectionEditor {
             case PRAYER -> new float[]{0.72F, 0.46F, 1.0F};
             case HOUSING -> new float[]{0.25F, 0.85F, 0.55F};
         };
+    }
+
+    private static boolean shapeToggleAllowed(AreaSelection.Type type) {
+        return type == AreaSelection.Type.CAPTURE_MAIN || type == AreaSelection.Type.CAPTURE_SECONDARY;
     }
 
     private static void renderCylinder(PoseStack pose, VertexConsumer consumer, BlockPos min, BlockPos max, float[] color) {
@@ -187,8 +198,9 @@ public final class AreaSelectionEditor {
         consumer.vertex(pose.last().pose(), (float)x2, (float)y2, (float)z2).color(color[0], color[1], color[2], 0.95F).normal(pose.last().normal(), nx, ny, nz).endVertex();
     }
 
-    private record Session(String settlementId, AreaSelection.Type type, AreaSelection.Shape shape, String dimension, BlockPos first) {
-        Session withShape(AreaSelection.Shape value) { return new Session(settlementId, type, value, dimension, first); }
-        Session withFirst(BlockPos value) { return new Session(settlementId, type, shape, dimension, value.immutable()); }
+    private record Session(String settlementId, AreaSelection.Type type, AreaSelection.Shape shape, String dimension,
+                           BlockPos first, int areaIndex) {
+        Session withShape(AreaSelection.Shape value) { return new Session(settlementId, type, value, dimension, first, areaIndex); }
+        Session withFirst(BlockPos value) { return new Session(settlementId, type, shape, dimension, value.immutable(), areaIndex); }
     }
 }

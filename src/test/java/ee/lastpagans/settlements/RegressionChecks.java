@@ -25,6 +25,8 @@ public final class RegressionChecks {
         Bootstrap.bootStrap();
         capturePersistenceAndGeometry();
         areaSelectionGeometry();
+        housingAreaManagement();
+        researchTierColumns();
         bannerValidation();
         treasuryAccounting();
         dyeNames();
@@ -95,6 +97,53 @@ public final class RegressionChecks {
             check(ee.lastpagans.settlements.network.AreaSelectionPacket.decode(buffer).equals(packet) && buffer.readableBytes() == 0,
                     "area selection packet preserves type, shape, and both corners");
         } finally { buffer.release(); }
+    }
+
+    private static void housingAreaManagement() {
+        CampaignSystemsData data = new CampaignSystemsData();
+        CampaignSystemsData.RegionRecord first = new CampaignSystemsData.RegionRecord("minecraft:overworld",
+                BlockPos.ZERO, new BlockPos(4, 4, 4), AreaSelection.Shape.CYLINDER);
+        CampaignSystemsData.RegionRecord second = new CampaignSystemsData.RegionRecord("minecraft:overworld",
+                new BlockPos(10, 0, 10), new BlockPos(14, 4, 14), AreaSelection.Shape.BOX);
+        data.addHousingArea("test", first);
+        data.addHousingArea("test", second);
+        check(data.housingAreas("test").size() == 2 && data.housingAreas("test").get(0).shape() == AreaSelection.Shape.BOX,
+                "housing supports multiple areas and rejects cylinder geometry");
+        CampaignSystemsData.RegionRecord replacement = new CampaignSystemsData.RegionRecord("minecraft:overworld",
+                new BlockPos(20, 0, 20), new BlockPos(24, 4, 24), AreaSelection.Shape.CYLINDER);
+        check(data.replaceHousingArea("test", 0, replacement)
+                        && data.housingAreas("test").get(0).shape() == AreaSelection.Shape.BOX,
+                "editing a housing area replaces it in place and enforces box geometry");
+        check(data.removeHousingArea("test", 1) && data.housingAreas("test").size() == 1,
+                "one housing area can be removed without clearing the others");
+        data.setMusterArea("test", replacement);
+        data.setPrayerSite("test", replacement);
+        check(data.musterArea("test").shape() == AreaSelection.Shape.BOX
+                        && data.prayerSite("test").shape() == AreaSelection.Shape.BOX,
+                "non-capture settlement regions normalize to box geometry");
+
+        HousingAreasSnapshot snapshot = new HousingAreasSnapshot("test", "Test", true,
+                java.util.List.of(new HousingAreasSnapshot.Entry(0, "minecraft:overworld", BlockPos.ZERO, new BlockPos(4, 4, 4))), "ok");
+        net.minecraft.network.FriendlyByteBuf buffer = new net.minecraft.network.FriendlyByteBuf(io.netty.buffer.Unpooled.buffer());
+        try {
+            snapshot.encode(buffer);
+            check(HousingAreasSnapshot.decode(buffer).equals(snapshot) && buffer.readableBytes() == 0,
+                    "housing manager snapshot preserves all selectable areas");
+            var edit = new ee.lastpagans.settlements.network.AreaSelectionPacket("test", AreaSelection.Type.HOUSING,
+                    AreaSelection.Shape.BOX, BlockPos.ZERO, new BlockPos(5, 5, 5), 3);
+            ee.lastpagans.settlements.network.AreaSelectionPacket.encode(edit, buffer);
+            check(ee.lastpagans.settlements.network.AreaSelectionPacket.decode(buffer).equals(edit) && buffer.readableBytes() == 0,
+                    "area selection packet preserves the housing edit index");
+        } finally { buffer.release(); }
+    }
+
+    private static void researchTierColumns() {
+        for (int tier = 1; tier <= 4; tier++) {
+            ResearchSnapshot.TechnologyEntry entry = new ResearchSnapshot.TechnologyEntry("tier_" + tier, "Tier " + tier,
+                    "minecraft:book", 20L, false, true, "None", java.util.List.of(), tier, "MIN", 0);
+            check(ee.lastpagans.settlements.client.ResearchScreen.tierColumn(entry) == tier - 1,
+                    "History Stages bench tier " + tier + " maps to research column " + tier);
+        }
     }
 
     private static void bannerValidation() {

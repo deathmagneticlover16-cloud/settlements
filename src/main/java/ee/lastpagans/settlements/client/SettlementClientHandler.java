@@ -10,6 +10,7 @@ import ee.lastpagans.settlements.ResearchSnapshot;
 import ee.lastpagans.settlements.SettlementSnapshot;
 import ee.lastpagans.settlements.MapMarkerSnapshot;
 import ee.lastpagans.settlements.network.SnapshotPacket;
+import ee.lastpagans.settlements.network.HousingAreasPacket;
 import net.minecraft.client.Minecraft;
 
 public final class SettlementClientHandler {
@@ -21,6 +22,13 @@ public final class SettlementClientHandler {
         if (!packet.open() && minecraft.screen instanceof MilitaryScreen military) { military.updateSnapshot(packet.snapshot()); return; }
         if (packet.open() || !(minecraft.screen instanceof SettlementScreen screen)) minecraft.setScreen(new SettlementScreen(packet.snapshot()));
         else screen.updateSnapshot(packet.snapshot());
+    }
+    public static void acceptHousingAreas(HousingAreasPacket packet) {
+        Minecraft minecraft = Minecraft.getInstance();
+        HousingAreaOverlay.update(packet.snapshot());
+        if (HousingAreaOverlay.active() && !packet.snapshot().message().isBlank()) TransientAlertOverlay.show(packet.snapshot().message());
+        if (packet.open()) minecraft.setScreen(new HousingAreasScreen(packet.snapshot()));
+        else if (minecraft.screen instanceof HousingAreasScreen screen) screen.updateSnapshot(packet.snapshot());
     }
     public static void openCharacterCreation() {
         ee.lastpagans.settlements.client.wildfire.ClientCharacterBodyState.beginOnboarding();

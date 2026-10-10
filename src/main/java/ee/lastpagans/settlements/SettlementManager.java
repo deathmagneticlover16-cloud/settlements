@@ -14,6 +14,8 @@ import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
 import ee.lastpagans.settlements.network.ProfileSyncPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.AreaSelectionPacket;
+import ee.lastpagans.settlements.network.HousingAreaActionPacket;
+import ee.lastpagans.settlements.network.HousingAreasPacket;
 import ee.lastpagans.settlements.network.SnapshotPacket;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -256,12 +258,31 @@ public final class SettlementManager {
         if (settlement == null) { player.sendSystemMessage(Component.literal("That settlement no longer exists.")); return; }
         String result;
         if (!canManage(player, settlement)) result = "You cannot manage this settlement.";
-        else result = applyAreaSelection(player, settlement, packet.type(), packet.shape(), packet.first(), packet.second());
+        else result = applyAreaSelection(player, settlement, packet.type(), packet.shape(), packet.first(), packet.second(), packet.areaIndex());
         sendSnapshot(player, settlement, false, result);
     }
 
+    public static void handleHousingAreaAction(ServerPlayer player, HousingAreaActionPacket packet) {
+        if (player == null || packet == null || packet.action() == null) return;
+        SettlementData.SettlementRecord settlement = SettlementData.get(player.serverLevel()).getSettlement(packet.settlementId());
+        if (settlement == null) { player.sendSystemMessage(Component.literal("That settlement no longer exists.")); return; }
+        boolean manager = canManage(player, settlement);
+        String message = "";
+        if (packet.action() == HousingAreaActionPacket.Action.DELETE) {
+            if (!manager) message = "You cannot manage this settlement.";
+            else if (CampaignSystemsData.get(player.serverLevel()).removeHousingArea(settlement.getId(), packet.areaIndex())) {
+                int beds = CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement);
+                message = "Housing area removed. " + beds + " total housing bed(s) remain.";
+            } else message = "That housing area no longer exists.";
+        }
+        HousingAreasSnapshot snapshot = HousingAreasSnapshot.from(settlement, CampaignSystemsData.get(player.serverLevel()), manager, message);
+        SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
+                new HousingAreasPacket(packet.action() == HousingAreaActionPacket.Action.OPEN, snapshot));
+    }
+
     private static String applyAreaSelection(ServerPlayer player, SettlementData.SettlementRecord settlement, AreaSelection.Type type,
-                                             AreaSelection.Shape shape, BlockPos first, BlockPos second) {
+                                             AreaSelection.Shape shape, BlockPos first, BlockPos second, int areaIndex) {
+        if (type != AreaSelection.Type.CAPTURE_MAIN && type != AreaSelection.Type.CAPTURE_SECONDARY) shape = AreaSelection.Shape.BOX;
         if (type.horizontalOnly()) second = new BlockPos(second.getX(), first.getY(), second.getZ());
         BlockPos min = AreaSelection.min(first, second), max = AreaSelection.max(first, second);
         int width = max.getX() - min.getX() + 1, height = max.getY() - min.getY() + 1, depth = max.getZ() - min.getZ() + 1;
@@ -273,9 +294,11 @@ public final class SettlementManager {
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
         return switch (type) {
             case HOUSING -> {
-                extra.addHousingArea(settlement.getId(), region);
+                if (areaIndex >= 0) {
+                    if (!extra.replaceHousingArea(settlement.getId(), areaIndex, region)) yield "That housing area no longer exists.";
+                } else extra.addHousingArea(settlement.getId(), region);
                 int beds = CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement);
-                yield shape.label() + " dwelling registered: " + beds + " total housing bed(s).";
+                yield (areaIndex >= 0 ? "Housing area updated: " : "Housing area added: ") + beds + " total housing bed(s).";
             }
             case MUSTER -> {
                 extra.setMusterArea(settlement.getId(), region);
@@ -836,9 +859,8 @@ public final class SettlementManager {
             return;
         }
         if (!CampaignDefinitions.isValidReligion(faith)
-                || !allowedCharacterChoice(address, CampaignDefinitions.ADDRESSES)
                 || !allowedCharacterChoice(title, CampaignDefinitions.PERSONAL_TITLES)) {
-            rejectCharacter(player, sessionId, "Invalid faith, form of address, or title selection. Use Go Back to correct it.");
+            rejectCharacter(player, sessionId, "Invalid faith or title selection. Use Go Back to correct it.");
             return;
         }
         String cleanFirst = SettlementData.cleanText(first, "", 24);
@@ -867,9 +889,14 @@ public final class SettlementManager {
             return;
         }
         CharacterBodyData body = submittedBody.sanitized();
+        String canonicalAddress = switch (body.gender()) {
+            case MALE -> "Male";
+            case FEMALE -> "Female";
+            case OTHER -> "Neutral";
+        };
 
         SettlementData.CharacterRecord character = data.getOrCreateCharacter(player.getUUID());
-        character.create(cleanFirst, cleanMiddle, cleanLast, faith, address, title);
+        character.create(cleanFirst, cleanMiddle, cleanLast, faith, canonicalAddress, title);
         character.setTraits(selectedTraits);
         character.setBody(body);
         data.setDirty();

@@ -109,7 +109,7 @@ public final class CampaignSystemsData extends SavedData {
             List<RegionRecord> regions = new ArrayList<>();
             for (Tag regionRaw : entry.getList("Regions", Tag.TAG_COMPOUND)) {
                 RegionRecord region = RegionRecord.fromNBT((CompoundTag) regionRaw);
-                if (region.valid()) regions.add(region);
+                if (region.valid()) regions.add(new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
             }
             if (!regions.isEmpty()) data.housingAreas.put(settlement, regions);
         }
@@ -117,13 +117,15 @@ public final class CampaignSystemsData extends SavedData {
             CompoundTag entry = (CompoundTag) raw;
             RegionRecord region = RegionRecord.fromNBT(entry.getCompound("Region"));
             String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
-            if (!settlement.isBlank() && region.valid()) data.musterAreas.put(settlement, region);
+            if (!settlement.isBlank() && region.valid()) data.musterAreas.put(settlement,
+                    new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
         }
         for (Tag raw : tag.getList("PrayerSites", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
             RegionRecord region = RegionRecord.fromNBT(entry.getCompound("Region"));
             String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
-            if (!settlement.isBlank() && region.valid()) data.prayerSites.put(settlement, region);
+            if (!settlement.isBlank() && region.valid()) data.prayerSites.put(settlement,
+                    new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
         }
         for (Tag raw : tag.getList("HolySites", Tag.TAG_COMPOUND)) {
             HolySiteRecord site = HolySiteRecord.fromNBT((CompoundTag) raw);
@@ -414,12 +416,29 @@ public final class CampaignSystemsData extends SavedData {
     public void setFactionProtected(String faction, boolean value) { if (faction == null || faction.isBlank()) return; protectedFactions.put(faction, value); setDirty(); }
 
     public List<RegionRecord> housingAreas(String settlement) { return List.copyOf(housingAreas.getOrDefault(SettlementData.normalizeId(settlement), List.of())); }
-    public void addHousingArea(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank() || !region.valid()) return; housingAreas.computeIfAbsent(id, key -> new ArrayList<>()).add(region); setDirty(); }
+    public void addHousingArea(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank() || !region.valid()) return; housingAreas.computeIfAbsent(id, key -> new ArrayList<>()).add(new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX)); setDirty(); }
+    public boolean replaceHousingArea(String settlement, int index, RegionRecord region) {
+        String id = SettlementData.normalizeId(settlement);
+        List<RegionRecord> values = housingAreas.get(id);
+        if (values == null || index < 0 || index >= values.size() || region == null || !region.valid()) return false;
+        values.set(index, new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
+        setDirty();
+        return true;
+    }
+    public boolean removeHousingArea(String settlement, int index) {
+        String id = SettlementData.normalizeId(settlement);
+        List<RegionRecord> values = housingAreas.get(id);
+        if (values == null || index < 0 || index >= values.size()) return false;
+        values.remove(index);
+        if (values.isEmpty()) housingAreas.remove(id);
+        setDirty();
+        return true;
+    }
     public void clearHousingAreas(String settlement) { if (housingAreas.remove(SettlementData.normalizeId(settlement)) != null) setDirty(); }
     public RegionRecord musterArea(String settlement) { return musterAreas.get(SettlementData.normalizeId(settlement)); }
-    public void setMusterArea(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; if (region == null || !region.valid()) musterAreas.remove(id); else musterAreas.put(id, region); setDirty(); }
+    public void setMusterArea(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; if (region == null || !region.valid()) musterAreas.remove(id); else musterAreas.put(id, new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX)); setDirty(); }
     public RegionRecord prayerSite(String settlement) { return prayerSites.get(SettlementData.normalizeId(settlement)); }
-    public void setPrayerSite(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; if (region == null || !region.valid()) prayerSites.remove(id); else prayerSites.put(id, region); setDirty(); }
+    public void setPrayerSite(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; if (region == null || !region.valid()) prayerSites.remove(id); else prayerSites.put(id, new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX)); setDirty(); }
     public List<HolySiteRecord> holySites() { return List.copyOf(holySites); }
     public void addHolySite(HolySiteRecord site) { if (site != null && site.region.valid() && !site.faith.isBlank()) { holySites.add(site); setDirty(); } }
     public boolean removeHolySite(String id) { boolean removed = holySites.removeIf(site -> site.id.equalsIgnoreCase(id)); if (removed) setDirty(); return removed; }

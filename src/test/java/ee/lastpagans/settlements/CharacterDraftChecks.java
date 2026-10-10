@@ -26,6 +26,7 @@ public final class CharacterDraftChecks {
         session.identity("Ada", "Marie", "Lovelace", CampaignDefinitions.RELIGIONS.get(3),
                 CampaignDefinitions.ADDRESSES.get(1), CampaignDefinitions.PERSONAL_TITLES.get(2));
         session.gender(CharacterGender.FEMALE);
+        check(session.draft().address().equals("Female"), "single Settlements gender derives the stored form of address");
         return session;
     }
 

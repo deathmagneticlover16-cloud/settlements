@@ -399,7 +399,7 @@ public final class SettlementData extends SavedData {
         private BlockPos upkeepChest;
         private int barracksRadius = 12;
         private int barracksCapacity = 64;
-        private AreaSelection.Shape barracksShape = AreaSelection.Shape.CYLINDER;
+        private AreaSelection.Shape barracksShape = AreaSelection.Shape.BOX;
         /** Political faction. Blank means this settlement is independent in Settlements diplomacy. */
         private String factionTeam = "";
         /** Hidden Recruits faction used only to make independent claims/units function correctly. */
@@ -484,8 +484,7 @@ public final class SettlementData extends SavedData {
                 if (point.contains("Chest", Tag.TAG_LONG)) barracksChest = BlockPos.of(point.getLong("Chest"));
                 barracksRadius = point.contains("Radius", Tag.TAG_INT) ? Math.max(2, point.getInt("Radius")) : 12;
                 barracksCapacity = point.contains("Capacity", Tag.TAG_INT) ? Math.max(1, point.getInt("Capacity")) : 64;
-                barracksShape = point.contains("Shape", Tag.TAG_STRING)
-                        ? AreaSelection.Shape.parse(point.getString("Shape")) : AreaSelection.Shape.CYLINDER;
+                barracksShape = AreaSelection.Shape.BOX;
             }
 
             readUuidSet(tag, "Villagers", villagerResidents);
@@ -836,7 +835,7 @@ public final class SettlementData extends SavedData {
             int radius = Math.max(2, Math.min(64, Math.max(max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1) / 2));
             setBarracks(dimension, center);
             barracksRadius = radius;
-            barracksShape = shape == null ? AreaSelection.Shape.BOX : shape;
+            barracksShape = AreaSelection.Shape.BOX;
             dirty();
         }
 

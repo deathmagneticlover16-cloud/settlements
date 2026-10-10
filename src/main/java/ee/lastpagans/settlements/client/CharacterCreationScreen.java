@@ -23,7 +23,6 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
     private EditBox middle;
     private EditBox last;
     private DropdownWidget faith;
-    private DropdownWidget address;
     private DropdownWidget title;
     private DropdownWidget gender;
     private Button breastsNo;
@@ -68,15 +67,12 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         // Lower lists are added first so expanded upper lists render above them.
         gender = addRenderableWidget(new DropdownWidget(left + 250, top + 246, 170, 20, GENDERS,
                 index(GENDERS, body().gender().displayName()), this::setGender));
-        title = addRenderableWidget(new DropdownWidget(left + 170, top + 204, 250, 20,
-                CampaignDefinitions.PERSONAL_TITLES,
-                index(CampaignDefinitions.PERSONAL_TITLES, draft.title()), value -> saveIdentity()));
-        address = addRenderableWidget(new DropdownWidget(left + 170, top + 176, 250, 20,
-                CampaignDefinitions.ADDRESSES,
-                index(CampaignDefinitions.ADDRESSES, draft.address()), value -> saveIdentity()));
-        faith = addRenderableWidget(new DropdownWidget(left + 170, top + 148, 250, 20,
+        faith = addRenderableWidget(new DropdownWidget(left + 170, top + 162, 250, 20,
                 CampaignDefinitions.RELIGIONS,
                 index(CampaignDefinitions.RELIGIONS, draft.faith()), value -> saveIdentity()));
+        title = addRenderableWidget(new DropdownWidget(left + 170, top + 190, 250, 20,
+                CampaignDefinitions.PERSONAL_TITLES,
+                index(CampaignDefinitions.PERSONAL_TITLES, draft.title()), value -> saveIdentity()));
         first.setResponder(value -> saveIdentity());
         middle.setResponder(value -> saveIdentity());
         last.setResponder(value -> saveIdentity());
@@ -108,7 +104,7 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
     }
 
     private void saveIdentity() {
-        session.identity(first.getValue(), middle.getValue(), last.getValue(), faith.value(), address.value(), title.value());
+        session.identity(first.getValue(), middle.getValue(), last.getValue(), faith.value(), body().gender().displayName(), title.value());
     }
 
     private CharacterBodyData body() { return session.draft().body(); }
@@ -145,7 +141,6 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
         if (gender.isExpanded() && gender.mouseClicked(uiX, uiY, button)) return true;
         if (faith.isExpanded() && faith.mouseClicked(uiX, uiY, button)) return true;
-        if (address.isExpanded() && address.mouseClicked(uiX, uiY, button)) return true;
         if (title.isExpanded() && title.mouseClicked(uiX, uiY, button)) return true;
         return super.mouseClicked(x, y, button);
     }
@@ -155,7 +150,6 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
         if (gender.isExpanded() && gender.mouseScrolled(uiX, uiY, delta)) return true;
         if (faith.isExpanded() && faith.mouseScrolled(uiX, uiY, delta)) return true;
-        if (address.isExpanded() && address.mouseScrolled(uiX, uiY, delta)) return true;
         if (title.isExpanded() && title.mouseScrolled(uiX, uiY, delta)) return true;
         return super.mouseScrolled(x, y, delta);
     }
@@ -178,6 +172,8 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         }
         graphics.drawString(font, "Name", left + 170, top + 44, 0xFFDDDDDD, false);
         graphics.drawString(font, "Identity", left + 170, top + 132, 0xFFDDDDDD, false);
+        graphics.drawString(font, "Faith", left + 170, top + 151, 0xFF888888, false);
+        graphics.drawString(font, "Title", left + 170, top + 179, 0xFF888888, false);
         graphics.drawString(font, "Body", left + 170, top + 232, 0xFFDDDDDD, false);
         graphics.drawString(font, "Gender", left + 170, top + 252, 0xFFAAAAAA, false);
         graphics.drawString(font, "Boobs?", left + 170, top + 280, 0xFFAAAAAA, false);

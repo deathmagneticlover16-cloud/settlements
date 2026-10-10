@@ -30,9 +30,9 @@ public final class CharacterCreationDraftSession {
 
     public CharacterCreationDraftSession(UUID playerId) {
         this.playerId = playerId;
+        CharacterBodyData body = CharacterBodyData.defaults();
         draft = new CharacterDraft("", "", "", CampaignDefinitions.RELIGIONS.get(0),
-                CampaignDefinitions.ADDRESSES.get(0), CampaignDefinitions.PERSONAL_TITLES.get(0),
-                CharacterBodyData.defaults());
+                addressFor(body.gender()), CampaignDefinitions.PERSONAL_TITLES.get(0), body);
     }
 
     public UUID id() { return id; }
@@ -48,7 +48,7 @@ public final class CharacterCreationDraftSession {
 
     public void identity(String first, String middle, String last, String faith, String address, String title) {
         if (state != State.DRAFT) return;
-        CharacterDraft next = new CharacterDraft(first, middle, last, faith, address, title, draft.body());
+        CharacterDraft next = new CharacterDraft(first, middle, last, faith, addressFor(draft.body().gender()), title, draft.body());
         // Trait cards are seeded by the complete display name. Preserve the spent reroll on a rename.
         if (!next.displayName().equalsIgnoreCase(draft.displayName())) {
             selected.clear();
@@ -59,11 +59,16 @@ public final class CharacterCreationDraftSession {
 
     public void body(CharacterBodyData body) {
         if (state != State.DRAFT || body == null) return;
+        CharacterBodyData safe = body.sanitized();
         draft = new CharacterDraft(draft.first(), draft.middle(), draft.last(), draft.faith(),
-                draft.address(), draft.title(), body.sanitized());
+                addressFor(safe.gender()), draft.title(), safe);
     }
 
-    public void gender(CharacterGender gender) { body(draft.body().withGender(gender)); }
+    public void gender(CharacterGender gender) {
+        if (state != State.DRAFT || gender == null) return;
+        draft = new CharacterDraft(draft.first(), draft.middle(), draft.last(), draft.faith(), addressFor(gender),
+                draft.title(), draft.body().withGender(gender).sanitized());
+    }
     public void breasts(boolean enabled) { body(draft.body().withBreasts(draft.body().breasts().withEnabled(enabled))); }
 
     public boolean beginEditor() {
@@ -131,5 +136,13 @@ public final class CharacterCreationDraftSession {
         selected.clear();
         draft = null;
         error = "";
+    }
+
+    private static String addressFor(CharacterGender gender) {
+        return switch (gender == null ? CharacterGender.MALE : gender) {
+            case MALE -> "Male";
+            case FEMALE -> "Female";
+            case OTHER -> "Neutral";
+        };
     }
 }

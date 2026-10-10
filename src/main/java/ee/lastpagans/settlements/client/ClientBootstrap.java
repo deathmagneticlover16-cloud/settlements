@@ -17,5 +17,10 @@ public final class ClientBootstrap {
         MinecraftForge.EVENT_BUS.addListener(AreaSelectionEditor::onClientTick);
         MinecraftForge.EVENT_BUS.addListener(AreaSelectionEditor::onRenderLevel);
         MinecraftForge.EVENT_BUS.addListener(AreaSelectionEditor::onRenderGui);
+        MinecraftForge.EVENT_BUS.addListener(HousingAreaOverlay::onKey);
+        MinecraftForge.EVENT_BUS.addListener(HousingAreaOverlay::onRenderLevel);
+        MinecraftForge.EVENT_BUS.addListener(HousingAreaOverlay::onRenderGui);
+        MinecraftForge.EVENT_BUS.addListener(TransientAlertOverlay::onClientTick);
+        MinecraftForge.EVENT_BUS.addListener(TransientAlertOverlay::onRenderGui);
     }
 }

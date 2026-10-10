@@ -93,7 +93,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         graphics.fill(left + 452, top + TREE_Y, left + 646, top + TREE_Y + TREE_H, 0xFF222222);
         renderTree(graphics);
         renderDetails(graphics);
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, trim(snapshot.message(), 80), left + W / 2, top + 382, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawString(font, trim(snapshot.message(), 72), left + 14, top + 376, 0xFFFFD27A, false);
         super.render(graphics, ux, uy, partialTick);
         endCampaignRender(graphics);
     }
@@ -184,7 +184,8 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         graphics.drawString(font, entry.completed() ? "Completed" : entry.available() ? "Available" : "Locked", x, y + 48,
                 entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFE2A3 : 0xFFFF8A8A, false);
         graphics.drawString(font, "Base time: " + duration(entry.durationSeconds()), x, y + 64, 0xFFCCCCCC, false);
-        String tier = "Settlement gate: " + tierName(entry.requiredTier()) + " (Tier " + roman(entry.requiredTier()) + ")" + ("EXACT".equalsIgnoreCase(entry.tierMode()) ? " exactly" : "+");
+        String tier = "Bench tier: " + roman(entry.requiredTier()) + " · " + tierName(entry.requiredTier())
+                + ("EXACT".equalsIgnoreCase(entry.tierMode()) ? " exactly" : "+");
         boolean tierAllowed = "EXACT".equalsIgnoreCase(entry.tierMode())
                 ? snapshot.researchTier() == entry.requiredTier()
                 : snapshot.researchTier() >= entry.requiredTier();
@@ -199,7 +200,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         List<Node> nodes = new ArrayList<>();
         for (int i = 0; i < snapshot.technologies().size(); i++) {
             ResearchSnapshot.TechnologyEntry entry = snapshot.technologies().get(i);
-            int col = Math.min(COLUMNS - 1, Math.max(0, entry.depth()));
+            int col = tierColumn(entry);
             int row = rowCounts[col]++;
             if (row < scroll || row >= scroll + ROWS) continue;
             int x = left + TREE_X + col * colW + 5;
@@ -211,7 +212,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
 
     private int maxScroll() {
         int[] counts = new int[COLUMNS];
-        for (ResearchSnapshot.TechnologyEntry entry : snapshot.technologies()) counts[Math.min(COLUMNS - 1, Math.max(0, entry.depth()))]++;
+        for (ResearchSnapshot.TechnologyEntry entry : snapshot.technologies()) counts[tierColumn(entry)]++;
         int maximum = 0;
         for (int count : counts) maximum = Math.max(maximum, count);
         return Math.max(0, maximum - ROWS);
@@ -261,6 +262,10 @@ public final class ResearchScreen extends ScaledCampaignScreen {
             case 3 -> "III";
             default -> "IV";
         };
+    }
+
+    public static int tierColumn(ResearchSnapshot.TechnologyEntry entry) {
+        return Math.min(COLUMNS - 1, Math.max(0, entry.requiredTier() - 1));
     }
 
     private static String trim(String value, int max) { return value == null ? "" : value.length() <= max ? value : value.substring(0, Math.max(0, max - 1)) + "…"; }

@@ -10,6 +10,7 @@ import ee.lastpagans.settlements.client.api.ClientCaptureZoneApi;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.SettlementActionPacket;
+import ee.lastpagans.settlements.network.HousingAreaActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -156,7 +157,8 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Edit Barracks Area"), b -> beginArea(AreaSelection.Type.BARRACKS))
                 .bounds(left + 360, top + 146, 150, 18).build());
 
-        addRenderableWidget(Button.builder(Component.literal("Edit Housing Area"), b -> beginArea(AreaSelection.Type.HOUSING))
+        addRenderableWidget(Button.builder(Component.literal("Manage Housing Areas"), b -> SettlementNetwork.CHANNEL.sendToServer(
+                        new HousingAreaActionPacket(snapshot.settlementId(), HousingAreaActionPacket.Action.OPEN, -1)))
                 .bounds(left + 30, top + 200, 214, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Recalculate"), b -> send(SettlementManager.SettlementAction.RECALCULATE_HOUSING))
                 .bounds(left + 250, top + 200, 92, 18).build());

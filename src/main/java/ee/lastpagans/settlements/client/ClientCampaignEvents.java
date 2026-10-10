@@ -34,7 +34,8 @@ public final class ClientCampaignEvents {
     }
 
     public static void onScreenOpening(ScreenEvent.Opening event) {
-        if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.PauseScreen && AreaSelectionEditor.consumePauseScreen()) {
+        if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.PauseScreen
+                && (AreaSelectionEditor.consumePauseScreen() || HousingAreaOverlay.consumePauseScreen())) {
             event.setCanceled(true);
             return;
         }
@@ -46,8 +47,7 @@ public final class ClientCampaignEvents {
             event.setCanceled(true);
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.player != null)
-                minecraft.player.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                        "Body settings are managed by Settlements."), true);
+                TransientAlertOverlay.show("Body settings are managed by Settlements.");
             return;
         }
         SettlementsWildfirePreviewSession.onScreenOpening(event);
@@ -73,6 +73,8 @@ public final class ClientCampaignEvents {
 
     public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         AreaSelectionEditor.cancel();
+        HousingAreaOverlay.cancel();
+        TransientAlertOverlay.clear();
         SettlementsWildfirePreviewSession.cancel();
         ClientCharacterBodyState.clear(null);
     }
