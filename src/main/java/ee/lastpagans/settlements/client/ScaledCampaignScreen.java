@@ -1,8 +1,11 @@
 package ee.lastpagans.settlements.client;
 
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+
+import java.util.function.IntConsumer;
 
 /**
  * Shared scaling support for the large campaign screens.
@@ -16,6 +19,14 @@ public abstract class ScaledCampaignScreen extends Screen {
     /** Recruits BannerRenderer ignores its width/height parameters and uses only the final scale. */
     protected static final int CAMPAIGN_BANNER_SCALE = 12;
     protected static final int CAMPAIGN_SMALL_BANNER_SCALE = 7;
+    protected static final int CAMPAIGN_TITLE = 0xFFE7D8B0;
+    protected static final int CAMPAIGN_TEXT = 0xFFFFFFFF;
+    protected static final int CAMPAIGN_MUTED = 0xFFAAAAAA;
+    protected static final int CAMPAIGN_MESSAGE = 0xFFFFD27A;
+    private static final int CAMPAIGN_FRAME = 0xF0181818;
+    private static final int CAMPAIGN_HEADER = 0xFF3B3023;
+    private static final int CAMPAIGN_PANEL = 0xFF242424;
+    private static final int CAMPAIGN_INSET = 0xFF191919;
     private float campaignScale = 1.0F;
     private int campaignVirtualWidth;
     private int campaignVirtualHeight;
@@ -69,10 +80,8 @@ public abstract class ScaledCampaignScreen extends Screen {
     protected final String scrollingText(String value, int pixelWidth) {
         String text = value == null ? "" : value;
         if (text.isEmpty() || pixelWidth <= 0 || font.width(text) <= pixelWidth) return text;
-        int lastStart = 0;
-        for (int i = 1; i < text.length(); i++) {
-            if (font.width(text.substring(i)) <= pixelWidth) { lastStart = i; break; }
-        }
+        String visibleSuffix = font.plainSubstrByWidth(text, pixelWidth, true);
+        int lastStart = Math.max(0, text.length() - visibleSuffix.length());
         if (lastStart <= 0) lastStart = Math.max(1, text.length() - 1);
         final int pauseSteps = 5;
         int travel = Math.max(1, lastStart);
@@ -85,6 +94,49 @@ public abstract class ScaledCampaignScreen extends Screen {
         else start = travel - (step - (pauseSteps + travel + pauseSteps));
         start = Math.max(0, Math.min(lastStart, start));
         return font.plainSubstrByWidth(text.substring(start), pixelWidth);
+    }
+
+    /** Draws the common campaign window and header used by every full-screen menu. */
+    protected final void drawCampaignFrame(GuiGraphics graphics, int left, int top, int width, int height,
+                                           int headerBottom) {
+        graphics.fill(left, top, left + width, top + height, CAMPAIGN_FRAME);
+        graphics.fill(left + 3, top + 3, left + width - 3, top + headerBottom, CAMPAIGN_HEADER);
+    }
+
+    /** Draws a normal content panel using absolute bounds in the scaled campaign canvas. */
+    protected final void drawCampaignPanel(GuiGraphics graphics, int left, int top, int right, int bottom) {
+        graphics.fill(left, top, right, bottom, CAMPAIGN_PANEL);
+    }
+
+    /** Draws a darker nested panel for summaries and secondary content. */
+    protected final void drawCampaignInset(GuiGraphics graphics, int left, int top, int right, int bottom) {
+        graphics.fill(left, top, right, bottom, CAMPAIGN_INSET);
+    }
+
+    /** Pixel-aware animated fit for status lines and names. */
+    protected final String fitText(String value, int pixelWidth) {
+        return scrollingText(value == null ? "" : value, pixelWidth);
+    }
+
+    /** Pixel-aware static truncation for dense rows and cards. */
+    protected final String ellipsize(String value, int pixelWidth) {
+        String text = value == null ? "" : value;
+        if (pixelWidth <= 0 || font.width(text) <= pixelWidth) return text;
+        String suffix = "…";
+        int available = Math.max(0, pixelWidth - font.width(suffix));
+        return font.plainSubstrByWidth(text, available) + suffix;
+    }
+
+    /** Adds a consistently spaced tab strip and disables the active tab as its selected state. */
+    protected final void addCampaignTabs(String[] labels, int selected, int x, int y, int width, int height,
+                                         int spacing, IntConsumer onSelected) {
+        for (int i = 0; i < labels.length; i++) {
+            int index = i;
+            Button button = Button.builder(Component.literal(labels[i]), ignored -> onSelected.accept(index))
+                    .bounds(x + i * (width + spacing), y, width, height).build();
+            button.active = i != selected;
+            addRenderableWidget(button);
+        }
     }
 
     protected final void beginCampaignRender(GuiGraphics graphics) {

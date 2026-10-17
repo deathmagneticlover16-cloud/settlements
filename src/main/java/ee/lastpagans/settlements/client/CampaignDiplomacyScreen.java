@@ -8,10 +8,8 @@ import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -49,11 +47,8 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         factionDropdown = typeDropdown = sourceDropdown = targetDropdown = goalDropdown = warAllyDropdown = null;
         customCasusBelli = null;
         String[] tabs = {"Relations", "Declare Conflict", "Proposals", "Active Wars"};
-        for (int i = 0; i < tabs.length; i++) {
-            Tab target = Tab.values()[i];
-            addRenderableWidget(Button.builder(Component.literal(tabs[i]), button -> { tab = target; buildWidgets(); })
-                    .bounds(left + 12 + i * 134, top + 45, 130, 20).build());
-        }
+        addCampaignTabs(tabs, tab.ordinal(), left + 12, top + 45, 130, 20, 4,
+                index -> { tab = Tab.values()[index]; buildWidgets(); });
         switch (tab) {
             case RELATIONS -> relationWidgets();
             case DECLARE -> declarationWidgets();
@@ -294,32 +289,15 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         return allies.isEmpty() ? "" : allies.get(clampIndex(warAllyIndex, allies.size())).factionId();
     }
 
-    @Override public boolean mouseClicked(double x, double y, int button) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        for (DropdownWidget dropdown : dropdowns()) if (dropdown != null && dropdown.isExpanded() && dropdown.mouseClicked(uiX, uiY, button)) return true;
-        return super.mouseClicked(x, y, button);
-    }
-    @Override public boolean mouseScrolled(double x, double y, double delta) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        for (DropdownWidget dropdown : dropdowns()) if (dropdown != null && dropdown.isExpanded() && dropdown.mouseScrolled(uiX, uiY, delta)) return true;
-        return super.mouseScrolled(x, y, delta);
-    }
-    private List<DropdownWidget> dropdowns() {
-        List<DropdownWidget> result = new ArrayList<>();
-        result.add(factionDropdown); result.add(typeDropdown); result.add(sourceDropdown); result.add(targetDropdown); result.add(goalDropdown); result.add(warAllyDropdown);
-        return result;
-    }
-
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 39, 0xFF3B3023);
-        graphics.fill(left + 12, top + 72, left + W - 12, top + H - 42, 0xFF242424);
+        drawCampaignFrame(graphics, left, top, W, H, 39);
+        drawCampaignPanel(graphics, left + 12, top + 72, left + W - 12, top + H - 42);
         String polity = snapshot.ownFactionName().isBlank() ? "INDEPENDENT" : snapshot.ownFactionName().toUpperCase(Locale.ROOT);
-        graphics.drawCenteredString(font, "CAMPAIGN DIPLOMACY — " + polity, left + W / 2, top + 12, 0xFFE7D8B0);
+        graphics.drawCenteredString(font, "CAMPAIGN DIPLOMACY — " + polity, left + W / 2, top + 12, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, "Authority: [" + snapshot.viewerRank() + "]", left + W / 2, top + 25, snapshot.canManage() ? 0xFFA9D18E : 0xFFFFA080);
         switch (tab) {
             case RELATIONS -> renderRelations(graphics);
@@ -359,7 +337,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         }
         if (selectedGoal() == CampaignData.WarGoal.CUSTOM) graphics.drawString(font, "Custom Casus Belli", left + 20, top + 176, 0xFFE7D8B0, false);
 
-        graphics.fill(left + 20, top + 218, left + W - 20, top + 282, 0xFF191919);
+        drawCampaignInset(graphics, left + 20, top + 218, left + W - 20, top + 282);
         graphics.drawString(font, "DECLARATION SUMMARY", left + 30, top + 227, 0xFFFFD27A, false);
         if (type == CampaignData.WarType.SETTLEMENT_WAR) {
             DiplomacySnapshot.SettlementTarget source = selectedSourceSettlement();

@@ -85,14 +85,13 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX), uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0171717);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 62, 0xFF3B3023);
-        graphics.drawCenteredString(font, "MERCENARY ROSTERS", left + W / 2, top + 13, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, W, H, 62);
+        graphics.drawCenteredString(font, "MERCENARY ROSTERS", left + W / 2, top + 13, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, snapshot.settlementName() + " · " + snapshot.factionName(), left + W / 2, top + 31, 0xFFB8B0A0);
         graphics.drawCenteredString(font, "Available Wealth: " + snapshot.availableWealth() + " · Reliability: " + snapshot.reliability(), left + W / 2, top + 46, 0xFFCFBE98);
 
-        graphics.fill(left + 14, top + 72, left + 310, top + 300, 0xFF242424);
-        graphics.fill(left + 320, top + 72, left + 546, top + 326, 0xFF242424);
+        drawCampaignPanel(graphics, left + 14, top + 72, left + 310, top + 300);
+        drawCampaignPanel(graphics, left + 320, top + 72, left + 546, top + 326);
         graphics.drawString(font, "AVAILABLE COMPANIES", left + 22, top + 74, 0xFFE7D8B0, false);
         List<MercenaryRosterSnapshot.Entry> entries = snapshot.entries();
         for (int row = 0; row < VISIBLE_ROWS; row++) {
@@ -101,9 +100,9 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
             int y = top + 82 + row * ROW_H;
             graphics.fill(left + 18, y, left + 302, y + 31, index == selected ? 0xFF51442F : 0xFF303030);
             ItemStack icon = icon(entry.iconItem()); graphics.renderItem(icon, left + 24, y + 7);
-            graphics.drawString(font, fit(entry.name(), 165), left + 46, y + 5, 0xFFFFFFFF, false);
+            graphics.drawString(font, fitText(entry.name(), 165), left + 46, y + 5, CAMPAIGN_TEXT, false);
             String line = entry.size() + " troops · " + entry.upkeep() + "/" + entry.intervalDays() + "d · " + entry.status();
-            graphics.drawString(font, fit(line, 235), left + 46, y + 18, "Paid".equals(entry.status()) || "Available".equals(entry.status()) ? 0xFFB8B0A0 : 0xFFFFB080, false);
+            graphics.drawString(font, fitText(line, 235), left + 46, y + 18, "Paid".equals(entry.status()) || "Available".equals(entry.status()) ? 0xFFB8B0A0 : 0xFFFFB080, false);
         }
         if (entries.size() > VISIBLE_ROWS) graphics.drawString(font, "Scroll for more", left + 216, top + 287, 0xFF8F887C, false);
 
@@ -123,14 +122,14 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
         } else {
             graphics.drawCenteredString(font, "No mercenary companies configured.", left + 433, top + 150, 0xFFFFA080);
         }
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 316, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fitText(snapshot.message(), W - 40), left + W / 2, top + 316, CAMPAIGN_MESSAGE);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
 
     private void detail(GuiGraphics graphics, String label, String value, int y) {
         graphics.drawString(font, label + ":", left + 330, top + y, 0xFFAAA294, false);
-        graphics.drawString(font, fit(value, 130), left + 400, top + y, 0xFFFFFFFF, false);
+        graphics.drawString(font, fitText(value, 130), left + 400, top + y, CAMPAIGN_TEXT, false);
     }
 
     private ItemStack icon(String raw) {
@@ -140,6 +139,5 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
         return new ItemStack(item);
     }
 
-    private String fit(String value, int pixels) { return scrollingText(value == null ? "" : value, pixels); }
     @Override public boolean isPauseScreen() { return false; }
 }

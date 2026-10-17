@@ -80,8 +80,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         renderBackground(graphics);
         int ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0161616);
-        graphics.fill(left + 4, top + 4, left + W - 4, top + 56, 0xFF3B3023);
+        drawCampaignFrame(graphics, left, top, W, H, 56);
         graphics.drawCenteredString(font, "RESEARCH — " + snapshot.polityName(), left + W / 2, top + 13, 0xFFFFE2A3);
         graphics.drawCenteredString(font, snapshot.historyStagesInstalled()
                         ? "History Stages · " + tierName(snapshot.researchTier()) + " (Tier " + roman(snapshot.researchTier()) + ") · " + snapshot.speedPercent() + "% speed"
@@ -89,11 +88,11 @@ public final class ResearchScreen extends ScaledCampaignScreen {
                 left + W / 2, top + 33, snapshot.historyStagesInstalled() ? 0xFFA8E39D : 0xFFFFA27A);
 
         renderActiveProject(graphics);
-        graphics.fill(left + TREE_X, top + TREE_Y, left + TREE_X + TREE_W, top + TREE_Y + TREE_H, 0xFF222222);
-        graphics.fill(left + 452, top + TREE_Y, left + 646, top + TREE_Y + TREE_H, 0xFF222222);
+        drawCampaignPanel(graphics, left + TREE_X, top + TREE_Y, left + TREE_X + TREE_W, top + TREE_Y + TREE_H);
+        drawCampaignPanel(graphics, left + 452, top + TREE_Y, left + 646, top + TREE_Y + TREE_H);
         renderTree(graphics);
         renderDetails(graphics);
-        if (!snapshot.message().isBlank()) graphics.drawString(font, trim(snapshot.message(), 72), left + 14, top + 376, 0xFFFFD27A, false);
+        if (!snapshot.message().isBlank()) graphics.drawString(font, ellipsize(snapshot.message(), 500), left + 14, top + 376, CAMPAIGN_MESSAGE, false);
         super.render(graphics, ux, uy, partialTick);
         endCampaignRender(graphics);
     }
@@ -106,7 +105,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
             graphics.drawString(font, "No project selected", x + 112, y + 6, 0xFFAAAAAA, false);
             return;
         }
-        graphics.drawString(font, trim(snapshot.activeStageName(), 40), x + 112, y + 6, 0xFFFFE2A3, false);
+        graphics.drawString(font, ellipsize(snapshot.activeStageName(), 300), x + 112, y + 6, 0xFFFFE2A3, false);
         int barX = x + 8, barY = y + 22, barW = width - 190;
         graphics.fill(barX, barY, barX + barW, barY + 8, 0xFF0E0E0E);
         int fill = (int)Math.round(barW * Math.max(0, Math.min(1000, snapshot.progressPermille())) / 1000.0D);
@@ -138,7 +137,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
             graphics.fill(node.x() + 1, node.y() + 1, node.x() + node.w() - 1, node.y() + node.h() - 1, fill);
             graphics.renderItem(icon(entry.icon()), node.x() + 4, node.y() + 4);
             int color = entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFE2A3 : 0xFF888888;
-            graphics.drawString(font, trim(entry.name(), 12), node.x() + 24, node.y() + 5, color, false);
+            graphics.drawString(font, ellipsize(entry.name(), node.w() - 29), node.x() + 24, node.y() + 5, color, false);
             String state = entry.completed() ? "DONE" : entry.available() ? "READY" : "LOCKED";
             graphics.drawString(font, state, node.x() + 24, node.y() + 15, color, false);
         }
@@ -180,7 +179,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
             return;
         }
         graphics.renderItem(icon(entry.icon()), x, y + 22);
-        graphics.drawString(font, trim(entry.name(), 21), x + 22, y + 25, entry.completed() ? 0xFFA9D18E : 0xFFFFE2A3, false);
+        graphics.drawString(font, ellipsize(entry.name(), 152), x + 22, y + 25, entry.completed() ? 0xFFA9D18E : 0xFFFFE2A3, false);
         graphics.drawString(font, entry.completed() ? "Completed" : entry.available() ? "Available" : "Locked", x, y + 48,
                 entry.completed() ? 0xFFA9D18E : entry.available() ? 0xFFFFE2A3 : 0xFFFF8A8A, false);
         graphics.drawString(font, "Base time: " + duration(entry.durationSeconds()), x, y + 64, 0xFFCCCCCC, false);
@@ -268,7 +267,6 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         return Math.min(COLUMNS - 1, Math.max(0, entry.requiredTier() - 1));
     }
 
-    private static String trim(String value, int max) { return value == null ? "" : value.length() <= max ? value : value.substring(0, Math.max(0, max - 1)) + "…"; }
     private record Node(int index, int x, int y, int w, int h) {}
     @Override public boolean isPauseScreen() { return false; }
 }

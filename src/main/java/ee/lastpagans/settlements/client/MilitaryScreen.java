@@ -52,9 +52,8 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         clearWidgets();
         unitDropdown = null;
 
-        addTab("Forces", PAGE_FORCES, 24);
-        addTab("Levies", PAGE_LEVIES, 190);
-        addTab("Support", PAGE_SUPPORT, 356);
+        addCampaignTabs(new String[]{"Forces", "Levies", "Support"}, page, left + 24, top + 68, 160, 20, 6,
+                index -> { page = index; rebuildWidgets(); });
 
         if (page == PAGE_FORCES) buildForcesWidgets();
         else if (page == PAGE_LEVIES) buildLevyWidgets();
@@ -70,15 +69,6 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
                 .bounds(left + 420, top + 331, 106, 18).build());
-    }
-
-    private void addTab(String label, int targetPage, int x) {
-        Button button = Button.builder(Component.literal(label), ignored -> {
-            page = targetPage;
-            rebuildWidgets();
-        }).bounds(left + x, top + 68, 160, 20).build();
-        button.active = page != targetPage;
-        addRenderableWidget(button);
     }
 
     private void buildForcesWidgets() {
@@ -144,34 +134,21 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                 "MILITARY", 0));
     }
 
-    @Override public boolean mouseClicked(double x, double y, int button) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (unitDropdown != null && unitDropdown.isExpanded() && unitDropdown.mouseClicked(uiX, uiY, button)) return true;
-        return super.mouseClicked(x, y, button);
-    }
-
-    @Override public boolean mouseScrolled(double x, double y, double delta) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (unitDropdown != null && unitDropdown.isExpanded() && unitDropdown.mouseScrolled(uiX, uiY, delta)) return true;
-        return super.mouseScrolled(x, y, delta);
-    }
-
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0171717);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 58, 0xFF3B3023);
-        graphics.fill(left + 14, top + 96, left + W - 14, top + 316, 0xFF242424);
-        graphics.drawCenteredString(font, "MILITARY — " + fit(snapshot.settlementName().toUpperCase(Locale.ROOT), 420), left + W / 2, top + 13, 0xFFE7D8B0);
-        graphics.drawCenteredString(font, fit(snapshot.factionName() + " · " + snapshot.rosterName(), 440), left + W / 2, top + 31, 0xFFB8B0A0);
+        drawCampaignFrame(graphics, left, top, W, H, 58);
+        drawCampaignPanel(graphics, left + 14, top + 96, left + W - 14, top + 316);
+        graphics.drawCenteredString(font, "MILITARY — " + fitText(snapshot.settlementName().toUpperCase(Locale.ROOT), 420), left + W / 2, top + 13, CAMPAIGN_TITLE);
+        graphics.drawCenteredString(font, fitText(snapshot.factionName() + " · " + snapshot.rosterName(), 440), left + W / 2, top + 31, 0xFFB8B0A0);
 
         if (page == PAGE_FORCES) renderForces(graphics);
         else if (page == PAGE_LEVIES) renderLevies(graphics);
         else renderSupport(graphics);
 
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 306, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fitText(snapshot.message(), W - 40), left + W / 2, top + 306, CAMPAIGN_MESSAGE);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -261,10 +238,6 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         if (hours > 0) return hours + "h " + minutes + "m";
         if (minutes > 0) return minutes + "m " + seconds + "s";
         return seconds + "s";
-    }
-
-    private String fit(String value, int pixelWidth) {
-        return scrollingText(value, pixelWidth);
     }
 
     @Override public boolean isPauseScreen() { return false; }

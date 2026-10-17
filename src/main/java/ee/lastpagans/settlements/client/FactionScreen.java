@@ -12,7 +12,6 @@ import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -128,12 +127,9 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 .bounds(left + W - 128, top + H - 28, 112, 18).build());
 
         if (snapshot.factionId().isBlank()) {
-            addRenderableWidget(Button.builder(Component.literal("Identity"), button -> { createPage = CreatePage.IDENTITY; rebuildWidgets(); })
-                    .bounds(left + 74, top + 76, 128, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("Banner Editor"), button -> { createPage = CreatePage.BANNER; rebuildWidgets(); })
-                    .bounds(left + 216, top + 76, 128, 20).build());
-            addRenderableWidget(Button.builder(Component.literal("Join / Invitations"), button -> { createPage = CreatePage.JOIN; rebuildWidgets(); })
-                    .bounds(left + 358, top + 76, 128, 20).build());
+            String[] setupTabs = {"Identity", "Banner Editor", "Join / Invitations"};
+            addCampaignTabs(setupTabs, createPage.ordinal(), left + 74, top + 76, 128, 20, 14,
+                    index -> { createPage = CreatePage.values()[index]; rebuildWidgets(); });
 
             if (createPage == CreatePage.IDENTITY) {
                 factionNameEdit = new EditBox(font, left + 168, top + 126, 280, 22, Component.literal("Faction name"));
@@ -213,13 +209,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
         }
 
         String[] labels = {"Overview", "Members", "Settlements", "Ranks"};
-        for (int i = 0; i < labels.length; i++) {
-            Tab target = Tab.values()[i];
-            addRenderableWidget(Button.builder(Component.literal(labels[i]), button -> {
-                tab = target;
-                rebuildWidgets();
-            }).bounds(left + 12 + i * 108, top + 68, 102, 20).build());
-        }
+        addCampaignTabs(labels, tab.ordinal(), left + 12, top + 68, 102, 20, 6,
+                index -> { tab = Tab.values()[index]; rebuildWidgets(); });
         addRenderableWidget(Button.builder(Component.literal("Diplomacy"), button ->
                         SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.DIPLOMACY)))
                 .bounds(left + 444, top + 68, 104, 20).build());
@@ -377,56 +368,13 @@ public final class FactionScreen extends ScaledCampaignScreen {
     }
 
     @Override
-    public boolean mouseClicked(double x, double y, int button) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (governmentDrop != null && governmentDrop.isExpanded() && governmentDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (capitalDrop != null && capitalDrop.isExpanded() && capitalDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (bannerBaseDrop != null && bannerBaseDrop.isExpanded() && bannerBaseDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (bannerPatternDrop != null && bannerPatternDrop.isExpanded() && bannerPatternDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (bannerPatternColorDrop != null && bannerPatternColorDrop.isExpanded() && bannerPatternColorDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (availableFactionDrop != null && availableFactionDrop.isExpanded() && availableFactionDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (requestDrop != null && requestDrop.isExpanded() && requestDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (invitationDrop != null && invitationDrop.isExpanded() && invitationDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (inviteCandidateDrop != null && inviteCandidateDrop.isExpanded() && inviteCandidateDrop.mouseClicked(uiX, uiY, button)) return true;
-        return super.mouseClicked(x, y, button);
-    }
-
-    @Override
-    public boolean mouseScrolled(double x, double y, double delta) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (teamColorDrop != null && teamColorDrop.isExpanded() && teamColorDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (unitColorDrop != null && unitColorDrop.isExpanded() && unitColorDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (governmentDrop != null && governmentDrop.isExpanded() && governmentDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (capitalDrop != null && capitalDrop.isExpanded() && capitalDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (bannerBaseDrop != null && bannerBaseDrop.isExpanded() && bannerBaseDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (bannerPatternDrop != null && bannerPatternDrop.isExpanded() && bannerPatternDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (bannerPatternColorDrop != null && bannerPatternColorDrop.isExpanded() && bannerPatternColorDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (memberDrop != null && memberDrop.isExpanded() && memberDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (rankDrop != null && rankDrop.isExpanded() && rankDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (titleRankDrop != null && titleRankDrop.isExpanded() && titleRankDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (settlementDrop != null && settlementDrop.isExpanded() && settlementDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (availableFactionDrop != null && availableFactionDrop.isExpanded() && availableFactionDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (requestDrop != null && requestDrop.isExpanded() && requestDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (invitationDrop != null && invitationDrop.isExpanded() && invitationDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (inviteCandidateDrop != null && inviteCandidateDrop.isExpanded() && inviteCandidateDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        return super.mouseScrolled(x, y, delta);
-    }
-
-    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0171717);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 62, 0xFF3B3023);
-        graphics.fill(left + 12, top + 96, left + W - 12, top + H - 38, 0xFF242424);
+        drawCampaignFrame(graphics, left, top, W, H, 62);
+        drawCampaignPanel(graphics, left + 12, top + 96, left + W - 12, top + H - 38);
 
         if (snapshot.factionId().isBlank()) {
             graphics.drawCenteredString(font, "CREATE A FACTION", left + W / 2, top + 18, 0xFFE7D8B0);
@@ -458,15 +406,15 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 if (snapshot.invitations().isEmpty())
                     graphics.drawCenteredString(font, "No pending invitations.", left + W / 2, top + 254, 0xFF999999);
             }
-            if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 50), left + W / 2, top + 398, 0xFFFFD27A);
+            if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fitText(snapshot.message(), W - 50), left + W / 2, top + 398, CAMPAIGN_MESSAGE);
             super.render(graphics, uiMouseX, uiMouseY, partialTick);
             endCampaignRender(graphics);
             return;
         }
 
         if (banner != null) banner.renderBanner(graphics, left + 18, top + 7, 20, 40, CAMPAIGN_BANNER_SCALE);
-        graphics.drawString(font, fit(snapshot.factionName().toUpperCase(), 340), left + 72, top + 13, 0xFFFFFFFF, false);
-        graphics.drawString(font, "Leader: " + fit(snapshot.leaderName(), 270), left + 72, top + 31, 0xFFE7D8B0, false);
+        graphics.drawString(font, fitText(snapshot.factionName().toUpperCase(), 340), left + 72, top + 13, CAMPAIGN_TEXT, false);
+        graphics.drawString(font, "Leader: " + fitText(snapshot.leaderName(), 270), left + 72, top + 31, CAMPAIGN_TITLE, false);
         graphics.drawString(font, "Your rank: [" + snapshot.viewerRank() + "]", left + 72, top + 47, 0xFFCCCCCC, false);
 
         switch (tab) {
@@ -475,7 +423,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             case SETTLEMENTS -> renderSettlements(graphics);
             case RANKS -> renderRanks(graphics);
         }
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 40), left + W / 2, top + 398, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fitText(snapshot.message(), W - 40), left + W / 2, top + 398, CAMPAIGN_MESSAGE);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -486,7 +434,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
         stat(graphics, "Realm population", snapshot.realmPopulation(), 24, 150);
         stat(graphics, "Daily settlement income", snapshot.realmWealth(), 24, 170);
         stat(graphics, "State Treasury", snapshot.factionTreasury(), 24, 190);
-        stat(graphics, "Military roster", fit(snapshot.rosterName(), 150), 24, 210);
+        stat(graphics, "Military roster", fitText(snapshot.rosterName(), 150), 24, 210);
         stat(graphics, "Government", snapshot.government(), 24, 230);
         stat(graphics, "Active wars", snapshot.activeWars(), 24, 250);
         graphics.drawString(font, "Faction dye: " + prettify(snapshot.teamDye()), left + 24, top + 274,
@@ -510,7 +458,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             int y = top + 128 + i * 13;
             String prefix = "[" + member.rankTitle() + "] ";
             String suffix = member.online() ? " •" : "";
-            graphics.drawString(font, fit(prefix + member.characterName() + suffix, 270),
+            graphics.drawString(font, fitText(prefix + member.characterName() + suffix, 270),
                     left + 24, y, member.online() ? 0xFFFFFFFF : 0xFF999999, false);
         }
         if (snapshot.joinRequests().isEmpty()) {
@@ -520,7 +468,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             for (int i = 0; i < Math.min(10, snapshot.joinRequests().size()); i++) {
                 FactionSnapshot.RequestEntry request = snapshot.joinRequests().get(i);
                 int y = top + 128 + i * 14;
-                graphics.drawString(font, fit(request.accountName() + (request.online() ? " • online" : " • offline"), 210),
+                graphics.drawString(font, fitText(request.accountName() + (request.online() ? " • online" : " • offline"), 210),
                         left + 322, y, request.online() ? 0xFFFFFFFF : 0xFF999999, false);
             }
         }
@@ -539,7 +487,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             FactionSnapshot.SettlementEntry settlement = snapshot.settlements().get(i);
             int y = top + 128 + i * 16;
             String capital = settlement.capital() ? " ◆ CAPITAL" : "";
-            graphics.drawString(font, fit(settlement.name() + " — " + settlement.rank() + capital, 250), left + 24, y, 0xFFFFFFFF, false);
+            graphics.drawString(font, fitText(settlement.name() + " — " + settlement.rank() + capital, 250), left + 24, y, CAMPAIGN_TEXT, false);
             graphics.drawString(font, "Pop " + settlement.population() + " · Stability " + settlement.stability()
                     + "% · Tax income " + settlement.wealth() + "/day", left + 300, y, 0xFFAAAAAA, false);
         }
@@ -569,10 +517,6 @@ public final class FactionScreen extends ScaledCampaignScreen {
 
     private void stat(GuiGraphics graphics, String label, Object value, int x, int y) {
         graphics.drawString(font, label + ": " + value, left + x, top + y, 0xFFFFFFFF, false);
-    }
-
-    private String fit(String value, int pixelWidth) {
-        return scrollingText(value, pixelWidth);
     }
 
     private static int clampIndex(int value, int size) { return size <= 0 ? 0 : Math.max(0, Math.min(value, size - 1)); }

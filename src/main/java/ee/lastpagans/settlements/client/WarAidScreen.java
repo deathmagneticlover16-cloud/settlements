@@ -96,8 +96,9 @@ public final class WarAidScreen extends ScaledCampaignScreen {
         renderBackground(g);
         int uiMx = campaignMouseX(mx);
         int uiMy = campaignMouseY(my);
-        beginCampaignRender(g); g.fill(left, top, left + 460, top + 360, 0xF0181818); g.fill(left + 3, top + 3, left + 457, top + 40, 0xFF3B3023);
-        g.drawCenteredString(font, canSendAid() ? "SEND AID / AID LEDGER" : "WAR AID LEDGER", left + 230, top + 14, 0xFFE7D8B0);
+        beginCampaignRender(g);
+        drawCampaignFrame(g, left, top, 460, 360, 40);
+        g.drawCenteredString(font, canSendAid() ? "SEND AID / AID LEDGER" : "WAR AID LEDGER", left + 230, top + 14, CAMPAIGN_TITLE);
         g.drawCenteredString(font, war.attackerSettlementName() + " vs " + war.targetSettlementName(), left + 230, top + 49, 0xFFBBBBBB);
         g.drawString(font, "Manpower", left + 30, top + 84, 0xFFFFFFFF, false); g.drawString(font, "Wealth", left + 30, top + 114, 0xFFFFFFFF, false); g.drawString(font, "Food", left + 30, top + 144, 0xFFFFFFFF, false);
         g.drawString(font, "Each resource can be one-time or daily.", left + 30, top + 160, 0xFFAAAAAA, false);

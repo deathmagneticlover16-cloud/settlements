@@ -39,8 +39,9 @@ public final class SettlementCreationScreen extends ScaledCampaignScreen {
         renderBackground(g);
         int uiMx = campaignMouseX(mx);
         int uiMy = campaignMouseY(my);
-        beginCampaignRender(g); g.fill(left, top, left + W, top + H, 0xF0181818); g.fill(left + 3, top + 3, left + W - 3, top + 40, 0xFF3B3023);
-        g.drawCenteredString(font, "FOUND A SETTLEMENT", left + W / 2, top + 14, 0xFFE7D8B0);
+        beginCampaignRender(g);
+        drawCampaignFrame(g, left, top, W, H, 40);
+        g.drawCenteredString(font, "FOUND A SETTLEMENT", left + W / 2, top + 14, CAMPAIGN_TITLE);
         g.drawString(font, "Short ID", left + 24, top + 68, 0xFFCCCCCC, false); g.drawString(font, "Display name", left + 24, top + 96, 0xFFCCCCCC, false);
         g.drawCenteredString(font, "Town Square is set at your current position; the current Recruits claim is linked when possible.", left + W / 2, top + 160, 0xFF999999);
         super.render(g, uiMx, uiMy, pt);

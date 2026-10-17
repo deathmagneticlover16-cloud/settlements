@@ -137,35 +137,16 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
     }
 
     @Override
-    public boolean mouseClicked(double x, double y, int button) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (gender.isExpanded() && gender.mouseClicked(uiX, uiY, button)) return true;
-        if (faith.isExpanded() && faith.mouseClicked(uiX, uiY, button)) return true;
-        if (title.isExpanded() && title.mouseClicked(uiX, uiY, button)) return true;
-        return super.mouseClicked(x, y, button);
-    }
-
-    @Override
-    public boolean mouseScrolled(double x, double y, double delta) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (gender.isExpanded() && gender.mouseScrolled(uiX, uiY, delta)) return true;
-        if (faith.isExpanded() && faith.mouseScrolled(uiX, uiY, delta)) return true;
-        if (title.isExpanded() && title.mouseScrolled(uiX, uiY, delta)) return true;
-        return super.mouseScrolled(x, y, delta);
-    }
-
-    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + PANEL_WIDTH, top + PANEL_HEIGHT, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + PANEL_WIDTH - 3, top + 40, 0xFF3B3023);
-        graphics.fill(left + 14, top + 50, left + 154, top + 303, 0xFF242424);
-        graphics.drawCenteredString(font, "CREATE YOUR CHARACTER", left + PANEL_WIDTH / 2, top + 13, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, PANEL_WIDTH, PANEL_HEIGHT, 40);
+        drawCampaignPanel(graphics, left + 14, top + 50, left + 154, top + 303);
+        graphics.drawCenteredString(font, "CREATE YOUR CHARACTER", left + PANEL_WIDTH / 2, top + 13, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, "Your account, UUID and Recruits faction remain unchanged.", left + PANEL_WIDTH / 2, top + 28, 0xFFAA9D7F);
-        graphics.drawCenteredString(font, "Character", left + 84, top + 57, 0xFFE7D8B0);
+        graphics.drawCenteredString(font, "Character", left + 84, top + 57, CAMPAIGN_TITLE);
         if (minecraft != null && minecraft.player != null) {
             SettlementsWildfirePreviewSession.renderDraft(session, () ->
                     PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 70, 122, 221, uiMouseX, uiMouseY));

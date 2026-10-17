@@ -62,13 +62,8 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         top = campaignTop(H);
         clearWidgets();
         String[] labels = {"Overview", "Residents", "Treasury", "Effects", "Manage"};
-        for (int i = 0; i < labels.length; i++) {
-            Tab target = Tab.values()[i];
-            addRenderableWidget(Button.builder(Component.literal(labels[i]), button -> {
-                tab = target;
-                buildWidgets();
-            }).bounds(left + 12 + i * 103, top + 68, 98, 20).build());
-        }
+        addCampaignTabs(labels, tab.ordinal(), left + 12, top + 68, 98, 20, 5,
+                index -> { tab = Tab.values()[index]; buildWidgets(); });
         switch (tab) {
             case OVERVIEW -> overviewButtons();
             case RESIDENTS -> residentButtons();
@@ -133,13 +128,12 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void managementButtons() {
         if (!snapshot.canManage()) return;
         String[] labels = {"Locations", "Identity", "Claims", "Capture", "Members"};
-        ManagePage[] pages = {ManagePage.LOCATIONS, ManagePage.IDENTITY, ManagePage.CLAIMS, ManagePage.CAPTURE_ZONES, ManagePage.MEMBERS};
-        for (int i = 0; i < labels.length; i++) {
-            ManagePage page = pages[i];
-            addRenderableWidget(Button.builder(Component.literal(labels[i]), b -> {
-                managePage = page; confirmDeleteSettlement = false; confirmClearClaims = false; buildWidgets();
-            }).bounds(left + 20 + i * 98, top + 102, 92, 18).build());
-        }
+        addCampaignTabs(labels, managePage.ordinal(), left + 20, top + 102, 92, 18, 6, index -> {
+            managePage = ManagePage.values()[index];
+            confirmDeleteSettlement = false;
+            confirmClearClaims = false;
+            buildWidgets();
+        });
         switch (managePage) {
             case LOCATIONS -> locationManagementButtons();
             case IDENTITY -> identityManagementButtons();
@@ -324,9 +318,8 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0171717);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 62, 0xFF3B3023);
-        graphics.fill(left + 12, top + 96, left + W - 12, top + 290, 0xFF242424);
+        drawCampaignFrame(graphics, left, top, W, H, 62);
+        drawCampaignPanel(graphics, left + 12, top + 96, left + W - 12, top + 290);
 
         BannerRenderer large = "CUSTOM".equals(snapshot.bannerMode()) && settlementBanner != null
                 ? settlementBanner : "FACTION".equals(snapshot.bannerMode()) ? factionBanner : null;
@@ -335,9 +328,9 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             factionBanner.renderBanner(graphics, left + 56, top + 17, 20, 40, CAMPAIGN_SMALL_BANNER_SCALE);
         }
 
-        graphics.drawString(font, fit(snapshot.settlementName().toUpperCase(Locale.ROOT), 360), left + 86, top + 13, 0xFFFFFFFF, false);
+        graphics.drawString(font, fitText(snapshot.settlementName().toUpperCase(Locale.ROOT), 360), left + 86, top + 13, CAMPAIGN_TEXT, false);
         graphics.drawString(font, snapshot.rank() + " · " + snapshot.rankSubtitle(), left + 86, top + 31, 0xFFE7D8B0, false);
-        graphics.drawString(font, fit(snapshot.factionName() + " · " + pretty(snapshot.role()), 360), left + 86, top + 47, 0xFFB8B0A0, false);
+        graphics.drawString(font, fitText(snapshot.factionName() + " · " + pretty(snapshot.role()), 360), left + 86, top + 47, 0xFFB8B0A0, false);
 
         switch (tab) {
             case OVERVIEW -> renderOverview(graphics);
@@ -346,7 +339,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             case EFFECTS -> renderEffects(graphics, uiMouseX, uiMouseY);
             case MANAGEMENT -> renderManagement(graphics);
         }
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fit(snapshot.message(), W - 36), left + W / 2, top + 284, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fitText(snapshot.message(), W - 36), left + W / 2, top + 284, CAMPAIGN_MESSAGE);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -368,7 +361,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         statWithIcon(graphics, "stability", "Stability", snapshot.stability() + "%", 22, 148);
         stat(graphics, "Food", snapshot.food(), 22, 168);
         stat(graphics, "Claims", snapshot.claimLinked() ? snapshot.claimCount() + " linked" : "none", 22, 188);
-        if (snapshot.claimLinked()) graphics.drawString(font, fit(snapshot.claimName(), 220), left + 22, top + 206, 0xFFAAAAAA, false);
+        if (snapshot.claimLinked()) graphics.drawString(font, fitText(snapshot.claimName(), 220), left + 22, top + 206, CAMPAIGN_MUTED, false);
 
         statWithIcon(graphics, "wealth", "State Treasury", snapshot.wealth(), 292, 108);
         stat(graphics, "Housing", snapshot.villagerCount() + " / " + snapshot.housingCapacity(), 292, 128);
@@ -387,7 +380,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         stat(graphics, "Military population", snapshot.militaryPopulation(), 22, 176);
         stat(graphics, "Free housing", snapshot.freeHousing(), 290, 110);
         stat(graphics, "Contracts ready", snapshot.pendingContracts(), 290, 132);
-        graphics.drawString(font, fit("Growth: " + snapshot.settlerGrowthStatus(), 220), left + 290, top + 154, 0xFFE7D8B0, false);
+        graphics.drawString(font, fitText("Growth: " + snapshot.settlerGrowthStatus(), 220), left + 290, top + 154, CAMPAIGN_TITLE, false);
         graphics.drawWordWrap(font, Component.literal(
                 "More settlers require spare housing, sufficient Stability, and a maintained Food reserve. Contract timing uses active server time, not Minecraft days."),
                 left + 290, top + 174, 220, 0xFFAAAAAA);
@@ -404,14 +397,14 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "TAXATION", left + 22, top + 194, 0xFFE7D8B0, false);
         String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " treasury/day · Last +" + snapshot.lastTaxIncome()
                 + " · Stability " + signed(snapshot.taxStabilityPerDay()) + "/day · Prosperity " + signed(snapshot.taxProsperityModifier());
-        graphics.drawString(font, fit(snapshot.taxRatePercent() + "% " + snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, 0xFFAAAAAA, false);
+        graphics.drawString(font, fitText(snapshot.taxRatePercent() + "% " + snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, CAMPAIGN_MUTED, false);
         graphics.drawString(font, "Low", left + 20, top + 240, 0xFFAAAAAA, false);
         graphics.drawCenteredString(font, "Normal", left + 176, top + 240, 0xFFAAAAAA);
         graphics.drawString(font, "High", left + 304, top + 240, 0xFFAAAAAA, false);
 
         graphics.drawString(font, "RECENT CONTRIBUTIONS", left + 356, top + 110, 0xFFE7D8B0, false);
         for (int i = 0; i < Math.min(9, snapshot.contributions().size()); i++) {
-            graphics.drawString(font, fit(snapshot.contributions().get(i), 164), left + 356, top + 130 + i * 15, 0xFFBBBBBB, false);
+            graphics.drawString(font, fitText(snapshot.contributions().get(i), 164), left + 356, top + 130 + i * 15, 0xFFBBBBBB, false);
         }
     }
 
@@ -434,8 +427,8 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             Item item = iconId == null ? Items.BOOK : BuiltInRegistries.ITEM.get(iconId);
             if (item == Items.AIR) item = Items.BOOK;
             graphics.renderItem(new ItemStack(item), left + 22, y - 5);
-            graphics.drawString(font, fit(effect.name(), 190), left + 44, y, tone, false);
-            graphics.drawString(font, fit(effect.source() + " · " + effect.duration(), 250), left + 264, y, 0xFF999999, false);
+            graphics.drawString(font, fitText(effect.name(), 190), left + 44, y, tone, false);
+            graphics.drawString(font, fitText(effect.source() + " · " + effect.duration(), 250), left + 264, y, 0xFF999999, false);
             if (mouseX >= left + 18 && mouseX <= left + W - 18 && mouseY >= y - 6 && mouseY <= y + 14) {
                 graphics.renderTooltip(font, Component.literal(effect.detail()), mouseX, mouseY);
             }
@@ -481,7 +474,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void renderIdentityManagement(GuiGraphics graphics) {
         graphics.drawString(font, "SETTLEMENT IDENTITY", left + 30, top + 128, 0xFFE7D8B0, false);
         graphics.drawString(font, "Banner mode: " + pretty(snapshot.bannerMode()), left + 30, top + 138, 0xFFAAAAAA, false);
-        graphics.drawString(font, "Faction: " + (snapshot.factionId().isBlank() ? "Independent" : fit(snapshot.factionName(), 250)), left + 30, top + 184, 0xFFAAAAAA, false);
+        graphics.drawString(font, "Faction: " + (snapshot.factionId().isBlank() ? "Independent" : fitText(snapshot.factionName(), 250)), left + 30, top + 184, CAMPAIGN_MUTED, false);
         graphics.drawString(font, "Rename settlement", left + 30, top + 198, 0xFFE7D8B0, false);
         if ("OWNER".equals(snapshot.role())) {
             graphics.drawString(font, "Transfer ownership to an online player", left + 30, top + 242, 0xFFE7D8B0, false);
@@ -498,7 +491,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "CLAIMS", left + 30, top + 128, 0xFFE7D8B0, false);
         graphics.drawString(font, "Linked claims: " + snapshot.claimCount(), left + 360, top + 130, 0xFFFFFFFF, false);
         if (snapshot.claimLinked()) {
-            graphics.drawString(font, "Current/primary: " + fit(snapshot.claimName(), 150), left + 360, top + 144, 0xFFAAAAAA, false);
+            graphics.drawString(font, "Current/primary: " + fitText(snapshot.claimName(), 150), left + 360, top + 144, CAMPAIGN_MUTED, false);
         }
 
         graphics.drawWordWrap(font, Component.literal("Links the Recruits claim you are currently standing in to this settlement."),
@@ -581,10 +574,6 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private String pretty(String raw) {
         String value = raw == null ? "" : raw.replace('_', ' ').toLowerCase(Locale.ROOT);
         return value.isBlank() ? "" : Character.toUpperCase(value.charAt(0)) + value.substring(1);
-    }
-
-    private String fit(String value, int pixelWidth) {
-        return scrollingText(value, pixelWidth);
     }
 
     @Override public boolean isPauseScreen() { return false; }

@@ -213,22 +213,13 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private static String clean(String s) { return s == null ? "" : s.replace('~','/').replace(';','/').replace('|','/'); }
     private static int clamp(int i, int size) { return size <= 0 ? 0 : Math.max(0, Math.min(i, size - 1)); }
 
-    @Override public boolean mouseClicked(double x, double y, int button) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claimSettlement, claim, destination, independenceSettlement}) if (d != null && d.isExpanded() && d.mouseClicked(uiX, uiY, button)) return true;
-        return super.mouseClicked(x, y, button);
-    }
-    @Override public boolean mouseScrolled(double x, double y, double delta) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        for (DropdownWidget d : new DropdownWidget[]{faith, settlement, claimSettlement, claim, destination, independenceSettlement}) if (d != null && d.isExpanded() && d.mouseScrolled(uiX, uiY, delta)) return true;
-        return super.mouseScrolled(x, y, delta);
-    }
     @Override public void render(GuiGraphics g, int mx, int my, float pt) {
         renderBackground(g);
         int uiMx = campaignMouseX(mx);
         int uiMy = campaignMouseY(my);
-        beginCampaignRender(g); g.fill(left, top, left + W, top + H, 0xF0181818); g.fill(left + 3, top + 3, left + W - 3, top + 40, 0xFF3B3023);
-        g.drawCenteredString(font, "NEGOTIATE PEACE", left + W / 2, top + 13, 0xFFE7D8B0);
+        beginCampaignRender(g);
+        drawCampaignFrame(g, left, top, W, H, 40);
+        g.drawCenteredString(font, "NEGOTIATE PEACE", left + W / 2, top + 13, CAMPAIGN_TITLE);
         g.drawCenteredString(font, war.typeName() + " · War score " + (war.warScore() > 0 ? "+" : "") + war.warScore(), left + W / 2, top + 29, 0xFFAAAAAA);
         g.drawString(font, "Lump wealth", left + 25, top + 74, 0xFFFFFFFF, false); g.drawString(font, "Manpower", left + 25, top + 102, 0xFFFFFFFF, false);
         g.drawString(font, "Reparations/day", left + 25, top + 130, 0xFFFFFFFF, false); g.drawString(font, "Reparation days", left + 25, top + 158, 0xFFFFFFFF, false); g.drawString(font, "Forced NAP days", left + 25, top + 186, 0xFFFFFFFF, false);

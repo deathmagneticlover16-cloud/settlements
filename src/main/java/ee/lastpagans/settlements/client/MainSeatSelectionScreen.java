@@ -66,9 +66,8 @@ public final class MainSeatSelectionScreen extends ScaledCampaignScreen {
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 45, 0xFF3B3023);
-        graphics.drawCenteredString(font, "CHOOSE MAIN SEAT", left + W / 2, top + 14, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, W, H, 45);
+        graphics.drawCenteredString(font, "CHOOSE MAIN SEAT", left + W / 2, top + 14, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, "Current: " + (snapshot.primarySeat().isBlank() ? "None" : snapshot.primarySeat()), left + W / 2, top + 53, 0xFFC8C0B0);
         if (snapshot.holdings().isEmpty()) {
             graphics.drawCenteredString(font, "You do not own a settlement that can become your Main Seat.", left + W / 2, top + 118, 0xFFAAAAAA);

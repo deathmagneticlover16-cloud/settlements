@@ -56,10 +56,9 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 82, 0xFF3B3023);
-        graphics.fill(left + 10, top + 86, left + W - 10, top + 176, 0xFF242424);
-        graphics.fill(left + 10, top + 216, left + W - 10, top + 285, 0xFF242424);
+        drawCampaignFrame(graphics, left, top, W, H, 82);
+        drawCampaignPanel(graphics, left + 10, top + 86, left + W - 10, top + 176);
+        drawCampaignPanel(graphics, left + 10, top + 216, left + W - 10, top + 285);
         if (minecraft != null && minecraft.player != null) PortraitRenderer.render(graphics, minecraft.player, left + 16, top + 9, 64, 66, uiMouseX, uiMouseY);
         if (banner != null) banner.renderBanner(graphics, left + W - 58, top + 7, 20, 40, CAMPAIGN_BANNER_SCALE);
 

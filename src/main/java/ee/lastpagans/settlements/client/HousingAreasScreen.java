@@ -79,11 +79,10 @@ public final class HousingAreasScreen extends ScaledCampaignScreen {
         renderBackground(graphics);
         int ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 44, 0xFF3B3023);
-        graphics.drawCenteredString(font, "HOUSING AREAS — " + snapshot.settlementName(), left + W / 2, top + 13, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, W, H, 44);
+        graphics.drawCenteredString(font, "HOUSING AREAS — " + snapshot.settlementName(), left + W / 2, top + 13, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, snapshot.areas().size() + " area(s) · box selection only", left + W / 2, top + 29, 0xFFB9AD8E);
-        graphics.fill(left + 20, top + 58, left + 480, top + 274, 0xFF222222);
+        drawCampaignPanel(graphics, left + 20, top + 58, left + 480, top + 274);
         List<HousingAreasSnapshot.Entry> areas = snapshot.areas();
         for (int row = 0; row < ROWS; row++) {
             int index = scroll + row;
@@ -99,7 +98,7 @@ public final class HousingAreasScreen extends ScaledCampaignScreen {
             graphics.drawString(font, area.min().toShortString() + " → " + area.max().toShortString(), left + 300, y + 7, 0xFFAAAAAA, false);
         }
         if (areas.isEmpty()) graphics.drawCenteredString(font, "No housing areas. Add one to begin counting beds.", left + W / 2, top + 155, 0xFFAAAAAA);
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, trim(snapshot.message(), 72), left + W / 2, top + 276, 0xFFFFC86B);
+        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, ellipsize(snapshot.message(), W - 40), left + W / 2, top + 276, 0xFFFFC86B);
         super.render(graphics, ux, uy, partialTick);
         endCampaignRender(graphics);
     }
@@ -126,6 +125,5 @@ public final class HousingAreasScreen extends ScaledCampaignScreen {
 
     private int maxScroll() { return Math.max(0, snapshot.areas().size() - ROWS); }
     private static String shortDimension(String value) { int colon = value.indexOf(':'); return colon >= 0 ? value.substring(colon + 1) : value; }
-    private static String trim(String value, int max) { return value.length() <= max ? value : value.substring(0, max - 1) + "…"; }
     @Override public boolean isPauseScreen() { return false; }
 }

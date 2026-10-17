@@ -97,9 +97,8 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen implements 
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 48, 0xFF3B3023);
-        graphics.drawCenteredString(font, "PICK YOUR TRAITS", left + W / 2, top + 12, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, W, H, 48);
+        graphics.drawCenteredString(font, "PICK YOUR TRAITS", left + W / 2, top + 12, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, session.state() == CharacterCreationDraftSession.State.SUBMITTING
                 ? "Waiting for server confirmation…" : session.completeTraits() ? "Three traits selected"
                 : "Choice " + (session.round() + 1) + " of 3 · choose one of the three cards", left + W / 2, top + 29, 0xFFC9B989);

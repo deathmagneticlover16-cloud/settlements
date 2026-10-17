@@ -40,10 +40,9 @@ public final class CharacterPreviewScreen extends ScaledCampaignScreen implement
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 44, 0xFF3B3023);
-        graphics.fill(left + 14, top + 54, left + 154, top + 227, 0xFF242424);
-        graphics.drawCenteredString(font, draft.displayName().toUpperCase(), left + W / 2, top + 10, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, W, H, 44);
+        drawCampaignPanel(graphics, left + 14, top + 54, left + 154, top + 227);
+        graphics.drawCenteredString(font, draft.displayName().toUpperCase(), left + W / 2, top + 10, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, draft.title(), left + W / 2, top + 27, 0xFFC9B989);
         if (minecraft != null && minecraft.player != null) {
             ee.lastpagans.settlements.client.wildfire.SettlementsWildfirePreviewSession.renderDraft(session, () ->

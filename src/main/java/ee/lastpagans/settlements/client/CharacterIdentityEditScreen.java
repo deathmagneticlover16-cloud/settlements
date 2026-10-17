@@ -67,9 +67,8 @@ public final class CharacterIdentityEditScreen extends ScaledCampaignScreen {
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 43, 0xFF3B3023);
-        graphics.drawCenteredString(font, "CHARACTER IDENTITY", left + W / 2, top + 14, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, W, H, 43);
+        graphics.drawCenteredString(font, "CHARACTER IDENTITY", left + W / 2, top + 14, CAMPAIGN_TITLE);
 
         graphics.drawWordWrap(font, Component.literal(
                 "Your personal name can be changed, but doing so has a social and administrative cost. Main House changes remain free."

@@ -63,13 +63,12 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 47, 0xFF3B3023);
-        graphics.fill(left + 14, top + 57, left + 164, top + 330, 0xFF242424);
-        graphics.fill(left + 174, top + 57, left + 566, top + 198, 0xFF242424);
-        graphics.fill(left + 174, top + 208, left + 566, top + 330, 0xFF242424);
+        drawCampaignFrame(graphics, left, top, W, H, 47);
+        drawCampaignPanel(graphics, left + 14, top + 57, left + 164, top + 330);
+        drawCampaignPanel(graphics, left + 174, top + 57, left + 566, top + 198);
+        drawCampaignPanel(graphics, left + 174, top + 208, left + 566, top + 330);
 
-        graphics.drawCenteredString(font, snapshot.displayName().toUpperCase(), left + W / 2, top + 11, 0xFFE7D8B0);
+        graphics.drawCenteredString(font, snapshot.displayName().toUpperCase(), left + W / 2, top + 11, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, snapshot.titleLine(), left + W / 2, top + 29, 0xFFC9B989);
         if (minecraft != null && minecraft.player != null) {
             PortraitRenderer.render(graphics, minecraft.player, left + 23, top + 67, 132, 253, uiMouseX, uiMouseY);
@@ -105,9 +104,9 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
                 case "MIXED" -> 0xFFFFD27A;
                 default -> 0xFFCCCCCC;
             };
-            graphics.drawString(font, shorten(trait.name(), 20), cardX + 22, cardY, toneColor, false);
+            graphics.drawString(font, ellipsize(trait.name(), 150), cardX + 22, cardY, toneColor, false);
             String effect = trait.effects().isEmpty() ? "No direct modifier" : String.join("; ", trait.effects());
-            graphics.drawString(font, shorten(effect, 26), cardX + 22, cardY + 12, 0xFFAAAAAA, false);
+            graphics.drawString(font, ellipsize(effect, 150), cardX + 22, cardY + 12, CAMPAIGN_MUTED, false);
             if (uiMouseX >= cardX - 4 && uiMouseX <= cardX + 180 && uiMouseY >= cardY - 6 && uiMouseY <= cardY + 29) hovered = trait;
         }
         if (snapshot.traits().size() > 4) {
@@ -140,15 +139,10 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
 
     private void line(GuiGraphics graphics, String label, String value, int x, int y) {
         graphics.drawString(font, label + ":", x, y, 0xFF999999, false);
-        graphics.drawString(font, shorten(value, 42), x + 94, y, 0xFFFFFFFF, false);
+        graphics.drawString(font, ellipsize(value, 280), x + 94, y, CAMPAIGN_TEXT, false);
     }
 
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
     private static String blank(String value) { return value == null || value.isBlank() ? "None" : value; }
-    private static String shorten(String value, int maximum) {
-        if (value == null) return "";
-        return value.length() <= maximum ? value : value.substring(0, maximum - 1) + "…";
-    }
-
     @Override public boolean isPauseScreen() { return false; }
 }

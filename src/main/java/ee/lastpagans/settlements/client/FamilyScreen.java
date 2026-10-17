@@ -6,7 +6,6 @@ import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
@@ -104,34 +103,15 @@ public final class FamilyScreen extends ScaledCampaignScreen {
     }
 
     @Override
-    public boolean mouseClicked(double x, double y, int button) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseClicked(uiX, uiY, button)) return true;
-        if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseClicked(uiX, uiY, button)) return true;
-        return super.mouseClicked(x, y, button);
-    }
-
-    @Override
-    public boolean mouseScrolled(double x, double y, double delta) {
-        double uiX = campaignMouseX(x), uiY = campaignMouseY(y);
-        if (genderDrop != null && genderDrop.isExpanded() && genderDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (playerDrop != null && playerDrop.isExpanded() && playerDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        if (candidateDrop != null && candidateDrop.isExpanded() && candidateDrop.mouseScrolled(uiX, uiY, delta)) return true;
-        return super.mouseScrolled(x, y, delta);
-    }
-
-    @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        graphics.fill(left, top, left + W, top + H, 0xF0181818);
-        graphics.fill(left + 3, top + 3, left + W - 3, top + 40, 0xFF3B3023);
-        graphics.fill(left + 12, top + 48, left + 236, top + 256, 0xFF242424);
-        graphics.fill(left + 242, top + 48, left + 488, top + 228, 0xFF242424);
-        graphics.drawCenteredString(font, "FAMILY — " + snapshot.characterName(), left + W / 2, top + 14, 0xFFE7D8B0);
+        drawCampaignFrame(graphics, left, top, W, H, 40);
+        drawCampaignPanel(graphics, left + 12, top + 48, left + 236, top + 256);
+        drawCampaignPanel(graphics, left + 242, top + 48, left + 488, top + 228);
+        graphics.drawCenteredString(font, "FAMILY — " + snapshot.characterName(), left + W / 2, top + 14, CAMPAIGN_TITLE);
 
         if (snapshot.married()) {
             graphics.drawString(font, "PRIMARY SPOUSE — " + snapshot.spouseCount() + "/" + snapshot.maxSpouses(), left + 22, top + 60, 0xFFE7D8B0, false);
