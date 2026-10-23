@@ -3,6 +3,7 @@ package ee.lastpagans.settlements.client;
 import ee.lastpagans.settlements.CharacterSnapshot;
 import ee.lastpagans.settlements.network.FamilyActionPacket;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
+import ee.lastpagans.settlements.network.SetMainSeatPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -44,9 +45,17 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Identity"), button ->
                 minecraft.setScreen(new CharacterIdentityEditScreen(snapshot, returnToMain)))
                 .bounds(left + 159, top + 376, 105, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Main Seat"), button ->
-                minecraft.setScreen(new MainSeatSelectionScreen(snapshot, returnToMain)))
-                .bounds(left + 270, top + 376, 110, 20).build());
+        List<String> seats = snapshot.holdings().stream().map(CharacterSnapshot.HoldingEntry::display).toList();
+        if (!seats.isEmpty()) {
+            int currentSeat = 0;
+            for (int i = 0; i < snapshot.holdings().size(); i++)
+                if (snapshot.holdings().get(i).settlementName().equals(snapshot.primarySeat())) currentSeat = i;
+            addRenderableWidget(new DropdownWidget(left + 270, top + 376, 110, 20, seats, currentSeat, selected -> {
+                int index = seats.indexOf(selected);
+                if (index >= 0) SettlementNetwork.CHANNEL.sendToServer(
+                        new SetMainSeatPacket(snapshot.holdings().get(index).settlementId(), returnToMain));
+            }));
+        }
         addRenderableWidget(Button.builder(Component.literal("Family"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.FAMILY)))
                 .bounds(left + 386, top + 376, 72, 20).build());

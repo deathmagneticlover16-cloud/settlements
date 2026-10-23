@@ -76,22 +76,6 @@ public final class CampaignSystemsManager {
         return beds;
     }
 
-    public static int recalculateProsperity(SettlementData.SettlementRecord settlement, CampaignSystemsData extra, long currentDay) {
-        int population = Math.max(1, settlement.getCivilianPopulation());
-        int averageDeposit = extra.averageWealthDeposit(settlement.getId(), currentDay, 7);
-        // Prosperity is primarily about money actually entering the local economy, not a ruler hoarding a static treasury.
-        int economicFlow = extra.hasWealthDepositHistory(settlement.getId())
-                ? Math.min(70, (averageDeposit * 25) / population)
-                : 0; // State Treasury is national money, not a local prosperity reserve.
-        int foodSecurity = Math.min(10, settlement.getFood() / Math.max(1, settlement.getVillagerCount() * 2));
-        int stability = settlement.getStability() / 5;
-        int housing = settlement.getFreeHousing() > 0 ? 5 : settlement.getVillagerCount() > settlement.getHousingCapacity() ? -10 : 0;
-        int modifiers = extra.modifiers(settlement.getId()).stream().mapToInt(value -> value.prosperity).sum();
-        int result = Math.max(0, Math.min(100, economicFlow + foodSecurity + stability + housing + modifiers));
-        extra.setProsperity(settlement.getId(), result);
-        return result;
-    }
-
     public static void processCampaignSystems(MinecraftServer server, long day) {
         SettlementData settlements = SettlementData.get(server.overworld());
         CampaignSystemsData extra = CampaignSystemsData.get(server.overworld());
@@ -101,9 +85,8 @@ public final class CampaignSystemsManager {
             updateRulerDevotionBenefit(settlement, extra, settlements);
             refreshTaxPolicyModifier(settlement, extra);
             processTaxes(server.overworld(), settlement, extra, day);
-            int prosperity = recalculateProsperity(settlement, extra, day);
             applyDailyModifierEffects(settlement, extra, day);
-            updateSettlementTier(server.overworld(), settlement, prosperity, extra);
+            updateSettlementTier(server.overworld(), settlement, extra);
         }
         processLevyMobilizations(server, extra, settlements);
         processLevyServicePenalties(server, extra, settlements);
@@ -128,9 +111,8 @@ public final class CampaignSystemsManager {
         updateRulerDevotionBenefit(settlement, extra, settlements);
         refreshTaxPolicyModifier(settlement, extra);
         processTaxes(server.overworld(), settlement, extra, simulatedDay);
-        int prosperity = recalculateProsperity(settlement, extra, simulatedDay);
         applyDailyModifierEffects(settlement, extra, simulatedDay);
-        updateSettlementTier(server.overworld(), settlement, prosperity, extra);
+        updateSettlementTier(server.overworld(), settlement, extra);
         updateLevyServicePenaltyForSettlement(server, extra, settlement);
     }
 
@@ -138,19 +120,18 @@ public final class CampaignSystemsManager {
         String modifierId = "tax_policy";
         int rate = extra.taxRatePercent(settlement.getId());
         int stability = extra.taxStabilityPerDay(settlement.getId());
-        int prosperity = extra.taxProsperityModifier(settlement.getId());
-        if ((stability == 0 && prosperity == 0) || settlement.getCivilianPopulation() <= 0) {
+        if (stability == 0 || settlement.getCivilianPopulation() <= 0) {
             extra.removeModifier(settlement.getId(), modifierId);
             return;
         }
         String tone = rate < 100 ? "POSITIVE" : "NEGATIVE";
         String detail = rate < 100
-                ? "Lighter taxation leaves more wealth in private hands, improving public order and local economic activity at the cost of State Treasury income."
-                : "Heavier taxation raises State Treasury income but strains households and the local economy.";
+                ? "Lighter taxation improves public order at the cost of State Treasury income."
+                : "Heavier taxation raises State Treasury income but strains public order.";
         extra.addModifier(settlement.getId(), new CampaignSystemsData.ModifierRecord(
                 modifierId, extra.taxDisplayName(settlement.getId()) + " Taxation (" + rate + "%)",
-                "settlements:textures/gui/icons/wealth.png", tone, "Tax policy", detail,
-                stability, prosperity, 0, 0L));
+                "settlements:textures/gui/icons/treasury.png", tone, "Tax policy", detail,
+                stability, 0, 0L));
     }
 
     private static void processTaxes(ServerLevel level, SettlementData.SettlementRecord settlement, CampaignSystemsData extra, long day) {
@@ -160,28 +141,21 @@ public final class CampaignSystemsManager {
             extra.setLastTaxIncome(settlement.getId(), 0);
             return;
         }
-        int populationPerWealth = Math.max(1, SettlementConfig.TAX_POPULATION_PER_WEALTH.get());
-        int base = Math.max(1, (population + populationPerWealth - 1) / populationPerWealth);
-        int prosperity = extra.prosperity(settlement.getId());
-        int minimumEfficiency = SettlementConfig.TAX_MIN_COLLECTION_EFFICIENCY_PERCENT.get();
-        int efficiency = minimumEfficiency + (int)Math.round((100 - minimumEfficiency) * (prosperity / 100.0D));
-        int income = (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D) * (efficiency / 100.0D));
+        int populationPerCoin = Math.max(1, SettlementConfig.TAX_POPULATION_PER_COIN.get());
+        int base = Math.max(1, (population + populationPerCoin - 1) / populationPerCoin);
+        int income = (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D));
         income = Math.max(0, income);
         if (income > 0) {
             StateTreasury.change(level, settlement, income);
-            extra.recordWealthDeposit(settlement.getId(), income, day);
         }
         extra.setLastTaxIncome(settlement.getId(), income);
     }
 
     public static int projectedTaxIncome(SettlementData.SettlementRecord settlement, CampaignSystemsData extra) {
         if (settlement == null || extra == null || settlement.getCivilianPopulation() <= 0) return 0;
-        int populationPerWealth = Math.max(1, SettlementConfig.TAX_POPULATION_PER_WEALTH.get());
-        int base = Math.max(1, (settlement.getCivilianPopulation() + populationPerWealth - 1) / populationPerWealth);
-        int prosperity = extra.prosperity(settlement.getId());
-        int minimumEfficiency = SettlementConfig.TAX_MIN_COLLECTION_EFFICIENCY_PERCENT.get();
-        int efficiency = minimumEfficiency + (int)Math.round((100 - minimumEfficiency) * (prosperity / 100.0D));
-        return Math.max(0, (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D) * (efficiency / 100.0D)));
+        int populationPerCoin = Math.max(1, SettlementConfig.TAX_POPULATION_PER_COIN.get());
+        int base = Math.max(1, (settlement.getCivilianPopulation() + populationPerCoin - 1) / populationPerCoin);
+        return Math.max(0, (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D)));
     }
 
     private static void updateRulerDevotionBenefit(SettlementData.SettlementRecord settlement, CampaignSystemsData extra, SettlementData settlements) {
@@ -190,14 +164,13 @@ public final class CampaignSystemsManager {
         String id = "devotion_guidance";
         if (devotion < 20) { extra.removeModifier(settlement.getId(), id); return; }
         int stability = devotion >= 70 ? 1 : 0;
-        int prosperity = devotion >= 90 ? 5 : devotion >= 70 ? 3 : devotion >= 45 ? 2 : 1;
         int morale = devotion >= 90 ? 5 : devotion >= 70 ? 3 : devotion >= 45 ? 2 : 1;
         String tier = devotion >= 90 ? "Exalted" : devotion >= 70 ? "Devout" : devotion >= 45 ? "Faithful" : "Observant";
         String detail = "The ruler's " + tier + " standing with their faith gives the settlement "
                 + (stability == 0 ? "" : "+" + stability + " daily stability, ")
-                + "+" + prosperity + " prosperity and +" + morale + " recruit morale.";
+                + "+" + morale + " recruit morale.";
         extra.addModifier(settlement.getId(), new CampaignSystemsData.ModifierRecord(id, tier + " Ruler", "minecraft:golden_apple", "POSITIVE",
-                "Ruler devotion", detail, stability, prosperity, morale, 0L));
+                "Ruler devotion", detail, stability, morale, 0L));
     }
 
     private static void updateReligiousUnrest(MinecraftServer server, SettlementData.SettlementRecord settlement, CampaignSystemsData extra, SettlementData settlements) {
@@ -278,9 +251,9 @@ public final class CampaignSystemsManager {
         if (stability != 0) settlement.changeStability(stability);
     }
 
-    private static void updateSettlementTier(ServerLevel level, SettlementData.SettlementRecord settlement, int prosperity, CampaignSystemsData extra) {
+    private static void updateSettlementTier(ServerLevel level, SettlementData.SettlementRecord settlement, CampaignSystemsData extra) {
         if (settlement.getRank() == SettlementData.SettlementRank.VILLAGE
-                && settlement.getCivilianPopulation() >= 100 && prosperity >= 35
+                && settlement.getCivilianPopulation() >= 100
                 && settlement.getStability() >= 45 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
                 && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.TOWN)) {
             settlement.setRank(SettlementData.SettlementRank.TOWN);
@@ -294,7 +267,7 @@ public final class CampaignSystemsManager {
                     settlement.getName() + " is now a Town. Civic Pride is temporarily boosting the settlement.");
         }
         if (settlement.getRank() == SettlementData.SettlementRank.TOWN
-                && settlement.getCivilianPopulation() >= 250 && prosperity >= 55 && settlement.getStability() >= 55
+                && settlement.getCivilianPopulation() >= 250 && settlement.getStability() >= 55
                 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
                 && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.CITY)) {
             settlement.setRank(SettlementData.SettlementRank.CITY);
@@ -309,7 +282,6 @@ public final class CampaignSystemsManager {
         }
         if (settlement.getRank() == SettlementData.SettlementRank.CITY
                 && settlement.getCivilianPopulation() >= SettlementConfig.MAJOR_CITY_MIN_POPULATION.get()
-                && prosperity >= SettlementConfig.MAJOR_CITY_MIN_PROSPERITY.get()
                 && settlement.getStability() >= SettlementConfig.MAJOR_CITY_MIN_STABILITY.get()
                 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
                 && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.MAJOR_CITY)) {
@@ -329,21 +301,21 @@ public final class CampaignSystemsManager {
         String id = SettlementData.normalizeId(raw);
         long expires = 0L;
         return switch (id) {
-            case "civic_pride" -> new CampaignSystemsData.ModifierRecord(id, "Civic Pride", "minecraft:bell", "POSITIVE", "Settlement progression", "+5 stability while citizens celebrate their settlement's advancement.", 5, 5, 3, expires);
-            case "local_religious_unrest" -> new CampaignSystemsData.ModifierRecord(id, "Local Religious Unrest", "minecraft:rotten_flesh", "NEGATIVE", "Religious diplomacy", "The population dislikes close political ties with a strongly incompatible faith.", -3, -3, -2, expires);
-            case "foreign_soldiers" -> new CampaignSystemsData.ModifierRecord(id, "Foreign Soldiers", "minecraft:iron_sword", "MIXED", "Peace treaty", "Foreign manpower is available, but locals resent relying on outside soldiers.", -8, -2, 0, expires);
-            case "families_in_mourning" -> new CampaignSystemsData.ModifierRecord(id, "Families in Mourning", "minecraft:wither_rose", "NEGATIVE", "Levy casualties", "Families mourn levymen who did not return.", -3, -2, -2, expires);
-            case "heavy_levy_losses" -> new CampaignSystemsData.ModifierRecord(id, "Heavy Levy Losses", "minecraft:wither_rose", "NEGATIVE", "Levy casualties", "A large share of the settlement's levy was lost.", -6, -5, -4, expires);
-            case "devastating_losses" -> new CampaignSystemsData.ModifierRecord(id, "Devastating Losses", "minecraft:skeleton_skull", "NEGATIVE", "Levy casualties", "The settlement has suffered devastating losses among its common people.", -10, -10, -7, expires);
-            case "a_generation_lost" -> new CampaignSystemsData.ModifierRecord(id, "A Generation Lost", "minecraft:skeleton_skull", "NEGATIVE", "Levy casualties", "An entire generation has been scarred by the levy disaster.", -15, -15, -10, expires);
-            case "levy_massacre" -> new CampaignSystemsData.ModifierRecord(id, "Levy Massacre", "minecraft:wither_skeleton_skull", "NEGATIVE", "Levy casualties", "Almost nobody returned from the levy. The settlement is in social crisis.", -20, -20, -15, expires);
-            case "extended_service" -> new CampaignSystemsData.ModifierRecord(id, "Extended Service", "minecraft:clock", "NEGATIVE", "Levy service", "Families are beginning to demand the return of the levy.", -2, -1, -2, expires);
-            case "weary_levies" -> new CampaignSystemsData.ModifierRecord(id, "Weary Levies", "minecraft:clock", "NEGATIVE", "Levy service", "The levy has remained in the field for too long.", -5, -4, -6, expires);
-            case "levy_exhaustion" -> new CampaignSystemsData.ModifierRecord(id, "Levy Exhaustion", "minecraft:clock", "NEGATIVE", "Levy service", "Prolonged mobilisation is seriously harming settlement life.", -10, -10, -10, expires);
-            case "popular_outrage" -> new CampaignSystemsData.ModifierRecord(id, "Popular Outrage", "minecraft:fire_charge", "NEGATIVE", "Levy service", "The ruler's refusal to return the levy has caused crippling popular anger.", -20, -20, -15, expires);
-            case "levy_recovery" -> new CampaignSystemsData.ModifierRecord(id, "Levy Recovery", "minecraft:clock", "NEGATIVE", "Returned levy", "The levy is home, but families and local work need time to recover from prolonged mobilisation.", -3, -2, -1, expires);
-            case "plague" -> new CampaignSystemsData.ModifierRecord(id, "Plague", "minecraft:spider_eye", "NEGATIVE", "Campaign event", "Disease is disrupting settlement life, confidence and economic activity.", -3, -15, -5, expires);
-            default -> new CampaignSystemsData.ModifierRecord(id, pretty(id), "minecraft:book", "NEUTRAL", "Debug", "Administrative test modifier.", 0, 0, 0, expires);
+            case "civic_pride" -> new CampaignSystemsData.ModifierRecord(id, "Civic Pride", "minecraft:bell", "POSITIVE", "Settlement progression", "+5 stability and +3 morale while citizens celebrate advancement.", 5, 3, expires);
+            case "local_religious_unrest" -> new CampaignSystemsData.ModifierRecord(id, "Local Religious Unrest", "minecraft:rotten_flesh", "NEGATIVE", "Religious diplomacy", "The population dislikes close political ties with a strongly incompatible faith.", -3, -2, expires);
+            case "foreign_soldiers" -> new CampaignSystemsData.ModifierRecord(id, "Foreign Soldiers", "minecraft:iron_sword", "MIXED", "Peace treaty", "Foreign manpower is available, but locals resent relying on outside soldiers.", -8, 0, expires);
+            case "families_in_mourning" -> new CampaignSystemsData.ModifierRecord(id, "Families in Mourning", "minecraft:wither_rose", "NEGATIVE", "Levy casualties", "Families mourn levymen who did not return.", -3, -2, expires);
+            case "heavy_levy_losses" -> new CampaignSystemsData.ModifierRecord(id, "Heavy Levy Losses", "minecraft:wither_rose", "NEGATIVE", "Levy casualties", "A large share of the settlement's levy was lost.", -6, -4, expires);
+            case "devastating_losses" -> new CampaignSystemsData.ModifierRecord(id, "Devastating Losses", "minecraft:skeleton_skull", "NEGATIVE", "Levy casualties", "The settlement has suffered devastating losses among its common people.", -10, -7, expires);
+            case "a_generation_lost" -> new CampaignSystemsData.ModifierRecord(id, "A Generation Lost", "minecraft:skeleton_skull", "NEGATIVE", "Levy casualties", "An entire generation has been scarred by the levy disaster.", -15, -10, expires);
+            case "levy_massacre" -> new CampaignSystemsData.ModifierRecord(id, "Levy Massacre", "minecraft:wither_skeleton_skull", "NEGATIVE", "Levy casualties", "Almost nobody returned from the levy. The settlement is in social crisis.", -20, -15, expires);
+            case "extended_service" -> new CampaignSystemsData.ModifierRecord(id, "Extended Service", "minecraft:clock", "NEGATIVE", "Levy service", "Families are beginning to demand the return of the levy.", -2, -2, expires);
+            case "weary_levies" -> new CampaignSystemsData.ModifierRecord(id, "Weary Levies", "minecraft:clock", "NEGATIVE", "Levy service", "The levy has remained in the field for too long.", -5, -6, expires);
+            case "levy_exhaustion" -> new CampaignSystemsData.ModifierRecord(id, "Levy Exhaustion", "minecraft:clock", "NEGATIVE", "Levy service", "Prolonged mobilisation is seriously harming settlement life.", -10, -10, expires);
+            case "popular_outrage" -> new CampaignSystemsData.ModifierRecord(id, "Popular Outrage", "minecraft:fire_charge", "NEGATIVE", "Levy service", "The ruler's refusal to return the levy has caused crippling popular anger.", -20, -15, expires);
+            case "levy_recovery" -> new CampaignSystemsData.ModifierRecord(id, "Levy Recovery", "minecraft:clock", "NEGATIVE", "Returned levy", "The levy is home, but families and local work need time to recover from prolonged mobilisation.", -3, -1, expires);
+            case "plague" -> new CampaignSystemsData.ModifierRecord(id, "Plague", "minecraft:spider_eye", "NEGATIVE", "Campaign event", "Disease is disrupting settlement life and military confidence.", -3, -5, expires);
+            default -> new CampaignSystemsData.ModifierRecord(id, pretty(id), "minecraft:book", "NEUTRAL", "Debug", "Administrative test modifier.", 0, 0, expires);
         };
     }
 
@@ -354,7 +326,7 @@ public final class CampaignSystemsManager {
         long expires = durationMs <= 0 ? 0 : extra.nowMillis(settlementId) + durationMs;
         CampaignSystemsData.ModifierRecord base = standardModifier(settlementId, id, 0);
         return new CampaignSystemsData.ModifierRecord(base.id, base.name, base.iconItem, base.tone, base.source, base.detail,
-                base.stabilityPerDay, base.prosperity, base.morale, expires);
+                base.stabilityPerDay, base.morale, expires);
     }
 
     public static String raiseLevy(ServerPlayer player, SettlementData.SettlementRecord settlement) {
@@ -731,9 +703,9 @@ public final class CampaignSystemsManager {
                 if (aid.nextDay() > day) { next.add(aid); continue; }
                 SettlementData.SettlementRecord target = settlements.getSettlement(aid.targetSettlement());
                 if (target == null) continue;
-                String error = CampaignManager.transferFactionAid(server.overworld(), aid.fromFaction(), target, aid.manpower(), aid.wealth(), aid.food());
+                String error = CampaignManager.transferFactionAid(server.overworld(), aid.fromFaction(), target, aid.manpower(), aid.treasury(), aid.food());
                 if (error == null) {
-                    next.add(new CampaignSystemsData.AidRecord(aid.id(), aid.fromFaction(), aid.targetSettlement(), aid.manpower(), aid.wealth(), aid.food(), true, day + 1));
+                    next.add(new CampaignSystemsData.AidRecord(aid.id(), aid.fromFaction(), aid.targetSettlement(), aid.manpower(), aid.treasury(), aid.food(), true, day + 1));
                     if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(server, target.getId(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
                     else CampaignToastSender.faction(server, target.getFactionTeam(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
                 } else {
@@ -749,12 +721,12 @@ public final class CampaignSystemsManager {
         for (CampaignSystemsData.ReparationRecord value : extra.reparations()) {
             if (value.remainingDays() <= 0) continue;
             if (value.nextDay() > day) { next.add(value); continue; }
-            int available = extra.factionWealth(value.payerFaction());
-            int paid = Math.min(available, value.wealthPerDay());
-            if (paid > 0) { extra.changeFactionWealth(value.payerFaction(), -paid); extra.changeFactionWealth(value.receiverFaction(), paid); }
+            int available = extra.treasuryBalance(value.payerFaction());
+            int paid = Math.min(available, value.treasuryPerDay());
+            if (paid > 0) { extra.changeTreasury(value.payerFaction(), -paid); extra.changeTreasury(value.receiverFaction(), paid); }
             int remaining = value.remainingDays() - 1;
             CampaignData campaign = CampaignData.get(server.overworld());
-            if (paid < value.wealthPerDay()) {
+            if (paid < value.treasuryPerDay()) {
                 CampaignManager.changeReliability(server.overworld(), campaign, value.payerFaction(), -2);
                 CampaignToastSender.faction(server, value.receiverFaction(), "REPARATIONS MISSED", CampaignManager.factionName(value.payerFaction()) + " could not pay the full daily reparations.");
             } else if (remaining <= 0) {

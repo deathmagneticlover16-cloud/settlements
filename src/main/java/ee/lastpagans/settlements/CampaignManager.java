@@ -201,7 +201,6 @@ public final class CampaignManager {
                     }
                 }
             }
-            case "TREASURY_DEPOSIT", "TREASURY_WITHDRAW" -> result = "Settlement wallets were retired in 2.6. All income and spending now use the State Treasury directly.";
             default -> result = "Unknown faction action.";
         }
         openFaction(player, result);
@@ -672,21 +671,21 @@ public final class CampaignManager {
         String targetSettlement = own.equals(war.attackerFaction()) ? war.attackerSettlement() : war.defenderSettlement();
         if (targetSettlement.isBlank()) return "This war has no settlement aid target.";
         String[] split = extra == null ? new String[0] : extra.split("\\|", -1);
-        int manpower = parsePositive(split, 0); int wealth = parsePositive(split, 1); int food = parsePositive(split, 2);
+        int manpower = parsePositive(split, 0); int treasury = parsePositive(split, 1); int food = parsePositive(split, 2);
         if (split.length < 6) return "Your client is using an outdated war-aid packet. Reconnect with the current Settlements build.";
         boolean manpowerRecurring = Boolean.parseBoolean(split[3]);
-        boolean wealthRecurring = Boolean.parseBoolean(split[4]);
+        boolean treasuryRecurring = Boolean.parseBoolean(split[4]);
         boolean foodRecurring = Boolean.parseBoolean(split[5]);
-        if (manpower + wealth + food <= 0) return "Enter at least one aid amount.";
+        if (manpower + treasury + food <= 0) return "Enter at least one aid amount.";
         SettlementData.SettlementRecord target = SettlementData.get(player.serverLevel()).getSettlement(targetSettlement);
         if (target == null) return "The aided settlement no longer exists.";
-        String payment = transferFactionAid(player.serverLevel(), own, target, manpower, wealth, food);
+        String payment = transferFactionAid(player.serverLevel(), own, target, manpower, treasury, food);
         if (payment != null) return payment;
         CampaignSystemsData extraData = CampaignSystemsData.get(player.serverLevel());
         if (manpowerRecurring && manpower > 0) extraData.addWarAid(war.id(),
                 new CampaignSystemsData.AidRecord(UUID.randomUUID(), own, targetSettlement, manpower, 0, 0, true, day + 1));
-        if (wealthRecurring && wealth > 0) extraData.addWarAid(war.id(),
-                new CampaignSystemsData.AidRecord(UUID.randomUUID(), own, targetSettlement, 0, wealth, 0, true, day + 1));
+        if (treasuryRecurring && treasury > 0) extraData.addWarAid(war.id(),
+                new CampaignSystemsData.AidRecord(UUID.randomUUID(), own, targetSettlement, 0, treasury, 0, true, day + 1));
         if (foodRecurring && food > 0) extraData.addWarAid(war.id(),
                 new CampaignSystemsData.AidRecord(UUID.randomUUID(), own, targetSettlement, 0, 0, food, true, day + 1));
         // Supporting one of your settlements is a small positive Reliability signal. It is
@@ -699,7 +698,7 @@ public final class CampaignManager {
         else CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
         java.util.List<String> recurringLabels = new java.util.ArrayList<>();
         if (manpowerRecurring && manpower > 0) recurringLabels.add("manpower");
-        if (wealthRecurring && wealth > 0) recurringLabels.add("wealth");
+        if (treasuryRecurring && treasury > 0) recurringLabels.add("treasury");
         if (foodRecurring && food > 0) recurringLabels.add("food");
         return "Aid delivered to " + target.getName() + (recurringLabels.isEmpty() ? "."
                 : ". Daily: " + String.join(", ", recurringLabels) + ".");
@@ -734,9 +733,9 @@ public final class CampaignManager {
         try { return Math.max(0, Integer.parseInt(split[index])); } catch (NumberFormatException ignored) { return 0; }
     }
 
-    static String transferFactionAid(ServerLevel level, String faction, SettlementData.SettlementRecord target, int manpower, int wealth, int food) {
+    static String transferFactionAid(ServerLevel level, String faction, SettlementData.SettlementRecord target, int manpower, int treasury, int food) {
         CampaignSystemsData extra = CampaignSystemsData.get(level);
-        if (extra.factionWealth(faction) < wealth) return "Your faction treasury does not have enough wealth.";
+        if (extra.treasuryBalance(faction) < treasury) return "Your State Treasury does not have enough funds.";
         List<SettlementData.SettlementRecord> sources = SettlementData.get(level).settlementsForFaction(faction).stream()
                 .filter(source -> !source.getId().equals(target.getId())).toList();
         int availableMp = sources.stream().mapToInt(SettlementData.SettlementRecord::getAvailableManpower).sum();
@@ -746,7 +745,7 @@ public final class CampaignManager {
         if (availableMp < manpower) return "Your faction settlements do not have enough available manpower.";
         if (manpower > recipientRoom) return "The aided settlement only has room for " + recipientRoom + " more manpower.";
         if (availableFood < food) return "Your faction settlements do not have enough food.";
-        extra.spendFactionWealth(faction, wealth);
+        extra.spendTreasury(faction, treasury);
         int mpLeft = manpower, foodLeft = food;
         for (SettlementData.SettlementRecord source : sources) {
             int mpTake = Math.min(mpLeft, source.getAvailableManpower());
@@ -757,8 +756,7 @@ public final class CampaignManager {
         }
         target.changeAvailableManpower(manpower);
         target.changeFood(food);
-        StateTreasury.change(level, target, wealth);
-        if (wealth > 0) extra.recordWealthDeposit(target.getId(), wealth, level.getDayTime() / 24000L);
+        StateTreasury.change(level, target, treasury);
         return null;
     }
 
@@ -880,7 +878,7 @@ public final class CampaignManager {
             String[] p = raw.split("~", -1); if (p.length < 5) continue;
             int amount = parseInt(p[2], 0, 1_000_000); int duration = parseInt(p[3], 0, 3650);
             String type = p[0].toUpperCase(Locale.ROOT); String target = SettlementData.cleanText(p[1], "", 80); String text = SettlementData.cleanText(p[4], "", 120);
-            if (List.of("WEALTH","MANPOWER","REPARATIONS","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RENOUNCE_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
+            if (List.of("TREASURY","MANPOWER","REPARATIONS","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RENOUNCE_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
                 terms.add(new CampaignSystemsData.PeaceTerm(type, target, amount, duration, text));
         }
         return List.copyOf(terms);
@@ -943,7 +941,7 @@ public final class CampaignManager {
     private static int peaceTermWarScoreCost(ServerLevel level, CampaignSystemsData.PeaceTerm term) {
         if (term == null) return 0;
         return switch (term.type()) {
-            case "WEALTH" -> ceilDiv(term.amount(), 100);
+            case "TREASURY" -> ceilDiv(term.amount(), 100);
             case "MANPOWER" -> ceilDiv(term.amount(), 5);
             case "REPARATIONS" -> (int)Math.min(100L, ceilDiv((long)term.amount() * (long)term.durationDays(), 100L));
             case "NAP" -> Math.min(20, ceilDiv(term.durationDays(), 7));
@@ -990,7 +988,7 @@ public final class CampaignManager {
         String loserFaction = offer.targetFaction();
         SettlementData.SettlementRecord winnerSettlement = settlements.getSettlement(offer.proposerSettlement());
         SettlementData.SettlementRecord loserSettlement = settlements.getSettlement(offer.targetSettlement());
-        int wealthNeed = 0, manpowerNeed = 0;
+        int treasuryNeed = 0, manpowerNeed = 0;
         Set<String> transferredSettlements = new HashSet<>();
         Set<String> releasedSettlements = new HashSet<>();
         Set<String> transferredClaims = new HashSet<>();
@@ -1012,7 +1010,7 @@ public final class CampaignManager {
 
         for (CampaignSystemsData.PeaceTerm term : offer.terms()) {
             switch (term.type()) {
-                case "WEALTH" -> wealthNeed += term.amount();
+                case "TREASURY" -> treasuryNeed += term.amount();
                 case "MANPOWER" -> manpowerNeed += term.amount();
                 case "REPARATIONS" -> {
                     if (winnerFaction.isBlank() || loserFaction.isBlank()) return "recurring reparations require two factions";
@@ -1084,10 +1082,10 @@ public final class CampaignManager {
             }
         }
 
-        int availableWealth = loserSettlement != null ? StateTreasury.balance(level, loserSettlement) : !loserFaction.isBlank() ? extra.factionWealth(loserFaction) : 0;
+        int availableTreasury = loserSettlement != null ? StateTreasury.balance(level, loserSettlement) : !loserFaction.isBlank() ? extra.treasuryBalance(loserFaction) : 0;
         int availableMp = !loserFaction.isBlank() ? settlements.settlementsForFaction(loserFaction).stream().mapToInt(SettlementData.SettlementRecord::getAvailableManpower).sum()
                 : loserSettlement == null ? 0 : loserSettlement.getAvailableManpower();
-        if (wealthNeed > availableWealth) return "the losing side no longer has the demanded wealth";
+        if (treasuryNeed > availableTreasury) return "the losing side no longer has the demanded treasury";
         if (manpowerNeed > availableMp) return "the losing side no longer has the demanded manpower";
         return null;
     }
@@ -1122,9 +1120,9 @@ public final class CampaignManager {
         UUID recipientOwner = treatyRecipientOwner(level, winnerFaction, winnerSettlement, war);
         for (CampaignSystemsData.PeaceTerm term : offer.terms()) {
             switch (term.type()) {
-                case "WEALTH" -> {
-                    takeWealth(level, extra, loserFaction, loserSettlement, term.amount());
-                    giveWealth(level, extra, winnerFaction, winnerSettlement, term.amount());
+                case "TREASURY" -> {
+                    takeTreasury(level, extra, loserFaction, loserSettlement, term.amount());
+                    giveTreasury(level, extra, winnerFaction, winnerSettlement, term.amount());
                 }
                 case "MANPOWER" -> {
                     int moved = takeManpower(settlements, loserFaction, loserSettlement, term.amount());
@@ -1146,15 +1144,15 @@ public final class CampaignManager {
         }
     }
 
-    private static void takeWealth(ServerLevel level, CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
+    private static void takeTreasury(ServerLevel level, CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
         if (amount <= 0) return;
         if (settlement != null) StateTreasury.change(level, settlement, -amount);
-        else if (!faction.isBlank()) extra.changeFactionWealth(faction, -amount);
+        else if (!faction.isBlank()) extra.changeTreasury(faction, -amount);
     }
-    private static void giveWealth(ServerLevel level, CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
+    private static void giveTreasury(ServerLevel level, CampaignSystemsData extra, String faction, SettlementData.SettlementRecord settlement, int amount) {
         if (amount <= 0) return;
         if (settlement != null) StateTreasury.change(level, settlement, amount);
-        else if (!faction.isBlank()) extra.changeFactionWealth(faction, amount);
+        else if (!faction.isBlank()) extra.changeTreasury(faction, amount);
     }
     private static int takeManpower(SettlementData settlements, String faction, SettlementData.SettlementRecord settlement, int amount) {
         int left = Math.max(0, amount); if (!faction.isBlank()) {
@@ -1262,7 +1260,7 @@ public final class CampaignManager {
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || !war.involves(own)) return "That war is not active.";
         if (war.type() == CampaignData.WarType.SETTLEMENT_WAR) {
-            return "Settlement Wars use negotiated Peace Terms. A parent faction cannot end a local war with the legacy one-click peace action.";
+            return "Settlement Wars use negotiated Peace Terms. A parent faction cannot end a local war with the obsolete one-click peace action.";
         }
         String target = own.equals(war.attackerFaction()) ? war.defenderFaction() : war.attackerFaction();
         data.createProposal(CampaignData.ProposalType.PEACE, own, target, player.getUUID(), war.id(), day);
@@ -1329,7 +1327,7 @@ public final class CampaignManager {
         if (proposal.type() == CampaignData.ProposalType.PEACE && proposal.linkedWar() != null) {
             CampaignData.WarRecord linked = data.getWar(proposal.linkedWar());
             if (linked != null && linked.type() == CampaignData.WarType.SETTLEMENT_WAR) {
-                return "This Settlement War must be resolved through negotiated Peace Terms, not a legacy one-click faction peace proposal.";
+                return "This Settlement War must be resolved through negotiated Peace Terms, not a obsolete one-click faction peace proposal.";
             }
         }
         data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
@@ -1547,7 +1545,7 @@ public final class CampaignManager {
                         int penalty = -Math.min(8, 2 * divorces);
                         long expires = extra.nowMillis(capital.getId()) + 3L * 24L * 60L * 60L * 1000L;
                         extra.addModifier(capital.getId(), new CampaignSystemsData.ModifierRecord("marital_scandal", "Marital Scandal", "minecraft:torn_banner_pattern", "NEGATIVE",
-                                "Repeated divorce", "Repeated political marriages and divorces have damaged confidence in the ruler.", penalty, penalty / 2, 0, expires));
+                                "Repeated divorce", "Repeated political marriages and divorces have damaged confidence in the ruler.", penalty, 0, expires));
                     }
                     if (!firstFaction.isBlank() && !secondFaction.isBlank() && !firstFaction.equals(secondFaction)) {
                         CampaignSystemsData.get(player.serverLevel()).removeMarriageAlliance(firstFaction, secondFaction);
@@ -1664,9 +1662,7 @@ public final class CampaignManager {
         SettlementData settlementData = SettlementData.get(player.serverLevel());
         if (foundingSeat == null || !player.getUUID().equals(foundingSeat.getOwnerId()) || !foundingSeat.getFactionTeam().isBlank())
             return "Found and develop an independent settlement before creating a political faction.";
-        CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
         int population = foundingSeat.getCivilianPopulation();
-        int prosperity = systems.prosperity(foundingSeat.getId());
         if (SettlementConfig.FACTION_FOUNDING_REQUIRE_TOWN.get() && foundingSeat.getRank() == SettlementData.SettlementRank.VILLAGE) {
             return "A full faction requires an established Town or City. " + foundingSeat.getName() + " is still a Village.";
         }
@@ -1674,12 +1670,10 @@ public final class CampaignManager {
             return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get() + " population; " + foundingSeat.getName() + " has " + population + ".";
         if (foundingSeat.getStability() < SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get())
             return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get() + " Stability; " + foundingSeat.getName() + " has " + foundingSeat.getStability() + ".";
-        if (prosperity < SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get())
-            return "Faction founding requires " + SettlementConfig.FACTION_FOUNDING_MIN_PROSPERITY.get() + " Prosperity; " + foundingSeat.getName() + " has " + prosperity + ".";
-        int wealthCost = SettlementConfig.FACTION_FOUNDING_WEALTH_COST.get();
+        int treasuryCost = SettlementConfig.FACTION_FOUNDING_TREASURY_COST.get();
         int foundingTreasury = StateTreasury.balance(player.serverLevel(), foundingSeat);
-        if (foundingTreasury < wealthCost)
-            return "Faction founding costs " + wealthCost + " from the State Treasury; the independent polity currently has " + foundingTreasury + ".";
+        if (foundingTreasury < treasuryCost)
+            return "Faction founding costs " + treasuryCost + " from the State Treasury; the independent polity currently has " + foundingTreasury + ".";
 
         if (banner == null || !(banner.getItem() instanceof BannerItem)) return "Faction creation failed: design a banner first.";
         banner = FactionBannerUtil.sanitize(banner);
@@ -1704,8 +1698,8 @@ public final class CampaignManager {
         RecruitsFaction created = FactionEvents.recruitsFactionManager.getFactionByStringID(newFactionId);
         if (created == null) return "Faction creation failed: Recruits did not confirm creation. Check its configured creation requirements/cost and try again.";
 
-        StateTreasury.spend(player.serverLevel(), foundingSeat, wealthCost);
-        foundingSeat.addChronicle("The State Treasury contributed " + wealthCost + " to the founding of " + displayName + ".");
+        StateTreasury.spend(player.serverLevel(), foundingSeat, treasuryCost);
+        foundingSeat.addChronicle("The State Treasury contributed " + treasuryCost + " to the founding of " + displayName + ".");
         BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, newFactionId);
         CampaignData campaign = CampaignData.get(player.serverLevel());
         campaign.setFactionGovernment(newFactionId, government);

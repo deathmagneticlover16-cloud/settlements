@@ -1,15 +1,13 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo Building Settlements 2.5.3...
+echo Building Settlements: The Culling and running regression checks...
 call gradlew.bat clean build
 if errorlevel 1 (
-  echo.
   echo BUILD FAILED. Copy the complete console output when reporting the error.
   pause
   exit /b 1
 )
-echo.
 echo BUILD COMPLETE
-echo JAR: build\libs\settlements-2.5.3.jar
+echo JAR: build\libs\settlements-3.0.0.jar
 pause

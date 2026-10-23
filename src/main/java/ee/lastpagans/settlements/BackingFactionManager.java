@@ -131,7 +131,6 @@ public final class BackingFactionManager {
         Set<String> oldBacking = new HashSet<>();
         for (SettlementData.SettlementRecord settlement : data.getOwnedSettlements(player.getUUID())) {
             if (!settlement.getFactionTeam().isBlank()) continue;
-            StateTreasury.migrateLegacy(player.serverLevel(), settlement);
             String previous = settlement.getBackingFactionTeam();
             if (!previous.isBlank()) oldBacking.add(previous);
             settlement.setFactionTeam(factionId);
@@ -142,10 +141,10 @@ public final class BackingFactionManager {
         }
         CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
         for (String backingId : oldBacking) {
-            int balance = systems.factionWealth(backingId);
+            int balance = systems.treasuryBalance(backingId);
             if (balance > 0) {
-                systems.changeFactionWealth(factionId, balance);
-                systems.setFactionWealth(backingId, 0);
+                systems.changeTreasury(factionId, balance);
+                systems.setTreasuryBalance(backingId, 0);
             }
         }
         oldBacking.forEach(value -> retireIfUnused(player.getServer(), value));

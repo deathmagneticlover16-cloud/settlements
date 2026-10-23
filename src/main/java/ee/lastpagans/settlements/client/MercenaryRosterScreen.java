@@ -88,7 +88,7 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
         drawCampaignFrame(graphics, left, top, W, H, 62);
         graphics.drawCenteredString(font, "MERCENARY ROSTERS", left + W / 2, top + 13, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, snapshot.settlementName() + " · " + snapshot.factionName(), left + W / 2, top + 31, 0xFFB8B0A0);
-        graphics.drawCenteredString(font, "Available Wealth: " + snapshot.availableWealth() + " · Reliability: " + snapshot.reliability(), left + W / 2, top + 46, 0xFFCFBE98);
+        graphics.drawCenteredString(font, "Available Treasury: " + snapshot.availableTreasury() + " · Reliability: " + snapshot.reliability(), left + W / 2, top + 46, 0xFFCFBE98);
 
         drawCampaignPanel(graphics, left + 14, top + 72, left + 310, top + 300);
         drawCampaignPanel(graphics, left + 320, top + 72, left + 546, top + 326);
@@ -113,8 +113,8 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
             detail(graphics, "Status", entry.status(), 100);
             detail(graphics, "Employer", entry.employer(), 116);
             detail(graphics, "Loyalty", entry.loyalty() + "/100", 132);
-            detail(graphics, "Base hire", entry.hireCost() + " Wealth", 148);
-            detail(graphics, entry.yours() ? "Contract" : "Current price", entry.yours() ? "Active" : entry.effectiveHireCost() + " Wealth", 164);
+            detail(graphics, "Base hire", entry.hireCost() + " Treasury", 148);
+            detail(graphics, entry.yours() ? "Contract" : "Current price", entry.yours() ? "Active" : entry.effectiveHireCost() + " Treasury", 164);
             detail(graphics, "Upkeep", entry.upkeep() + " every " + entry.intervalDays() + " day(s)", 180);
             graphics.drawString(font, "COMPOSITION", left + 330, top + 204, 0xFFE7D8B0, false);
             graphics.drawWordWrap(font, Component.literal(entry.composition()), left + 330, top + 218, 202, 0xFFDDDDDD);

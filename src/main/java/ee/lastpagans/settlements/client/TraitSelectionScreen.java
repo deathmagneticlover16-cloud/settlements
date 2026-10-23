@@ -44,7 +44,7 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen implements 
     private void rebuildButtons() {
         clearWidgets();
         if (session.state() == CharacterCreationDraftSession.State.SUBMITTING) return;
-        addRenderableWidget(Button.builder(Component.literal("Go Back"), b -> minecraft.setScreen(new CharacterPreviewScreen(session)))
+        addRenderableWidget(Button.builder(Component.literal("Go Back"), b -> minecraft.setScreen(new CharacterCreationScreen(session)))
                 .bounds(left + 22, top + 292, 100, 20).build());
         if (session.completeTraits()) {
             addRenderableWidget(Button.builder(Component.literal("Submit Character"), b -> submit())

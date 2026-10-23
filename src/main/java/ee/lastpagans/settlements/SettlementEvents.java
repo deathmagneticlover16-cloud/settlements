@@ -5,7 +5,6 @@ import com.talhanation.recruits.ClaimEvents;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsClaim;
-import com.mojang.logging.LogUtils;
 import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -24,7 +23,6 @@ import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
-import org.slf4j.Logger;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -32,7 +30,6 @@ import java.util.Map;
 import java.util.UUID;
 
 public final class SettlementEvents {
-    private static final Logger LOGGER = LogUtils.getLogger();
     private static final Map<UUID, Integer> PENDING_CHARACTER_SCREENS = new HashMap<>();
     private static final Map<UUID, Integer> PENDING_BODY_REASSERTIONS = new HashMap<>();
     private static int checkerTicks;
@@ -202,9 +199,7 @@ public final class SettlementEvents {
         } else if (character.hasBodyData()) {
             SettlementsWildfireAuthority.reassert(player, true);
             PENDING_BODY_REASSERTIONS.put(player.getUUID(), 40);
-        } else {
-            LOGGER.info("[Settlements/Wildfire] Legacy character {} has no Body data; authority remains disabled", player.getUUID());
-        }
+        } else PENDING_CHARACTER_SCREENS.put(player.getUUID(), 40);
         ResearchManager.syncCompletedResearch(player);
         CaptureZoneManager.sync(player);
     }

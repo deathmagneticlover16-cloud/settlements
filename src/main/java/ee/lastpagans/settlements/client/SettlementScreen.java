@@ -363,7 +363,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         stat(graphics, "Claims", snapshot.claimLinked() ? snapshot.claimCount() + " linked" : "none", 22, 188);
         if (snapshot.claimLinked()) graphics.drawString(font, fitText(snapshot.claimName(), 220), left + 22, top + 206, CAMPAIGN_MUTED, false);
 
-        statWithIcon(graphics, "wealth", "State Treasury", snapshot.wealth(), 292, 108);
+        statWithIcon(graphics, "treasury", "State Treasury", snapshot.treasury(), 292, 108);
         stat(graphics, "Housing", snapshot.villagerCount() + " / " + snapshot.housingCapacity(), 292, 128);
         status(graphics, "Town Square", snapshot.townSquareSet(), 292, 148);
         status(graphics, "Muster Ground", snapshot.musterGroundSet(), 292, 168);
@@ -389,14 +389,13 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void renderTreasury(GuiGraphics graphics) {
         if (isLimitedView()) { renderPrivateTabNotice(graphics, "Treasury"); return; }
         stat(graphics, "Food stockpile", snapshot.food(), 22, 110);
-        statWithIcon(graphics, "wealth", "State Treasury", snapshot.wealth(), 22, 132);
-        statWithIcon(graphics, "prosperity", "Prosperity", snapshot.prosperity() + "/100", 22, 154);
+        statWithIcon(graphics, "treasury", "State Treasury", snapshot.treasury(), 22, 132);
         stat(graphics, "Mercenary wage cycle", snapshot.mercenaryWages(), 22, 176);
         graphics.drawString(font, "City upkeep: " + (snapshot.upkeepChestSet() ? "automatic chest linked" : "manual food deposits"), left + 356, top + 246, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
 
         graphics.drawString(font, "TAXATION", left + 22, top + 194, 0xFFE7D8B0, false);
         String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " treasury/day · Last +" + snapshot.lastTaxIncome()
-                + " · Stability " + signed(snapshot.taxStabilityPerDay()) + "/day · Prosperity " + signed(snapshot.taxProsperityModifier());
+                + " · Stability " + signed(snapshot.taxStabilityPerDay()) + "/day";
         graphics.drawString(font, fitText(snapshot.taxRatePercent() + "% " + snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, CAMPAIGN_MUTED, false);
         graphics.drawString(font, "Low", left + 20, top + 240, 0xFFAAAAAA, false);
         graphics.drawCenteredString(font, "Normal", left + 176, top + 240, 0xFFAAAAAA);

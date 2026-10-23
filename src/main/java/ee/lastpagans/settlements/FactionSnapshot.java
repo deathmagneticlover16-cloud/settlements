@@ -26,8 +26,8 @@ public record FactionSnapshot(
         String government,
         String teamDye,
         String unitDye,
-        int realmWealth,
-        int factionTreasury,
+        int dailyTaxIncome,
+        int stateTreasury,
         int realmPopulation,
         int activeWars,
         List<MemberEntry> members,
@@ -124,7 +124,7 @@ public record FactionSnapshot(
                 profile.teamDye(),
                 profile.unitDye(),
                 owned.stream().mapToInt(settlement -> CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId())).sum(),
-                owned.isEmpty() ? CampaignSystemsData.get(player.serverLevel()).factionWealth(factionId) : StateTreasury.balance(player.serverLevel(), owned.get(0)),
+                owned.isEmpty() ? CampaignSystemsData.get(player.serverLevel()).treasuryBalance(factionId) : StateTreasury.balance(player.serverLevel(), owned.get(0)),
                 owned.stream().mapToInt(SettlementData.SettlementRecord::getDisplayedPopulation).sum(),
                 campaign.activeWarsFor(factionId).size(),
                 members,
@@ -208,8 +208,8 @@ public record FactionSnapshot(
         buffer.writeUtf(government, 32);
         buffer.writeUtf(teamDye, 32);
         buffer.writeUtf(unitDye, 32);
-        buffer.writeVarInt(realmWealth);
-        buffer.writeVarInt(factionTreasury);
+        buffer.writeVarInt(dailyTaxIncome);
+        buffer.writeVarInt(stateTreasury);
         buffer.writeVarInt(realmPopulation);
         buffer.writeVarInt(activeWars);
         writeList(buffer, members, MemberEntry::encode);
@@ -237,8 +237,8 @@ public record FactionSnapshot(
         String government = buffer.readUtf(32);
         String teamDye = buffer.readUtf(32);
         String unitDye = buffer.readUtf(32);
-        int wealth = buffer.readVarInt();
-        int treasury = buffer.readVarInt();
+        int dailyTaxIncome = buffer.readVarInt();
+        int stateTreasury = buffer.readVarInt();
         int population = buffer.readVarInt();
         int activeWars = buffer.readVarInt();
         List<MemberEntry> members = readList(buffer, MemberEntry::decode, 512);
@@ -255,7 +255,7 @@ public record FactionSnapshot(
         List<InvitationEntry> invitations = readList(buffer, InvitationEntry::decode, 512);
         List<PlayerChoice> inviteCandidates = readList(buffer, PlayerChoice::decode, 512);
         return new FactionSnapshot(factionId, factionName, banner, leaderName, viewerLeader, viewerTier, viewerRank, rosterName,
-                government, teamDye, unitDye, wealth, treasury, population, activeWars, members, settlements, allies, enemies, ranks,
+                government, teamDye, unitDye, dailyTaxIncome, stateTreasury, population, activeWars, members, settlements, allies, enemies, ranks,
                 availableFactions, joinRequests, invitations, inviteCandidates, buffer.readUtf(256));
     }
 
@@ -292,14 +292,14 @@ public record FactionSnapshot(
     }
 
     public record SettlementEntry(String id, String name, String rank, int population, int stability,
-                                  int wealth, boolean capital) {
+                                  int taxIncome, boolean capital) {
         private static void encode(SettlementEntry value, FriendlyByteBuf buffer) {
             buffer.writeUtf(value.id, 64);
             buffer.writeUtf(value.name, 64);
             buffer.writeUtf(value.rank, 32);
             buffer.writeVarInt(value.population);
             buffer.writeVarInt(value.stability);
-            buffer.writeVarInt(value.wealth);
+            buffer.writeVarInt(value.taxIncome);
             buffer.writeBoolean(value.capital);
         }
         private static SettlementEntry decode(FriendlyByteBuf buffer) {

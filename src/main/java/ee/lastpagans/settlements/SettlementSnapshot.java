@@ -22,8 +22,8 @@ public record SettlementSnapshot(
         String factionId, String factionName, CompoundTag factionBanner,
         String bannerMode, CompoundTag settlementBannerStack, String rosterName, List<UnitTemplateEntry> unitTemplates,
         int villagerCount, double populationMultiplier, int civilianPopulation, int militaryPopulation, int totalPopulation,
-        int housingCapacity, int freeHousing, int stability, int food, int wealth, int prosperity,
-        String taxPolicy, int taxRatePercent, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay, int taxProsperityModifier,
+        int housingCapacity, int freeHousing, int stability, int food, int treasury,
+        String taxPolicy, int taxRatePercent, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay,
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
         int professionals, int levymen, int pendingContracts, String settlerGrowthStatus,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet, boolean upkeepChestSet,
@@ -68,13 +68,12 @@ public record SettlementSnapshot(
                 factionId, factionName, factionBanner, visual.getBannerMode().name(), settlementBanner,
                 limitedView ? "Hidden" : campaign.assignedRosterName(settlement), limitedView ? List.of() : templates,
                 limitedView ? 0 : settlement.getVillagerCount(), limitedView ? 0.0D : settlement.getPopulationMultiplier(), limitedView ? 0 : settlement.getCivilianPopulation(), limitedView ? 0 : settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
-                limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : StateTreasury.balance(player.serverLevel(), settlement), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).prosperity(settlement.getId()),
+                limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : StateTreasury.balance(player.serverLevel(), settlement),
                 limitedView ? "Hidden" : CampaignSystemsData.get(player.serverLevel()).taxDisplayName(settlement.getId()),
                 limitedView ? 100 : CampaignSystemsData.get(player.serverLevel()).taxRatePercent(settlement.getId()),
                 limitedView ? 0 : CampaignSystemsManager.projectedTaxIncome(settlement, CampaignSystemsData.get(player.serverLevel())),
                 limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
                 limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxStabilityPerDay(settlement.getId()),
-                limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxProsperityModifier(settlement.getId()),
                 limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
                 limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(), limitedView ? "Hidden" : settlement.getSettlerGrowthStatus(player.serverLevel().getGameTime()),
                 !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null, !limitedView && settlement.getUpkeepChest() != null,
@@ -221,9 +220,9 @@ public record SettlementSnapshot(
                 CampaignDefinitions.TraitDefinition definition = CampaignDefinitions.trait(traitId);
                 if (definition == null) continue;
                 int stability = definition.effect(CampaignDefinitions.EffectKind.STABILITY);
-                int wealth = definition.effect(CampaignDefinitions.EffectKind.WEALTH);
+                int treasury = definition.effect(CampaignDefinitions.EffectKind.TREASURY);
                 int unitMorale = definition.effect(CampaignDefinitions.EffectKind.MORALE);
-                if (stability == 0 && wealth == 0 && unitMorale == 0) continue;
+                if (stability == 0 && treasury == 0 && unitMorale == 0) continue;
                 values.add(new EffectEntry(definition.name(), "Ruler trait", definition.iconItem(), definition.tone().name(),
                         definition.effectsText(), "While ruler governs"));
             }
@@ -231,11 +230,11 @@ public record SettlementSnapshot(
         CampaignData.MarriageRecord marriage = settlement.getOwnerId() == null ? null : campaign.getMarriage(settlement.getOwnerId());
         if (marriage != null && (settlement.isCapital() || (settlement.getFactionTeam().isBlank() && settlement.getRank().ordinal() >= SettlementData.SettlementRank.CITY.ordinal()))) {
             int spouseStability = marriage.effectiveStabilityBonus(data);
-            int spouseWealth = marriage.effectiveWealthPerDay(data);
+            int spouseTreasury = marriage.effectiveTreasuryPerDay(data);
             int spouseMorale = marriage.effectiveMoraleBonus(data);
-            if (spouseStability != 0 || spouseWealth != 0 || spouseMorale != 0) {
-                String details = joinEffects(spouseStability, spouseWealth, spouseMorale);
-                String tone = spouseStability + spouseWealth + spouseMorale >= 0 ? "POSITIVE" : "NEGATIVE";
+            if (spouseStability != 0 || spouseTreasury != 0 || spouseMorale != 0) {
+                String details = joinEffects(spouseStability, spouseTreasury, spouseMorale);
+                String tone = spouseStability + spouseTreasury + spouseMorale >= 0 ? "POSITIVE" : "NEGATIVE";
                 String spouseName = marriage.spouseName();
                 if (marriage.kind() == CampaignData.MarriageKind.PLAYER && marriage.spousePlayerId() != null) {
                     SettlementData.CharacterRecord spouseCharacter = data.getCharacter(marriage.spousePlayerId());
@@ -249,10 +248,10 @@ public record SettlementSnapshot(
             int spouseIndex = 1;
             for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(settlement.getOwnerId())) {
                 int stability = CampaignData.scaledSpouseEffect(additional.stabilityBonus(), spouseIndex);
-                int wealth = CampaignData.scaledSpouseEffect(additional.wealthPerDay(), spouseIndex);
+                int treasury = CampaignData.scaledSpouseEffect(additional.treasuryPerDay(), spouseIndex);
                 int extraMorale = CampaignData.scaledSpouseEffect(additional.moraleBonus(), spouseIndex);
-                String details = joinEffects(stability, wealth, extraMorale) + " (" + CampaignData.spouseEffectPercent(spouseIndex) + "% spouse scaling)";
-                String tone = stability + wealth + extraMorale >= 0 ? "POSITIVE" : "NEGATIVE";
+                String details = joinEffects(stability, treasury, extraMorale) + " (" + CampaignData.spouseEffectPercent(spouseIndex) + "% spouse scaling)";
+                String tone = stability + treasury + extraMorale >= 0 ? "POSITIVE" : "NEGATIVE";
                 values.add(new EffectEntry("Additional spouse: " + additional.spouseName(), "Marriage", "minecraft:rose_bush", tone, details, "While married"));
                 spouseIndex++;
             }
@@ -275,31 +274,21 @@ public record SettlementSnapshot(
             String detail = modifier.detail;
             List<String> mechanical = new ArrayList<>();
             if (modifier.stabilityPerDay != 0) mechanical.add(signed(modifier.stabilityPerDay) + " daily stability");
-            if (modifier.prosperity != 0) mechanical.add(signed(modifier.prosperity) + " prosperity");
             if (modifier.morale != 0) mechanical.add(signed(modifier.morale) + " recruit morale");
             if (!mechanical.isEmpty()) detail = detail.isBlank() ? String.join(", ", mechanical) : detail + " — " + String.join(", ", mechanical);
             values.add(new EffectEntry(modifier.name, modifier.source, modifier.iconItem, modifier.tone, detail, duration));
         }
-        int prosperity = extra.prosperity(settlement.getId());
-        long currentDay = player.serverLevel().getDayTime() / 24000L;
-        int averageDeposit = extra.averageWealthDeposit(settlement.getId(), currentDay, 7);
-        String prosperityDetail = "Recent wealth entering the settlement is the main driver. 7-day average deposit: " + averageDeposit + " wealth/day. "
-                + (prosperity >= 65 ? "A strong economy supports settlement growth and advancement."
-                : prosperity < 30 ? "Weak economic activity is holding the settlement back."
-                : "The settlement economy is stable but unexceptional.");
-        values.add(new EffectEntry("Prosperity: " + prosperity + "/100", "Settlement economy", "minecraft:emerald",
-                prosperity >= 65 ? "POSITIVE" : prosperity < 30 ? "NEGATIVE" : "MIXED", prosperityDetail, "Current"));
         values.add(new EffectEntry("Major City / Tier IV", "Settlement development", "minecraft:bricks", "MIXED",
                 "Requires City rank, " + SettlementConfig.MAJOR_CITY_MIN_POPULATION.get() + " civilian population, "
                         + SettlementConfig.MAJOR_CITY_MIN_STABILITY.get() + " Stability, "
-                        + SettlementConfig.MAJOR_CITY_MIN_PROSPERITY.get() + " Prosperity, housing for all registered villagers, and 1 Main + 2 Secondary Capture Zones. Capital is a political designation and grants no research tier.", "Server requirements"));
+                        + "housing for all registered villagers, and 1 Main + 2 Secondary Capture Zones. Capital is a political designation and grants no research tier.", "Server requirements"));
         return values.stream().limit(32).toList();
     }
 
-    private static String joinEffects(int stability, int wealth, int morale) {
+    private static String joinEffects(int stability, int treasury, int morale) {
         List<String> parts = new ArrayList<>();
         if (stability != 0) parts.add(signed(stability) + " daily stability");
-        if (wealth != 0) parts.add(signed(wealth) + " daily wealth");
+        if (treasury != 0) parts.add(signed(treasury) + " State Treasury/day");
         if (morale != 0) parts.add(signed(morale) + " recruit morale target");
         return String.join(", ", parts);
     }
@@ -326,8 +315,8 @@ public record SettlementSnapshot(
         buffer.writeUtf(bannerMode, 16); buffer.writeNbt(settlementBannerStack); buffer.writeUtf(rosterName, 64);
         writeList(buffer, unitTemplates, UnitTemplateEntry::encode);
         buffer.writeVarInt(villagerCount); buffer.writeDouble(populationMultiplier); buffer.writeVarInt(civilianPopulation); buffer.writeVarInt(militaryPopulation); buffer.writeVarInt(totalPopulation);
-        buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(wealth); buffer.writeVarInt(prosperity);
-        buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(taxRatePercent); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay); buffer.writeInt(taxProsperityModifier);
+        buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(treasury);
+        buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(taxRatePercent); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay);
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
         buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts); buffer.writeUtf(settlerGrowthStatus, 128);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet); buffer.writeBoolean(upkeepChestSet);
@@ -343,8 +332,8 @@ public record SettlementSnapshot(
                 buffer.readUtf(64), buffer.readUtf(64), safe(buffer.readNbt()), buffer.readUtf(16), safe(buffer.readNbt()), buffer.readUtf(64),
                 readList(buffer, UnitTemplateEntry::decode, 16),
                 buffer.readVarInt(), buffer.readDouble(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
-                buffer.readUtf(16), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readInt(), buffer.readInt(),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
+                buffer.readUtf(16), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readUtf(128),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),

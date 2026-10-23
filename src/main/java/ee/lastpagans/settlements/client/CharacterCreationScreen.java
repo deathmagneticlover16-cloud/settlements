@@ -54,7 +54,7 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         middle.setValue(draft.middle());
         last.setValue(draft.last());
 
-        addRenderableWidget(Button.builder(Component.literal("Preview Character"), button -> preview())
+        addRenderableWidget(Button.builder(Component.literal("Choose Traits"), button -> continueToTraits())
                 .bounds(left + 260, top + 346, 160, 20).build());
 
         breastsNo = addRenderableWidget(Button.builder(Component.literal("No"), button -> setBreasts(false))
@@ -94,13 +94,13 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         return box;
     }
 
-    private void preview() {
+    private void continueToTraits() {
         if (first.getValue().trim().isBlank() || last.getValue().trim().isBlank()) {
             warning = "A first and last name are required.";
             return;
         }
         saveIdentity();
-        minecraft.setScreen(new CharacterPreviewScreen(session));
+        minecraft.setScreen(new TraitSelectionScreen(session));
     }
 
     private void saveIdentity() {

@@ -5,21 +5,21 @@ import net.minecraft.network.FriendlyByteBuf;
 import java.util.ArrayList;
 import java.util.List;
 
-public record MercenaryRosterSnapshot(String settlementId, String settlementName, String factionName, int availableWealth,
+public record MercenaryRosterSnapshot(String settlementId, String settlementName, String factionName, int availableTreasury,
                                       int reliability, List<Entry> entries, String message) {
     public void encode(FriendlyByteBuf buffer) {
         buffer.writeUtf(settlementId, 64); buffer.writeUtf(settlementName, 96); buffer.writeUtf(factionName, 96);
-        buffer.writeInt(availableWealth); buffer.writeInt(reliability); buffer.writeVarInt(entries.size());
+        buffer.writeInt(availableTreasury); buffer.writeInt(reliability); buffer.writeVarInt(entries.size());
         for (Entry entry : entries) entry.encode(buffer);
         buffer.writeUtf(message == null ? "" : message, 512);
     }
 
     public static MercenaryRosterSnapshot decode(FriendlyByteBuf buffer) {
         String settlement = buffer.readUtf(64), settlementName = buffer.readUtf(96), faction = buffer.readUtf(96);
-        int wealth = buffer.readInt(), reliability = buffer.readInt();
+        int treasury = buffer.readInt(), reliability = buffer.readInt();
         int count = Math.min(128, Math.max(0, buffer.readVarInt()));
         List<Entry> entries = new ArrayList<>(count); for (int i = 0; i < count; i++) entries.add(Entry.decode(buffer));
-        return new MercenaryRosterSnapshot(settlement, settlementName, faction, wealth, reliability, List.copyOf(entries), buffer.readUtf(512));
+        return new MercenaryRosterSnapshot(settlement, settlementName, faction, treasury, reliability, List.copyOf(entries), buffer.readUtf(512));
     }
 
     public record Entry(String id, String name, String iconItem, String composition, int size, int hireCost, int effectiveHireCost,

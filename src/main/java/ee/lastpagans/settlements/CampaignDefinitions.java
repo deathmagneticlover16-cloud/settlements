@@ -46,7 +46,7 @@ public final class CampaignDefinitions {
                 List.of(new TraitEffect("Diplomatic relations", "+8", 8, EffectKind.RELATIONS))));
         register(new TraitDefinition("frugal", "Frugal", "minecraft:emerald", TraitTone.POSITIVE,
                 "Avoids waste and stretches settlement funds further.",
-                List.of(new TraitEffect("Settlement wealth", "+1 per day", 1, EffectKind.WEALTH))));
+                List.of(new TraitEffect("State Treasury", "+1 per day", 1, EffectKind.TREASURY))));
         register(new TraitDefinition("warlike", "Warlike", "minecraft:shield", TraitTone.MIXED,
                 "A forceful military character whose confidence can also strain peace.",
                 List.of(
@@ -58,7 +58,7 @@ public final class CampaignDefinitions {
                 List.of(new TraitEffect("Reliability change magnitude", "-35%", -35, EffectKind.RELIABILITY))));
         register(new TraitDefinition("extravagant", "Extravagant", "minecraft:gold_ingot", TraitTone.NEGATIVE,
                 "Spends freely on display, gifts and household comforts.",
-                List.of(new TraitEffect("Settlement wealth", "-1 per day", -1, EffectKind.WEALTH))));
+                List.of(new TraitEffect("State Treasury", "-1 per day", -1, EffectKind.TREASURY))));
         register(new TraitDefinition("frail", "Frail", "minecraft:spider_eye", TraitTone.NEGATIVE,
                 "Poor health and limited ability to withstand long campaigns.",
                 List.of(new TraitEffect("Recruit morale", "-3", -3, EffectKind.MORALE))));
@@ -91,7 +91,7 @@ public final class CampaignDefinitions {
         register(new TraitDefinition("scholarly", "Scholarly", "minecraft:lectern", TraitTone.POSITIVE,
                 "A learned ruler who organizes scribes, study and technical inquiry efficiently.",
                 List.of(new TraitEffect("Research speed", "+15%", 15, EffectKind.RESEARCH_SPEED),
-                        new TraitEffect("Settlement wealth", "+1 per day", 1, EffectKind.WEALTH))));
+                        new TraitEffect("State Treasury", "+1 per day", 1, EffectKind.TREASURY))));
     }
 
     private CampaignDefinitions() {}
@@ -108,11 +108,9 @@ public final class CampaignDefinitions {
         return List.copyOf(TRAITS.values());
     }
 
-    /** Traits offered to newly-created player characters. Legacy reliability/fertility remain readable but are not rolled. */
+    /** Traits offered to newly-created player characters. */
     public static List<TraitDefinition> playableTraits() {
-        return TRAITS.values().stream()
-                .filter(value -> !value.id().equals("reliable") && !value.id().equals("fertile"))
-                .toList();
+        return List.copyOf(TRAITS.values());
     }
 
     /** Deterministic three-card roll. The server uses the same method to reject modified-client trait cheating. */
@@ -143,13 +141,6 @@ public final class CampaignDefinitions {
             previous.add(choice);
         }
         return rerollRound >= -1 && rerollRound <= 2;
-    }
-
-    /** Legacy fallback for old callers; new character creation uses the three-card chooser. */
-    public static List<String> assignStartingTraits(UUID playerId, String seedText) {
-        List<String> selected = new ArrayList<>();
-        for (int round = 0; round < 3; round++) selected.add(traitChoices(playerId, seedText, round, false, selected).get(0));
-        return List.copyOf(selected);
     }
 
     public static int totalEffect(List<String> traitIds, EffectKind kind) {
@@ -229,7 +220,7 @@ public final class CampaignDefinitions {
     }
 
     public enum TraitTone { POSITIVE, NEGATIVE, MIXED, NEUTRAL }
-    public enum EffectKind { STABILITY, WEALTH, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER, RESEARCH_SPEED, HEALTH }
+    public enum EffectKind { STABILITY, TREASURY, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER, RESEARCH_SPEED, HEALTH }
 
     public record TraitEffect(String label, String displayValue, int amount, EffectKind kind) {}
 

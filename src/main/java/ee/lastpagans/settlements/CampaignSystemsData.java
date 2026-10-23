@@ -24,22 +24,19 @@ import java.util.UUID;
 public final class CampaignSystemsData extends SavedData {
     private static final String DATA_NAME = "settlements_campaign_systems";
 
-    private final Map<String, Integer> factionWealth = new HashMap<>();
+    private final Map<String, Integer> stateTreasuries = new HashMap<>();
     private final Map<String, Integer> marriageAlliances = new HashMap<>();
     private final Map<UUID, Integer> devotion = new HashMap<>();
     private final Map<UUID, Long> lastHolyVisitDay = new HashMap<>();
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<UUID, Integer> divorceCount = new HashMap<>();
     private final Map<UUID, Long> lastSettlementFoundingGameTime = new HashMap<>();
-    private final Map<String, Integer> prosperity = new HashMap<>();
     /** Settlement tax policy and daily collection history. */
     private final Map<String, Integer> taxPolicies = new HashMap<>();
     private final Map<String, Long> lastTaxDay = new HashMap<>();
     private final Map<String, Integer> lastTaxIncome = new HashMap<>();
     /** Capped settlement memory of repeated real levy service. It grants only modest starting XP. */
     private final Map<String, Integer> levyTradition = new HashMap<>();
-    /** Rolling settlement wealth deposits used to calculate Prosperity from actual economic activity. */
-    private final Map<String, List<WealthDepositRecord>> wealthDeposits = new HashMap<>();
     /** Temporary manpower awarded by peace terms. It is recruitable, but never raises a settlement's native MP ceiling. */
     private final Map<String, Integer> foreignManpower = new HashMap<>();
     private final Map<String, Long> debugTimeOffsetMillis = new HashMap<>();
@@ -73,29 +70,17 @@ public final class CampaignSystemsData extends SavedData {
 
     public static CampaignSystemsData load(CompoundTag tag) {
         CampaignSystemsData data = new CampaignSystemsData();
-        readStringIntMap(tag, "FactionWealth", data.factionWealth);
+        readStringIntMap(tag, "StateTreasuries", data.stateTreasuries);
         readStringIntMap(tag, "MarriageAlliances", data.marriageAlliances);
         readUuidIntMap(tag, "Devotion", data.devotion);
         readUuidLongMap(tag, "LastHolyVisitDay", data.lastHolyVisitDay);
         readUuidLongMap(tag, "LastPrayerDay", data.lastPrayerDay);
         readUuidIntMap(tag, "DivorceCount", data.divorceCount);
         readUuidLongMap(tag, "LastSettlementFoundingGameTime", data.lastSettlementFoundingGameTime);
-        readStringIntMap(tag, "Prosperity", data.prosperity);
         readStringIntMap(tag, "TaxPolicies", data.taxPolicies);
         readStringLongMap(tag, "LastTaxDay", data.lastTaxDay);
         readStringIntMap(tag, "LastTaxIncome", data.lastTaxIncome);
         readStringIntMap(tag, "LevyTradition", data.levyTradition);
-        for (Tag raw : tag.getList("WealthDeposits", Tag.TAG_COMPOUND)) {
-            CompoundTag entry = (CompoundTag) raw;
-            String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
-            if (settlement.isBlank()) continue;
-            List<WealthDepositRecord> samples = new ArrayList<>();
-            for (Tag sampleRaw : entry.getList("Samples", Tag.TAG_COMPOUND)) {
-                WealthDepositRecord sample = WealthDepositRecord.fromNBT((CompoundTag) sampleRaw);
-                if (sample.amount() > 0) samples.add(sample);
-            }
-            if (!samples.isEmpty()) data.wealthDeposits.put(settlement, samples);
-        }
         readStringIntMap(tag, "ForeignManpower", data.foreignManpower);
         readStringLongMap(tag, "DebugOffsets", data.debugTimeOffsetMillis);
         readStringLongMap(tag, "LastModifierDay", data.lastModifierDay);
@@ -197,25 +182,17 @@ public final class CampaignSystemsData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
-        writeStringIntMap(tag, "FactionWealth", factionWealth);
+        writeStringIntMap(tag, "StateTreasuries", stateTreasuries);
         writeStringIntMap(tag, "MarriageAlliances", marriageAlliances);
         writeUuidIntMap(tag, "Devotion", devotion);
         writeUuidLongMap(tag, "LastHolyVisitDay", lastHolyVisitDay);
         writeUuidLongMap(tag, "LastPrayerDay", lastPrayerDay);
         writeUuidIntMap(tag, "DivorceCount", divorceCount);
         writeUuidLongMap(tag, "LastSettlementFoundingGameTime", lastSettlementFoundingGameTime);
-        writeStringIntMap(tag, "Prosperity", prosperity);
         writeStringIntMap(tag, "TaxPolicies", taxPolicies);
         writeStringLongMap(tag, "LastTaxDay", lastTaxDay);
         writeStringIntMap(tag, "LastTaxIncome", lastTaxIncome);
         writeStringIntMap(tag, "LevyTradition", levyTradition);
-        ListTag wealthDepositTag = new ListTag();
-        wealthDeposits.forEach((settlement, samples) -> {
-            CompoundTag entry = new CompoundTag(); entry.putString("Settlement", settlement);
-            ListTag list = new ListTag(); samples.forEach(sample -> list.add(sample.toNBT()));
-            entry.put("Samples", list); wealthDepositTag.add(entry);
-        });
-        tag.put("WealthDeposits", wealthDepositTag);
         writeStringIntMap(tag, "ForeignManpower", foreignManpower);
         writeStringLongMap(tag, "DebugOffsets", debugTimeOffsetMillis);
         writeStringLongMap(tag, "LastModifierDay", lastModifierDay);
@@ -261,10 +238,10 @@ public final class CampaignSystemsData extends SavedData {
         return tag;
     }
 
-    public int factionWealth(String faction) { return factionWealth.getOrDefault(faction == null ? "" : faction, 0); }
-    public void setFactionWealth(String faction, int value) { if (faction == null || faction.isBlank()) return; factionWealth.put(faction, Math.max(0, value)); setDirty(); }
-    public void changeFactionWealth(String faction, int delta) { setFactionWealth(faction, (int)Math.max(0L, Math.min(Integer.MAX_VALUE, (long)factionWealth(faction) + delta))); }
-    public boolean spendFactionWealth(String faction, int amount) { int cost = Math.max(0, amount); if (factionWealth(faction) < cost) return false; setFactionWealth(faction, factionWealth(faction) - cost); return true; }
+    public int treasuryBalance(String state) { return stateTreasuries.getOrDefault(state == null ? "" : state, 0); }
+    public void setTreasuryBalance(String state, int value) { if (state == null || state.isBlank()) return; stateTreasuries.put(state, Math.max(0, value)); setDirty(); }
+    public void changeTreasury(String state, int delta) { setTreasuryBalance(state, (int)Math.max(0L, Math.min(Integer.MAX_VALUE, (long)treasuryBalance(state) + delta))); }
+    public boolean spendTreasury(String state, int amount) { int cost = Math.max(0, amount); if (treasuryBalance(state) < cost) return false; setTreasuryBalance(state, treasuryBalance(state) - cost); return true; }
     public int marriageAllianceCount(String first, String second) { return marriageAlliances.getOrDefault(pairKey(first, second), 0); }
     public boolean marriageAlliance(String first, String second) { return marriageAllianceCount(first, second) > 0; }
     public void addMarriageAlliance(String first, String second) { String key = pairKey(first, second); if (key.isBlank()) return; marriageAlliances.put(key, marriageAlliances.getOrDefault(key, 0) + 1); setDirty(); }
@@ -281,9 +258,6 @@ public final class CampaignSystemsData extends SavedData {
     public long lastSettlementFoundingGameTime(UUID player) { return player == null ? Long.MIN_VALUE / 4 : lastSettlementFoundingGameTime.getOrDefault(player, Long.MIN_VALUE / 4); }
     public void markSettlementFounded(UUID player, long gameTime) { if (player != null) { lastSettlementFoundingGameTime.put(player, Math.max(0L, gameTime)); setDirty(); } }
     public int incrementDivorceCount(UUID player) { if (player == null) return 0; int value = divorceCount(player) + 1; divorceCount.put(player, value); setDirty(); return value; }
-
-    public int prosperity(String settlement) { return prosperity.getOrDefault(SettlementData.normalizeId(settlement), 0); }
-    public void setProsperity(String settlement, int value) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; prosperity.put(id, clamp(value, 0, 100)); setDirty(); }
 
     /** Continuous taxation policy from 50% (low) through 100% (normal) to 150% (high). */
     public int taxRatePercent(String settlement) {
@@ -310,18 +284,6 @@ public final class CampaignSystemsData extends SavedData {
         if (rate >= 120) return -1;
         return 0;
     }
-    public int taxProsperityModifier(String settlement) {
-        return clamp((int)Math.round((100 - taxRatePercent(settlement)) / 10.0D), -5, 5);
-    }
-    /** Legacy helper retained for old call sites while the frontend migrates to the slider. */
-    public TaxPolicy taxPolicy(String settlement) {
-        int rate = taxRatePercent(settlement);
-        return rate <= 75 ? TaxPolicy.LOW : rate >= 125 ? TaxPolicy.HIGH : TaxPolicy.NORMAL;
-    }
-    public void setTaxPolicy(String settlement, TaxPolicy policy) {
-        TaxPolicy safe = policy == null ? TaxPolicy.NORMAL : policy;
-        setTaxRatePercent(settlement, safe.ratePercent());
-    }
     public boolean beginTaxDay(String settlement, long day) {
         String id = SettlementData.normalizeId(settlement);
         if (id.isBlank() || lastTaxDay.getOrDefault(id, Long.MIN_VALUE) == day) return false;
@@ -339,50 +301,6 @@ public final class CampaignSystemsData extends SavedData {
     public int levyTradition(String settlement) { return levyTradition.getOrDefault(SettlementData.normalizeId(settlement), 0); }
     public void setLevyTradition(String settlement, int value) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; levyTradition.put(id, clamp(value, 0, 50)); setDirty(); }
     public int changeLevyTradition(String settlement, int delta) { setLevyTradition(settlement, levyTradition(settlement) + delta); return levyTradition(settlement); }
-    public void recordWealthDeposit(String settlement, int amount, long day) {
-        String id = SettlementData.normalizeId(settlement);
-        if (id.isBlank() || amount <= 0) return;
-        List<WealthDepositRecord> samples = wealthDeposits.computeIfAbsent(id, ignored -> new ArrayList<>());
-        for (int i = 0; i < samples.size(); i++) {
-            WealthDepositRecord sample = samples.get(i);
-            if (sample.day() == day) {
-                samples.set(i, new WealthDepositRecord(day, Math.min(1_000_000, sample.amount() + amount)));
-                pruneWealthDeposits(id, day, 30);
-                setDirty();
-                return;
-            }
-        }
-        samples.add(new WealthDepositRecord(day, Math.min(1_000_000, amount)));
-        pruneWealthDeposits(id, day, 30);
-        setDirty();
-    }
-    public int averageWealthDeposit(String settlement, long currentDay, int windowDays) {
-        String id = SettlementData.normalizeId(settlement);
-        int window = Math.max(1, windowDays);
-        long firstDay = currentDay - window + 1L;
-        long sum = 0L;
-        long earliest = Long.MAX_VALUE;
-        for (WealthDepositRecord sample : wealthDeposits.getOrDefault(id, List.of())) {
-            if (sample.day() >= firstDay && sample.day() <= currentDay) {
-                sum += sample.amount();
-                earliest = Math.min(earliest, sample.day());
-            }
-        }
-        if (earliest == Long.MAX_VALUE) return 0;
-        int observedDays = (int) Math.max(1L, Math.min(window, currentDay - earliest + 1L));
-        return (int) Math.min(Integer.MAX_VALUE, sum / observedDays);
-    }
-    public boolean hasWealthDepositHistory(String settlement) {
-        return !wealthDeposits.getOrDefault(SettlementData.normalizeId(settlement), List.of()).isEmpty();
-    }
-    private void pruneWealthDeposits(String settlement, long currentDay, int keepDays) {
-        List<WealthDepositRecord> samples = wealthDeposits.get(settlement);
-        if (samples == null) return;
-        long firstDay = currentDay - Math.max(1, keepDays) + 1L;
-        samples.removeIf(sample -> sample.day() < firstDay || sample.day() > currentDay + 1L);
-        if (samples.isEmpty()) wealthDeposits.remove(settlement);
-    }
-
     public int foreignManpower(String settlement) { return foreignManpower.getOrDefault(SettlementData.normalizeId(settlement), 0); }
     public void setForeignManpower(String settlement, int value) {
         String id = SettlementData.normalizeId(settlement);
@@ -452,12 +370,10 @@ public final class CampaignSystemsData extends SavedData {
     public void clearSettlementData(String settlement) {
         String id = SettlementData.normalizeId(settlement);
         if (id.isBlank()) return;
-        prosperity.remove(id);
         taxPolicies.remove(id);
         lastTaxDay.remove(id);
         lastTaxIncome.remove(id);
         levyTradition.remove(id);
-        wealthDeposits.remove(id);
         foreignManpower.remove(id);
         debugTimeOffsetMillis.remove(id);
         lastModifierDay.remove(id);
@@ -628,44 +544,6 @@ public final class CampaignSystemsData extends SavedData {
     }
     public void resetCandidateHistory(UUID player) { if (player != null && candidateHistory.remove(player) != null) setDirty(); }
 
-    public record WealthDepositRecord(long day, int amount) {
-        public WealthDepositRecord { amount = Math.max(0, amount); }
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putLong("Day", day); tag.putInt("Amount", amount); return tag; }
-        private static WealthDepositRecord fromNBT(CompoundTag tag) { return new WealthDepositRecord(tag.getLong("Day"), tag.getInt("Amount")); }
-    }
-
-    public enum TaxPolicy {
-        LOW("Low", 50, 1, 3),
-        NORMAL("Normal", 100, 0, 0),
-        HIGH("High", 150, -2, -5);
-
-        private final String displayName;
-        private final int ratePercent;
-        private final int stabilityPerDay;
-        private final int prosperityModifier;
-
-        TaxPolicy(String displayName, int ratePercent, int stabilityPerDay, int prosperityModifier) {
-            this.displayName = displayName;
-            this.ratePercent = ratePercent;
-            this.stabilityPerDay = stabilityPerDay;
-            this.prosperityModifier = prosperityModifier;
-        }
-
-        public String displayName() { return displayName; }
-        public int ratePercent() { return ratePercent; }
-        public int stabilityPerDay() { return stabilityPerDay; }
-        public int prosperityModifier() { return prosperityModifier; }
-        public static TaxPolicy parse(String raw) {
-            if (raw == null) return NORMAL;
-            try { return valueOf(raw.trim().toUpperCase(Locale.ROOT)); }
-            catch (IllegalArgumentException ignored) { return NORMAL; }
-        }
-        public static TaxPolicy fromOrdinal(int ordinal) {
-            TaxPolicy[] values = values();
-            return ordinal < 0 || ordinal >= values.length ? NORMAL : values[ordinal];
-        }
-    }
-
     public record RegionRecord(String dimension, BlockPos min, BlockPos max, AreaSelection.Shape shape) {
         public RegionRecord(String dimension, BlockPos min, BlockPos max) { this(dimension, min, max, AreaSelection.Shape.BOX); }
         public RegionRecord {
@@ -694,13 +572,13 @@ public final class CampaignSystemsData extends SavedData {
 
     public static final class ModifierRecord {
         public final String id, name, iconItem, tone, source, detail;
-        public final int stabilityPerDay, prosperity, morale;
+        public final int stabilityPerDay, morale;
         public final long expiresAtMillis;
-        public ModifierRecord(String id, String name, String iconItem, String tone, String source, String detail, int stabilityPerDay, int prosperity, int morale, long expiresAtMillis) {
-            this.id = SettlementData.normalizeId(id); this.name = SettlementData.cleanText(name, this.id, 64); this.iconItem = iconItem == null ? "minecraft:book" : iconItem; this.tone = tone == null ? "NEUTRAL" : tone.toUpperCase(Locale.ROOT); this.source = SettlementData.cleanText(source, "Campaign", 64); this.detail = SettlementData.cleanText(detail, "", 180); this.stabilityPerDay = stabilityPerDay; this.prosperity = prosperity; this.morale = morale; this.expiresAtMillis = Math.max(0L, expiresAtMillis);
+        public ModifierRecord(String id, String name, String iconItem, String tone, String source, String detail, int stabilityPerDay, int morale, long expiresAtMillis) {
+            this.id = SettlementData.normalizeId(id); this.name = SettlementData.cleanText(name, this.id, 64); this.iconItem = iconItem == null ? "minecraft:book" : iconItem; this.tone = tone == null ? "NEUTRAL" : tone.toUpperCase(Locale.ROOT); this.source = SettlementData.cleanText(source, "Campaign", 64); this.detail = SettlementData.cleanText(detail, "", 180); this.stabilityPerDay = stabilityPerDay; this.morale = morale; this.expiresAtMillis = Math.max(0L, expiresAtMillis);
         }
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putString("Id", id); tag.putString("Name", name); tag.putString("Icon", iconItem); tag.putString("Tone", tone); tag.putString("Source", source); tag.putString("Detail", detail); tag.putInt("Stability", stabilityPerDay); tag.putInt("Prosperity", prosperity); tag.putInt("Morale", morale); tag.putLong("Expires", expiresAtMillis); return tag; }
-        private static ModifierRecord fromNBT(CompoundTag tag) { return new ModifierRecord(tag.getString("Id"), tag.getString("Name"), tag.getString("Icon"), tag.getString("Tone"), tag.getString("Source"), tag.getString("Detail"), tag.getInt("Stability"), tag.getInt("Prosperity"), tag.getInt("Morale"), tag.getLong("Expires")); }
+        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putString("Id", id); tag.putString("Name", name); tag.putString("Icon", iconItem); tag.putString("Tone", tone); tag.putString("Source", source); tag.putString("Detail", detail); tag.putInt("Stability", stabilityPerDay); tag.putInt("Morale", morale); tag.putLong("Expires", expiresAtMillis); return tag; }
+        private static ModifierRecord fromNBT(CompoundTag tag) { return new ModifierRecord(tag.getString("Id"), tag.getString("Name"), tag.getString("Icon"), tag.getString("Tone"), tag.getString("Source"), tag.getString("Detail"), tag.getInt("Stability"), tag.getInt("Morale"), tag.getLong("Expires")); }
         public boolean permanent() { return expiresAtMillis <= 0L; }
     }
 
@@ -740,9 +618,9 @@ public final class CampaignSystemsData extends SavedData {
         private static PeaceTerm fromNBT(CompoundTag tag) { return new PeaceTerm(tag.getString("Type"), tag.getString("Target"), tag.getInt("Amount"), tag.getInt("Duration"), tag.getString("Text")); }
     }
 
-    public record AidRecord(UUID id, String fromFaction, String targetSettlement, int manpower, int wealth, int food, boolean recurring, long nextDay) {
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("From", fromFaction == null ? "" : fromFaction); tag.putString("Target", SettlementData.normalizeId(targetSettlement)); tag.putInt("Manpower", Math.max(0, manpower)); tag.putInt("Wealth", Math.max(0, wealth)); tag.putInt("Food", Math.max(0, food)); tag.putBoolean("Recurring", recurring); tag.putLong("NextDay", nextDay); return tag; }
-        private static AidRecord fromNBT(CompoundTag tag) { return new AidRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("From"), tag.getString("Target"), tag.getInt("Manpower"), tag.getInt("Wealth"), tag.getInt("Food"), tag.getBoolean("Recurring"), tag.getLong("NextDay")); }
+    public record AidRecord(UUID id, String fromFaction, String targetSettlement, int manpower, int treasury, int food, boolean recurring, long nextDay) {
+        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("From", fromFaction == null ? "" : fromFaction); tag.putString("Target", SettlementData.normalizeId(targetSettlement)); tag.putInt("Manpower", Math.max(0, manpower)); tag.putInt("Treasury", Math.max(0, treasury)); tag.putInt("Food", Math.max(0, food)); tag.putBoolean("Recurring", recurring); tag.putLong("NextDay", nextDay); return tag; }
+        private static AidRecord fromNBT(CompoundTag tag) { return new AidRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("From"), tag.getString("Target"), tag.getInt("Manpower"), tag.getInt("Treasury"), tag.getInt("Food"), tag.getBoolean("Recurring"), tag.getLong("NextDay")); }
     }
 
 
@@ -795,11 +673,11 @@ public final class CampaignSystemsData extends SavedData {
         }
     }
 
-    public record ReparationRecord(UUID id, String payerFaction, String receiverFaction, int wealthPerDay, int remainingDays, long nextDay) {
-        public ReparationRecord { if (id == null) id = UUID.randomUUID(); payerFaction = payerFaction == null ? "" : payerFaction; receiverFaction = receiverFaction == null ? "" : receiverFaction; wealthPerDay = Math.max(0, wealthPerDay); remainingDays = Math.max(0, remainingDays); }
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("Payer", payerFaction); tag.putString("Receiver", receiverFaction); tag.putInt("Wealth", wealthPerDay); tag.putInt("Remaining", remainingDays); tag.putLong("NextDay", nextDay); return tag; }
-        private static ReparationRecord fromNBT(CompoundTag tag) { return new ReparationRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("Payer"), tag.getString("Receiver"), tag.getInt("Wealth"), tag.getInt("Remaining"), tag.getLong("NextDay")); }
-        public ReparationRecord next(long day, int remaining) { return new ReparationRecord(id, payerFaction, receiverFaction, wealthPerDay, remaining, day); }
+    public record ReparationRecord(UUID id, String payerFaction, String receiverFaction, int treasuryPerDay, int remainingDays, long nextDay) {
+        public ReparationRecord { if (id == null) id = UUID.randomUUID(); payerFaction = payerFaction == null ? "" : payerFaction; receiverFaction = receiverFaction == null ? "" : receiverFaction; treasuryPerDay = Math.max(0, treasuryPerDay); remainingDays = Math.max(0, remainingDays); }
+        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("Payer", payerFaction); tag.putString("Receiver", receiverFaction); tag.putInt("Treasury", treasuryPerDay); tag.putInt("Remaining", remainingDays); tag.putLong("NextDay", nextDay); return tag; }
+        private static ReparationRecord fromNBT(CompoundTag tag) { return new ReparationRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("Payer"), tag.getString("Receiver"), tag.getInt("Treasury"), tag.getInt("Remaining"), tag.getLong("NextDay")); }
+        public ReparationRecord next(long day, int remaining) { return new ReparationRecord(id, payerFaction, receiverFaction, treasuryPerDay, remaining, day); }
     }
 
     public static final class CandidateHistory {

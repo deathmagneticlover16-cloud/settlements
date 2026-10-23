@@ -31,12 +31,11 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue LATER_SPOUSE_EFFECT_PERCENT;
     public static final ForgeConfigSpec.IntValue PRAYER_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue CURRENCY_DONATION_DEVOTION_GAIN;
-    public static final ForgeConfigSpec.IntValue CURRENCY_ITEM_WEALTH_VALUE;
+    public static final ForgeConfigSpec.IntValue CURRENCY_ITEM_TREASURY_VALUE;
     public static final ForgeConfigSpec.IntValue CHARACTER_RENAME_CURRENCY_COST;
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_TARGET_DAYS;
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP;
-    public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_WEALTH;
-    public static final ForgeConfigSpec.IntValue TAX_MIN_COLLECTION_EFFICIENCY_PERCENT;
+    public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_COIN;
     public static final ForgeConfigSpec.IntValue RESIDENT_BOUNDARY_CHECK_TICKS;
     public static final ForgeConfigSpec.BooleanValue SPAWN_FIRST_SETTLERS;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_COUNT;
@@ -51,7 +50,6 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue SETTLEMENT_FOUNDING_COOLDOWN_MINUTES;
     public static final ForgeConfigSpec.IntValue RESEARCH_FALLBACK_HOURS;
     public static final ForgeConfigSpec.IntValue SCHOLARLY_RESEARCH_BONUS_PERCENT;
-    public static final ForgeConfigSpec.IntValue RESEARCH_MAX_PROSPERITY_BONUS_PERCENT;
     public static final ForgeConfigSpec.IntValue RESERVED_RELIABILITY_MAGNITUDE_PERCENT;
     public static final ForgeConfigSpec.IntValue PLAGUE_DAILY_CHANCE_PER_10000;
     public static final ForgeConfigSpec.IntValue HEALTHY_PLAGUE_CHANCE_PERCENT;
@@ -64,13 +62,11 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue CAPTURE_MAX_SPEED_TROOPS;
     public static final ForgeConfigSpec.IntValue MAJOR_CITY_MIN_POPULATION;
     public static final ForgeConfigSpec.IntValue MAJOR_CITY_MIN_STABILITY;
-    public static final ForgeConfigSpec.IntValue MAJOR_CITY_MIN_PROSPERITY;
     public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_ENABLED;
     public static final ForgeConfigSpec.BooleanValue FACTION_FOUNDING_REQUIRE_TOWN;
     public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_POPULATION;
     public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_STABILITY;
-    public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_MIN_PROSPERITY;
-    public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_WEALTH_COST;
+    public static final ForgeConfigSpec.IntValue FACTION_FOUNDING_TREASURY_COST;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -140,8 +136,8 @@ public final class SettlementConfig {
         builder.pop();
 
         builder.push("economy");
-        CURRENCY_ITEM_WEALTH_VALUE = builder.comment("State Treasury value represented by one item in #settlements:currency when depositing or withdrawing physical currency.")
-                .defineInRange("currencyItemWealthValue", 10, 1, 100000);
+        CURRENCY_ITEM_TREASURY_VALUE = builder.comment("State Treasury value represented by one item in #settlements:currency when depositing or withdrawing physical currency.")
+                .defineInRange("currencyItemTreasuryValue", 10, 1, 100000);
         CHARACTER_RENAME_CURRENCY_COST = builder.comment("Number of #settlements:currency items consumed when a created character changes their personal name. Main House edits remain free.")
                 .defineInRange("characterRenameCurrencyCost", 10, 0, 100000);
         UPKEEP_CHEST_TARGET_DAYS = builder.comment("Automatic city-upkeep chest tries to maintain this many days of Food for civilians and tracked soldiers.")
@@ -151,10 +147,8 @@ public final class SettlementConfig {
         builder.pop();
 
         builder.push("taxation");
-        TAX_POPULATION_PER_WEALTH = builder.comment("Civilian population represented by one point of base daily tax revenue before policy and prosperity scaling.")
-                .defineInRange("populationPerWealth", 10, 1, 1000);
-        TAX_MIN_COLLECTION_EFFICIENCY_PERCENT = builder.comment("Minimum tax collection efficiency at 0 Prosperity. Efficiency scales linearly to 100% at 100 Prosperity.")
-                .defineInRange("minimumCollectionEfficiencyPercent", 50, 0, 100);
+        TAX_POPULATION_PER_COIN = builder.comment("Civilian population represented by one point of base daily State Treasury revenue before the tax rate is applied.")
+                .defineInRange("populationPerCoin", 10, 1, 1000);
         builder.pop();
 
         builder.push("residents");
@@ -212,8 +206,6 @@ public final class SettlementConfig {
                 .defineInRange("minimumPopulation", 500, 0, 1000000);
         MAJOR_CITY_MIN_STABILITY = builder.comment("Minimum Stability for Major City research status.")
                 .defineInRange("minimumStability", 65, 0, 100);
-        MAJOR_CITY_MIN_PROSPERITY = builder.comment("Minimum Prosperity for Major City research status.")
-                .defineInRange("minimumProsperity", 70, 0, 100);
         builder.pop();
 
         builder.push("events");
@@ -228,8 +220,6 @@ public final class SettlementConfig {
                 .defineInRange("fallbackResearchHours", 6, 1, 24 * 30);
         SCHOLARLY_RESEARCH_BONUS_PERCENT = builder.comment("Research-speed bonus supplied by the Scholarly ruler trait when History Stages research is active.")
                 .defineInRange("scholarlyResearchBonusPercent", 15, 0, 200);
-        RESEARCH_MAX_PROSPERITY_BONUS_PERCENT = builder.comment("Maximum research-speed bonus supplied by settlement Prosperity at 100 Prosperity.")
-                .defineInRange("maximumProsperityResearchBonusPercent", 10, 0, 100);
         builder.pop();
 
         builder.push("faction_founding");
@@ -241,10 +231,8 @@ public final class SettlementConfig {
                 .defineInRange("minimumPopulation", 75, 0, 100000);
         FACTION_FOUNDING_MIN_STABILITY = builder.comment("Minimum stability of the founding settlement.")
                 .defineInRange("minimumStability", 60, 0, 100);
-        FACTION_FOUNDING_MIN_PROSPERITY = builder.comment("Minimum prosperity of the founding settlement.")
-                .defineInRange("minimumProsperity", 40, 0, 100);
-        FACTION_FOUNDING_WEALTH_COST = builder.comment("State Treasury spent when upgrading from an independent polity into a full faction. Recruits' own configured faction-creation item cost still applies too.")
-                .defineInRange("wealthCost", 500, 0, 1000000);
+        FACTION_FOUNDING_TREASURY_COST = builder.comment("State Treasury spent when upgrading from an independent polity into a full faction. Recruits' own configured faction-creation item cost still applies too.")
+                .defineInRange("treasuryCost", 500, 0, 1000000);
         builder.pop();
         SPEC = builder.build();
     }

@@ -39,11 +39,10 @@ assets/settlements/textures/gui/
     mercenary_rosters.png
   icons/
     stability.png
-    prosperity.png
     population.png
     housing.png
     food.png
-    wealth.png
+    treasury.png
     manpower.png
     morale.png
     devotion.png

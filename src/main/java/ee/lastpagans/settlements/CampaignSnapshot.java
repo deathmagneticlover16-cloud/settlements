@@ -18,7 +18,7 @@ public record CampaignSnapshot(
         CompoundTag factionBanner,
         int settlementCount,
         int totalPopulation,
-        int totalWealth,
+        int totalTreasury,
         int totalFood,
         int maximumManpower,
         int availableManpower,
@@ -49,7 +49,9 @@ public record CampaignSnapshot(
         }
 
         int population = holdings.stream().mapToInt(SettlementData.SettlementRecord::getDisplayedPopulation).sum();
-        int wealth = holdings.isEmpty() ? 0 : StateTreasury.balance(player.serverLevel(), holdings.get(0));
+        int treasury = holdings.isEmpty()
+                ? CampaignSystemsData.get(player.serverLevel()).treasuryBalance(factionId)
+                : StateTreasury.balance(player.serverLevel(), holdings.get(0));
         int food = holdings.stream().mapToInt(SettlementData.SettlementRecord::getFood).sum();
         int maximum = holdings.stream().mapToInt(SettlementData.SettlementRecord::getMaximumManpower).sum();
         int available = holdings.stream().mapToInt(SettlementData.SettlementRecord::getAvailableManpower).sum();
@@ -76,7 +78,7 @@ public record CampaignSnapshot(
                 banner,
                 holdings.size(),
                 population,
-                wealth,
+                treasury,
                 food,
                 maximum,
                 available,
@@ -98,7 +100,7 @@ public record CampaignSnapshot(
         buffer.writeNbt(factionBanner);
         buffer.writeVarInt(settlementCount);
         buffer.writeVarInt(totalPopulation);
-        buffer.writeVarInt(totalWealth);
+        buffer.writeVarInt(totalTreasury);
         buffer.writeVarInt(totalFood);
         buffer.writeVarInt(maximumManpower);
         buffer.writeVarInt(availableManpower);

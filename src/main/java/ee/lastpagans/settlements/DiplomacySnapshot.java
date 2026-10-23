@@ -134,7 +134,7 @@ public record DiplomacySnapshot(
                 SettlementData.SettlementRecord target = settlementsData.getSettlement(value.targetSettlement());
                 aid.add(new AidEntry(value.id(), visibleWarId, value.fromFaction(), CampaignManager.factionName(value.fromFaction()),
                         value.targetSettlement(), target == null ? value.targetSettlement() : target.getName(),
-                        value.manpower(), value.wealth(), value.food(), value.recurring(), value.nextDay()));
+                        value.manpower(), value.treasury(), value.food(), value.recurring(), value.nextDay()));
             }
         }
 
@@ -155,9 +155,9 @@ public record DiplomacySnapshot(
 
     private static String prettyTerm(CampaignSystemsData.PeaceTerm term) {
         return switch (term.type()) {
-            case "WEALTH" -> term.amount() + " wealth";
+            case "TREASURY" -> term.amount() + " treasury";
             case "MANPOWER" -> term.amount() + " manpower";
-            case "REPARATIONS" -> term.amount() + " wealth/day for " + term.durationDays() + " days";
+            case "REPARATIONS" -> term.amount() + " treasury/day for " + term.durationDays() + " days";
             case "NAP" -> "NAP for " + term.durationDays() + " days";
             case "CONVERT_FAITH" -> "convert to " + term.text();
             case "TRANSFER_SETTLEMENT" -> "transfer settlement " + term.targetId();
@@ -247,13 +247,13 @@ public record DiplomacySnapshot(
     }
 
     public record AidEntry(UUID id, UUID warId, String fromFactionId, String fromFactionName,
-                           String targetSettlementId, String targetSettlementName, int manpower, int wealth, int food,
+                           String targetSettlementId, String targetSettlementName, int manpower, int treasury, int food,
                            boolean recurring, long nextDay) {
         private static void encode(AidEntry value, FriendlyByteBuf buffer) {
             buffer.writeUUID(value.id); buffer.writeUUID(value.warId);
             buffer.writeUtf(value.fromFactionId, 64); buffer.writeUtf(value.fromFactionName, 80);
             buffer.writeUtf(value.targetSettlementId, 64); buffer.writeUtf(value.targetSettlementName, 80);
-            buffer.writeInt(value.manpower); buffer.writeInt(value.wealth); buffer.writeInt(value.food);
+            buffer.writeInt(value.manpower); buffer.writeInt(value.treasury); buffer.writeInt(value.food);
             buffer.writeBoolean(value.recurring); buffer.writeLong(value.nextDay);
         }
         private static AidEntry decode(FriendlyByteBuf buffer) {
@@ -264,7 +264,7 @@ public record DiplomacySnapshot(
         public String summary() {
             List<String> parts = new ArrayList<>();
             if (manpower > 0) parts.add(manpower + " MP");
-            if (wealth > 0) parts.add(wealth + " wealth");
+            if (treasury > 0) parts.add(treasury + " treasury");
             if (food > 0) parts.add(food + " food");
             return String.join(" · ", parts);
         }

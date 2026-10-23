@@ -1,6 +1,5 @@
 package ee.lastpagans.settlements.api;
 
-import ee.lastpagans.settlements.CampaignSystemsData;
 import ee.lastpagans.settlements.CaptureZoneData;
 import ee.lastpagans.settlements.SettlementData;
 import ee.lastpagans.settlements.StateTreasury;
@@ -15,13 +14,12 @@ public final class SettlementCampaignApi {
     private SettlementCampaignApi() {}
 
     public static List<SettlementView> settlements(ServerLevel level) {
-        CampaignSystemsData systems = CampaignSystemsData.get(level);
         CaptureZoneData capture = CaptureZoneData.get(level);
         return SettlementData.get(level).getSettlements().stream().map(settlement -> new SettlementView(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(),
                 settlement.getTownSquareDimension(), settlement.getTownSquare(), settlement.getOwnerId(), settlement.isCapital(),
                 settlement.getFactionTeam(), settlement.getBackingFactionTeam(), settlement.getDisplayedPopulation(),
-                settlement.getStability(), systems.prosperity(settlement.getId()), StateTreasury.balance(level, settlement),
+                settlement.getStability(), StateTreasury.balance(level, settlement),
                 settlement.getClaimCount(), capture.zonesFor(settlement.getId()).size(), capture.occupyingTeam(settlement.getId())
         )).toList();
     }
@@ -32,7 +30,7 @@ public final class SettlementCampaignApi {
 
     public record SettlementView(
             String id, String name, String tier, String dimension, BlockPos center, UUID owner, boolean capital,
-            String factionId, String backingFactionId, int population, int stability, int prosperity,
+            String factionId, String backingFactionId, int population, int stability,
             int stateTreasury, int linkedClaims, int captureZones, String occupyingTeam
     ) {}
 }

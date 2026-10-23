@@ -48,8 +48,8 @@ public final class SettlerContractItem extends Item {
         CompoundTag tag = stack.getOrCreateTag();
         String settlementId = tag.getString(TAG_SETTLEMENT);
         if (!tag.hasUUID(TAG_CONTRACT_ID)) {
-            // Upgrade legacy contract items to a unique, server-tracked redemption token.
-            tag.putUUID(TAG_CONTRACT_ID, UUID.randomUUID());
+            serverPlayer.sendSystemMessage(Component.literal("This contract is invalid."));
+            return InteractionResultHolder.fail(stack);
         }
         UUID contractId = tag.getUUID(TAG_CONTRACT_ID);
         SettlementManager.ContractUseResult result = SettlementManager.useSettlerContract(serverPlayer, settlementId, contractId);

@@ -770,11 +770,11 @@ public final class CampaignData extends SavedData {
                 if (score > bestScore) { bestScore = score; traits = attempt; }
             }
             int stability = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.STABILITY);
-            int wealth = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.WEALTH);
+            int treasury = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.TREASURY);
             int morale = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.MORALE);
             String id = "generated_" + Long.toUnsignedString(random.nextLong(), 36);
-            String effect = describeSpouseEffects(stability, wealth, morale);
-            result.add(new NpcSpouse(id, fullName, gender, faith, cultures[culture], traits, effect, stability, wealth, morale));
+            String effect = describeSpouseEffects(stability, treasury, morale);
+            result.add(new NpcSpouse(id, fullName, gender, faith, cultures[culture], traits, effect, stability, treasury, morale));
         }
         return result;
     }
@@ -799,10 +799,10 @@ public final class CampaignData extends SavedData {
         return values.stream().anyMatch(value -> value != null && value.equalsIgnoreCase(wanted));
     }
 
-    private static String describeSpouseEffects(int stability, int wealth, int morale) {
+    private static String describeSpouseEffects(int stability, int treasury, int morale) {
         List<String> parts = new ArrayList<>();
         if (stability != 0) parts.add((stability > 0 ? "+" : "") + stability + " daily stability");
-        if (wealth != 0) parts.add((wealth > 0 ? "+" : "") + wealth + " daily wealth");
+        if (treasury != 0) parts.add((treasury > 0 ? "+" : "") + treasury + " State Treasury/day");
         if (morale != 0) parts.add((morale > 0 ? "+" : "") + morale + " recruit morale");
         return parts.isEmpty() ? "No direct settlement modifier" : String.join(", ", parts);
     }
@@ -931,7 +931,7 @@ public final class CampaignData extends SavedData {
     }
 
     public enum WarGoal {
-        SEIZE_WEALTH("Seize Wealth", WarType.RAID),
+        SEIZE_TREASURY("Seize Treasury", WarType.RAID),
         STEAL_SUPPLIES("Steal Supplies", WarType.RAID),
         PUNITIVE_RAID("Punitive Raid", WarType.RAID),
         BORDER_CLASH("Border Clash", WarType.SKIRMISH),
@@ -1382,7 +1382,7 @@ public final class CampaignData extends SavedData {
             List<String> traits,
             String effect,
             int stabilityBonus,
-            int wealthPerDay,
+            int treasuryPerDay,
             int moraleBonus
     ) {
         private CompoundTag toNBT() {
@@ -1397,7 +1397,7 @@ public final class CampaignData extends SavedData {
             tag.put("Traits", traitList);
             tag.putString("Effect", effect);
             tag.putInt("StabilityBonus", stabilityBonus);
-            tag.putInt("WealthPerDay", wealthPerDay);
+            tag.putInt("TreasuryPerDay", treasuryPerDay);
             tag.putInt("MoraleBonus", moraleBonus);
             return tag;
         }
@@ -1414,7 +1414,7 @@ public final class CampaignData extends SavedData {
                     List.copyOf(traits),
                     tag.getString("Effect"),
                     tag.getInt("StabilityBonus"),
-                    tag.getInt("WealthPerDay"),
+                    tag.getInt("TreasuryPerDay"),
                     tag.getInt("MoraleBonus")
             );
         }
@@ -1438,7 +1438,7 @@ public final class CampaignData extends SavedData {
         private final List<String> spouseTraits = new ArrayList<>();
         private String spouseEffect = "";
         private int stabilityBonus;
-        private int wealthPerDay;
+        private int treasuryPerDay;
         private int moraleBonus;
         private long marriedDay;
 
@@ -1456,7 +1456,7 @@ public final class CampaignData extends SavedData {
             record.spouseTraits.addAll(spouse.traits);
             record.spouseEffect = spouse.effect;
             record.stabilityBonus = spouse.stabilityBonus;
-            record.wealthPerDay = spouse.wealthPerDay;
+            record.treasuryPerDay = spouse.treasuryPerDay;
             record.moraleBonus = spouse.moraleBonus;
             record.marriedDay = Math.max(0L, day);
             return record;
@@ -1487,7 +1487,7 @@ public final class CampaignData extends SavedData {
             }
             record.spouseEffect = tag.getString("SpouseEffect");
             record.stabilityBonus = tag.getInt("StabilityBonus");
-            record.wealthPerDay = tag.getInt("WealthPerDay");
+            record.treasuryPerDay = tag.getInt("TreasuryPerDay");
             record.moraleBonus = tag.getInt("MoraleBonus");
             record.marriedDay = tag.getLong("MarriedDay");
             return record;
@@ -1507,7 +1507,7 @@ public final class CampaignData extends SavedData {
             tag.put("SpouseTraitList", traits);
             tag.putString("SpouseEffect", spouseEffect);
             tag.putInt("StabilityBonus", stabilityBonus);
-            tag.putInt("WealthPerDay", wealthPerDay);
+            tag.putInt("TreasuryPerDay", treasuryPerDay);
             tag.putInt("MoraleBonus", moraleBonus);
             tag.putLong("MarriedDay", marriedDay);
             return tag;
@@ -1529,7 +1529,7 @@ public final class CampaignData extends SavedData {
         }
         public String spouseEffect() { return spouseEffect; }
         public int stabilityBonus() { return stabilityBonus; }
-        public int wealthPerDay() { return wealthPerDay; }
+        public int treasuryPerDay() { return treasuryPerDay; }
         public int moraleBonus() { return moraleBonus; }
 
         /**
@@ -1545,11 +1545,11 @@ public final class CampaignData extends SavedData {
                     : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
         }
 
-        public int effectiveWealthPerDay(SettlementData characters) {
-            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return wealthPerDay;
+        public int effectiveTreasuryPerDay(SettlementData characters) {
+            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return treasuryPerDay;
             SettlementData.CharacterRecord spouse = characters.getCharacter(spousePlayerId);
             return spouse == null || !spouse.isCreated() ? 0
-                    : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.WEALTH);
+                    : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.TREASURY);
         }
 
         public int effectiveMoraleBonus(SettlementData characters) {

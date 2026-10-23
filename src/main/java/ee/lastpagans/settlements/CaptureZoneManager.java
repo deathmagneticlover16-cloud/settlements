@@ -22,17 +22,13 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.network.PacketDistributor;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /** Server-authoritative settlement tactical objectives and occupation bridge. */
 public final class CaptureZoneManager {
-    private static final Map<UUID, Draft> MAIN_DRAFTS = new HashMap<>();
-    private static final Map<UUID, Draft> SECONDARY_DRAFTS = new HashMap<>();
     private CaptureZoneManager() {}
 
     public record ZoneRequirement(int main, int secondary) {
@@ -73,39 +69,6 @@ public final class CaptureZoneManager {
         long main = zones.stream().filter(z -> z.type()==CaptureZoneData.ZoneType.MAIN).count();
         long secondary = zones.size()-main;
         return "Capture Zones: " + main + "/" + needed.main() + " Main · " + secondary + "/" + needed.secondary() + " Secondary";
-    }
-
-    /** First click stores pos1; second click validates and creates/replaces the zone. */
-    public static String setPosition(ServerPlayer player, SettlementData.SettlementRecord settlement, CaptureZoneData.ZoneType type, boolean first) {
-        if (player == null || settlement == null) return "Invalid settlement.";
-        if (editingBlocked(player.serverLevel(), settlement)) return "Capture Zones cannot be changed during war or occupation.";
-        Map<UUID, Draft> drafts = type == CaptureZoneData.ZoneType.MAIN ? MAIN_DRAFTS : SECONDARY_DRAFTS;
-        if (first) {
-            drafts.put(player.getUUID(), new Draft(settlement.getId(), player.serverLevel().dimension().location().toString(), player.blockPosition()));
-            return (type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone pos1 set. Move to the opposite corner and set pos2.";
-        }
-        Draft draft = drafts.remove(player.getUUID());
-        if (draft == null || !draft.settlementId.equals(settlement.getId())) return "Set pos1 for this Capture Zone first.";
-        String dimension = player.serverLevel().dimension().location().toString();
-        if (!dimension.equals(draft.dimension)) return "Both Capture Zone corners must be in the same dimension.";
-        CaptureZoneData.CaptureZoneRecord candidate = new CaptureZoneData.CaptureZoneRecord(UUID.randomUUID(), settlement.getId(), type, dimension, draft.pos, player.blockPosition());
-        CaptureZoneData.CaptureZoneRecord oldMain = CaptureZoneData.get(player.serverLevel()).zonesFor(settlement.getId()).stream()
-                .filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).findFirst().orElse(null);
-        String invalid = validate(player.serverLevel(), settlement, candidate,
-                type == CaptureZoneData.ZoneType.MAIN && oldMain != null ? oldMain.id() : null);
-        if (invalid != null) return invalid;
-        CaptureZoneData data = CaptureZoneData.get(player.serverLevel());
-        if (type == CaptureZoneData.ZoneType.MAIN) {
-            for (CaptureZoneData.CaptureZoneRecord zone : data.zonesFor(settlement.getId())) if (zone.type()==CaptureZoneData.ZoneType.MAIN) data.remove(zone.id());
-        } else {
-            int max = Math.max(2, requirement(settlement).secondary() + 1);
-            long existing = data.zonesFor(settlement.getId()).stream().filter(z -> z.type()==CaptureZoneData.ZoneType.SECONDARY).count();
-            if (existing >= max) return "Remove a surplus Secondary before adding another. One spare objective is allowed for relocation.";
-        }
-        data.put(candidate);
-        settlement.addChronicle((type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone designated.");
-        broadcast(player.getServer());
-        return (type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone created (" + candidate.width() + "×" + candidate.depth() + ").";
     }
 
     public static String setArea(ServerPlayer player, SettlementData.SettlementRecord settlement, CaptureZoneData.ZoneType type,
@@ -376,7 +339,6 @@ public final class CaptureZoneManager {
         SettlementNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), new CaptureZoneSnapshotPacket(views));
     }
 
-    private record Draft(String settlementId,String dimension,BlockPos pos){}
     private record CapturePresence(int attackers,int defenders){}
     private record TeamSets(Set<String> attackers, Set<String> defenders, String primaryAttacker, String primaryDefender){}
 }

@@ -121,10 +121,10 @@ public final class SettlementCommands {
                                                 StringArgumentType.getString(context, "id"),
                                                 IntegerArgumentType.getInteger(context, "value")
                                         )))))
-                .then(Commands.literal("wealth").requires(source -> source.hasPermission(2))
+                .then(Commands.literal("treasury").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .then(Commands.argument("value", IntegerArgumentType.integer(0))
-                                        .executes(context -> addWealth(
+                                        .executes(context -> addTreasury(
                                                 context.getSource(),
                                                 StringArgumentType.getString(context, "id"),
                                                 IntegerArgumentType.getInteger(context, "value")
@@ -228,13 +228,13 @@ public final class SettlementCommands {
                                                                         .executes(context -> adminCreateFaction(context.getSource(), EntityArgument.getPlayer(context, "player"),
                                                                                 StringArgumentType.getString(context, "team_color"), IntegerArgumentType.getInteger(context, "unit_color"),
                                                                                 StringArgumentType.getString(context, "name"))))))))
-                                .then(Commands.literal("wealth")
+                                .then(Commands.literal("treasury")
                                         .then(Commands.literal("set").then(Commands.argument("faction", StringArgumentType.word())
                                                 .then(Commands.argument("value", IntegerArgumentType.integer(0, 100000000))
-                                                        .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), false)))))
+                                                        .executes(context -> adminFactionTreasury(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), false)))))
                                         .then(Commands.literal("add").then(Commands.argument("faction", StringArgumentType.word())
                                                 .then(Commands.argument("value", IntegerArgumentType.integer(-100000000, 100000000))
-                                                        .executes(context -> adminFactionWealth(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), true)))))))
+                                                        .executes(context -> adminFactionTreasury(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), true)))))))
                         .then(Commands.literal("reset")
                                 .then(Commands.literal("character").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> warnResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))
@@ -324,8 +324,6 @@ public final class SettlementCommands {
                                 .then(Commands.literal("devotion").then(Commands.argument("player", EntityArgument.player())
                                         .then(Commands.argument("value", IntegerArgumentType.integer(0, 100))
                                                 .executes(context -> adminDebugDevotion(context.getSource(), EntityArgument.getPlayer(context, "player"), IntegerArgumentType.getInteger(context, "value"))))))
-                                .then(Commands.literal("prosperity").then(Commands.argument("settlement", StringArgumentType.word())
-                                        .executes(context -> adminDebugProsperity(context.getSource(), StringArgumentType.getString(context, "settlement")))))
                                 .then(Commands.literal("manpower").then(Commands.argument("settlement", StringArgumentType.word())
                                         .executes(context -> adminDebugManpower(context.getSource(), StringArgumentType.getString(context, "settlement")))))
                                 .then(Commands.literal("war_score").then(Commands.argument("war", StringArgumentType.word())
@@ -688,7 +686,7 @@ public final class SettlementCommands {
         return 1;
     }
 
-    private static int addWealth(CommandSourceStack source, String id, int value) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private static int addTreasury(CommandSourceStack source, String id, int value) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         SettlementData.SettlementRecord settlement = SettlementData.get(player(source).serverLevel()).getSettlement(id);
         if (settlement == null) return 0;
         StateTreasury.change(player(source).serverLevel(), settlement, value);
@@ -1039,16 +1037,15 @@ public final class SettlementCommands {
         switch (stat) {
             case "stability" -> { if (add) settlement.changeStability(value); else settlement.setStability(value); }
             case "food" -> { if (add) settlement.changeFood(value); else settlement.setFood(value); }
-            case "wealth", "treasury" -> { if (add) StateTreasury.change(source.getLevel(), settlement, value); else StateTreasury.set(source.getLevel(), settlement, value); }
+            case "treasury" -> { if (add) StateTreasury.change(source.getLevel(), settlement, value); else StateTreasury.set(source.getLevel(), settlement, value); }
             case "housing", "housing_capacity" -> { if (add) settlement.changeHousingCapacity(value); else settlement.setHousingCapacity(value); }
             case "maximum_manpower", "max_manpower", "manpower_max" -> { if (add) settlement.changeMaximumManpower(value); else settlement.setMaximumManpower(value); }
             case "available_manpower", "manpower", "manpower_available" -> { if (add) settlement.changeAvailableManpower(value); else settlement.setAvailableManpower(value); }
             case "contracts", "pending_contracts" -> { if (add) settlement.changePendingContracts(value); else settlement.setPendingContracts(value); }
-            case "prosperity" -> { CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel()); extra.setProsperity(settlement.getId(), add ? extra.prosperity(settlement.getId()) + value : value); }
             case "levy_tradition", "tradition" -> { CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel()); extra.setLevyTradition(settlement.getId(), add ? extra.levyTradition(settlement.getId()) + value : value); }
             case "foreign_manpower", "foreign_mp" -> { CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel()); extra.setForeignManpower(settlement.getId(), add ? extra.foreignManpower(settlement.getId()) + value : value); if (extra.foreignManpower(settlement.getId()) > 0) extra.addModifier(settlement.getId(), CampaignSystemsManager.standardModifier(source.getLevel(), settlement.getId(), "foreign_soldiers", 0)); else extra.removeModifier(settlement.getId(), "foreign_soldiers"); }
             default -> {
-                source.sendFailure(Component.literal("Unknown stat. Use stability, food, treasury, prosperity, levy_tradition, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
+                source.sendFailure(Component.literal("Unknown stat. Use stability, food, treasury, levy_tradition, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
                 return 0;
             }
         }
@@ -1062,18 +1059,17 @@ public final class SettlementCommands {
         return 1;
     }
 
-    private static int adminFactionWealth(CommandSourceStack source, String faction, int value, boolean add) {
+    private static int adminFactionTreasury(CommandSourceStack source, String faction, int value, boolean add) {
         CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel());
         if (faction == null || faction.isBlank()) { source.sendFailure(Component.literal("Faction ID cannot be blank.")); return 0; }
-        if (add) extra.changeFactionWealth(faction, value); else extra.setFactionWealth(faction, value);
-        source.sendSuccess(() -> Component.literal("Faction treasury for " + faction + " is now " + extra.factionWealth(faction) + "."), true);
+        if (add) extra.changeTreasury(faction, value); else extra.setTreasuryBalance(faction, value);
+        source.sendSuccess(() -> Component.literal("Faction treasury for " + faction + " is now " + extra.treasuryBalance(faction) + "."), true);
         return 1;
     }
 
     private static int createFaction(CommandSourceStack source, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
-        // The legacy command cannot express Recruits Team Color + Unit Color and previously
-        // created white/default factions. Route players to the authoritative creator instead.
+        // The command cannot express Recruits Team Color, Unit Color, or the required banner.
         CampaignManager.openFaction(player, "Faction creation uses the GUI so Team Color, Unit Color and the required patterned banner cannot be bypassed.");
         source.sendSuccess(() -> Component.literal("Open the Faction screen and create the faction there. The typed name was not submitted."), false);
         return 1;
@@ -1258,11 +1254,10 @@ public final class SettlementCommands {
         if (settlement == null) { source.sendFailure(Component.literal("Unknown settlement.")); return 0; }
         int housing = CampaignSystemsManager.recalculateHousing(source.getLevel(), settlement);
         int recovered = settlement.runManpowerChecker();
-        int prosperity = CampaignSystemsManager.recalculateProsperity(settlement, CampaignSystemsData.get(source.getLevel()), source.getLevel().getDayTime() / 24000L);
         CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel());
         if (extra.foreignManpower(settlement.getId()) <= 0) extra.removeModifier(settlement.getId(), "foreign_soldiers");
         source.sendSuccess(() -> Component.literal("Recalculated " + settlement.getName() + ": housing=" + housing
-                + ", prosperity=" + prosperity + ", recoveredMP=" + recovered + ", availableMP=" + settlement.getAvailableManpower()
+                + ", recoveredMP=" + recovered + ", availableMP=" + settlement.getAvailableManpower()
                 + "/" + settlement.getMaximumManpower() + ", foreignMP=" + extra.foreignManpower(settlement.getId()) + "."), true);
         return 1;
     }
@@ -1286,7 +1281,7 @@ public final class SettlementCommands {
         int activeLevyUnits = activeLevies.stream().mapToInt(value -> Math.max(0, value.initialUnits - value.returnedUnits)).sum();
         source.sendSuccess(() -> Component.literal("[Settlement inspect] " + s.getName() + " [" + s.getId() + "] | faction=" + (s.getFactionTeam().isBlank() ? "Independent" : s.getFactionTeam())
                 + " | rank=" + s.getRank().displayName() + " | pop=" + s.getDisplayedPopulation() + " | villagers=" + s.getVillagerCount() + " | housing=" + s.getHousingCapacity()
-                + " | stability=" + s.getStability() + " | prosperity=" + extra.prosperity(s.getId()) + " | food=" + s.getFood() + " | treasury=" + StateTreasury.balance(source.getLevel(), s)
+                + " | stability=" + s.getStability() + " | food=" + s.getFood() + " | treasury=" + StateTreasury.balance(source.getLevel(), s)
                 + " | manpower=" + s.getAvailableManpower() + "/" + s.getMaximumManpower() + " used=" + s.getUsedManpower() + " levyReserved=" + s.getLevyReservedManpower()
                 + " | levyTradition=" + extra.levyTradition(s.getId()) + "/50 | activeLevyBatches=" + activeLevies.size() + " units≈" + activeLevyUnits
                 + " | claims=" + s.getClaimCount() + " | protected=" + extra.settlementProtected(s.getId()) + " | modifiers=" + modifiers), false); return 1;
@@ -1336,7 +1331,6 @@ public final class SettlementCommands {
     }
     private static int adminDebugModifierClear(CommandSourceStack source, String id) { CampaignSystemsData.get(source.getLevel()).clearModifiers(id); source.sendSuccess(() -> Component.literal("All temporary/campaign modifiers cleared for " + id + "."), true); return 1; }
     private static int adminDebugDevotion(CommandSourceStack source, ServerPlayer target, int value) { CampaignSystemsData.get(target.serverLevel()).setDevotion(target.getUUID(), value); source.sendSuccess(() -> Component.literal("Devotion set to " + value + " for " + target.getGameProfile().getName() + "."), true); return 1; }
-    private static int adminDebugProsperity(CommandSourceStack source, String id) { SettlementData.SettlementRecord s = SettlementData.get(source.getLevel()).getSettlement(id); if (s == null) return 0; int value = CampaignSystemsManager.recalculateProsperity(s, CampaignSystemsData.get(source.getLevel()), source.getLevel().getDayTime() / 24000L); source.sendSuccess(() -> Component.literal("Prosperity recalculated: " + value + "."), true); return 1; }
     private static int adminDebugManpower(CommandSourceStack source, String id) { SettlementData.SettlementRecord s = SettlementData.get(source.getLevel()).getSettlement(id); if (s == null) return 0; s.runManpowerChecker(); source.sendSuccess(() -> Component.literal("Manpower recovery/recalculation applied: " + s.getAvailableManpower() + "/" + s.getMaximumManpower() + "."), true); return 1; }
     private static int adminDebugWarScore(CommandSourceStack source, String rawId, int value) { try { UUID id = UUID.fromString(rawId); CampaignData.WarRecord war = CampaignData.get(source.getLevel()).getWar(id); if (war == null) { source.sendFailure(Component.literal("Unknown war UUID.")); return 0; } CampaignSystemsData.get(source.getLevel()).setWarScore(id, value); source.sendSuccess(() -> Component.literal("War score set to " + value + " for " + id + ". ±90 enables capitulation logic."), true); return 1; } catch (IllegalArgumentException e) { source.sendFailure(Component.literal("Invalid war UUID.")); return 0; } }
     private static int adminDebugCapitulate(CommandSourceStack source, String rawId, String rawSide) {

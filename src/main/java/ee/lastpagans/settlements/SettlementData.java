@@ -68,7 +68,7 @@ public final class SettlementData extends SavedData {
             }
         }
         readUuidSet(tag, "RedeemedSettlerContracts", data.redeemedSettlerContracts);
-        data.deduplicateVillagerRegistries();
+        data.enforceUniqueVillagerRegistries();
         return data;
     }
 
@@ -199,11 +199,8 @@ public final class SettlementData extends SavedData {
         return removed;
     }
 
-    /**
-     * Repairs duplicate villager registry entries left behind by older builds.
-     * The first settlement encountered keeps the villager; all later duplicates lose it.
-     */
-    public int deduplicateVillagerRegistries() {
+    /** Keeps each villager assigned to at most one settlement registry. */
+    public int enforceUniqueVillagerRegistries() {
         Map<UUID, String> ownerByVillager = new HashMap<>();
         int removed = 0;
         for (SettlementRecord settlement : settlements.values()) {
@@ -306,7 +303,7 @@ public final class SettlementData extends SavedData {
     }
 
     public int runAllCheckers() {
-        deduplicateVillagerRegistries();
+        enforceUniqueVillagerRegistries();
         int recovered = 0;
         for (SettlementRecord settlement : settlements.values()) {
             recovered += settlement.runManpowerChecker();
@@ -378,7 +375,6 @@ public final class SettlementData extends SavedData {
 
         private int stability = 100;
         private int food;
-        private int wealth;
         private int availableManpower;
         private int maximumManpower;
         private int housingCapacity;
@@ -439,7 +435,6 @@ public final class SettlementData extends SavedData {
             capital = tag.getBoolean("Capital");
             stability = clamp(tag.getInt("Stability"), 0, 100);
             food = Math.max(0, tag.getInt("Food"));
-            wealth = Math.max(0, tag.getInt("Wealth"));
             availableManpower = Math.max(0, tag.getInt("AvailableManpower"));
             maximumManpower = Math.max(0, tag.getInt("MaximumManpower"));
             housingCapacity = Math.max(0, tag.getInt("HousingCapacity"));
@@ -490,8 +485,7 @@ public final class SettlementData extends SavedData {
             readUuidSet(tag, "Villagers", villagerResidents);
             readUuidSet(tag, "Professionals", professionalUnits);
             readUuidSet(tag, "MercenaryCompanyUnits", mercenaryCompanyUnits);
-            // Named mercenary companies are tracked separately from professional manpower. Repair
-            // any overlap left by the old entity-join race so population/manpower are never doubled.
+            // Named mercenary companies are distinct from professional manpower.
             professionalUnits.removeAll(mercenaryCompanyUnits);
 
             for (Tag raw : tag.getList("Members", Tag.TAG_COMPOUND)) {
@@ -523,7 +517,6 @@ public final class SettlementData extends SavedData {
             tag.putBoolean("Capital", capital);
             tag.putInt("Stability", stability);
             tag.putInt("Food", food);
-            tag.putInt("Wealth", wealth);
             tag.putInt("AvailableManpower", availableManpower);
             tag.putInt("MaximumManpower", maximumManpower);
             tag.putInt("HousingCapacity", housingCapacity);
@@ -602,7 +595,6 @@ public final class SettlementData extends SavedData {
         public boolean isCapital() { return capital; }
         public int getStability() { return stability; }
         public int getFood() { return food; }
-        public int getWealth() { return wealth; }
         public int getAvailableManpower() { return availableManpower; }
         public int getMaximumManpower() { return maximumManpower; }
         public int getUsedManpower() { return professionalUnits.size(); }
@@ -766,8 +758,6 @@ public final class SettlementData extends SavedData {
         public void changeStability(int delta) { setStability(stability + delta); }
         public void setFood(int value) { food = Math.max(0, value); dirty(); }
         public void changeFood(int delta) { setFood(food + delta); }
-        public void setWealth(int value) { wealth = Math.max(0, value); dirty(); }
-        public void changeWealth(int delta) { setWealth(wealth + delta); }
         public void setMaximumManpower(int value) {
             int committed = getUsedManpower() + getLevyReservedManpower();
             maximumManpower = Math.max(committed, Math.max(0, value));
@@ -939,20 +929,6 @@ public final class SettlementData extends SavedData {
             return true;
         }
 
-        public void addWealth(int amount, String contributor) {
-            if (amount <= 0) return;
-            wealth += amount;
-            if (contributor != null && !contributor.isBlank()) addContribution(contributor + " added " + amount + " wealth.");
-            dirty();
-        }
-
-        public boolean spendWealth(int amount) {
-            if (amount < 0 || wealth < amount) return false;
-            wealth -= amount;
-            dirty();
-            return true;
-        }
-
         public boolean spendAvailableManpower(int amount) {
             if (amount < 0 || availableManpower < amount) return false;
             availableManpower -= amount;
@@ -1111,25 +1087,25 @@ public final class SettlementData extends SavedData {
             CharacterRecord ruler = ownerId == null || owner == null ? null : owner.getCharacter(ownerId);
             if (ruler != null && ruler.isCreated()) {
                 int stabilityEffect = CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
-                int wealthEffect = CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.WEALTH);
+                int treasuryEffect = CampaignDefinitions.totalEffect(ruler.getTraits(), CampaignDefinitions.EffectKind.TREASURY);
                 if (stabilityEffect != 0) changeStability(stabilityEffect);
-                if (wealthEffect != 0 && level != null) StateTreasury.change(level, this, wealthEffect);
+                if (treasuryEffect != 0 && level != null) StateTreasury.change(level, this, treasuryEffect);
             }
 
             if (campaign != null && ownerId != null && (capital || (factionTeam.isBlank() && rank.ordinal() >= SettlementRank.CITY.ordinal()))) {
                 CampaignData.MarriageRecord marriage = campaign.getMarriage(ownerId);
                 if (marriage != null) {
                     int spouseStability = marriage.effectiveStabilityBonus(owner);
-                    int spouseWealth = marriage.effectiveWealthPerDay(owner);
+                    int spouseTreasury = marriage.effectiveTreasuryPerDay(owner);
                     if (spouseStability != 0) changeStability(spouseStability);
-                    if (spouseWealth != 0 && level != null) StateTreasury.change(level, this, spouseWealth);
+                    if (spouseTreasury != 0 && level != null) StateTreasury.change(level, this, spouseTreasury);
                 }
                 int spouseIndex = 1;
                 for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(ownerId)) {
                     int stability = CampaignData.scaledSpouseEffect(additional.stabilityBonus(), spouseIndex);
-                    int spouseWealth = CampaignData.scaledSpouseEffect(additional.wealthPerDay(), spouseIndex);
+                    int spouseTreasury = CampaignData.scaledSpouseEffect(additional.treasuryPerDay(), spouseIndex);
                     if (stability != 0) changeStability(stability);
-                    if (spouseWealth != 0 && level != null) StateTreasury.change(level, this, spouseWealth);
+                    if (spouseTreasury != 0 && level != null) StateTreasury.change(level, this, spouseTreasury);
                     spouseIndex++;
                 }
             }
@@ -1293,7 +1269,7 @@ public final class SettlementData extends SavedData {
             record.firstName = cleanText(tag.getString("FirstName"), "", 24);
             record.middleName = cleanText(tag.getString("MiddleName"), "", 24);
             record.lastName = cleanText(tag.getString("LastName"), "", 24);
-            record.faith = normalizeLegacyFaith(cleanText(tag.getString("Faith"), "Finnic Paganism", 32));
+            record.faith = validFaith(cleanText(tag.getString("Faith"), "Finnic Paganism", 32));
             record.address = cleanText(tag.getString("Address"), "Neutral", 16);
             record.title = cleanText(tag.getString("Title"), "Lord", 32);
             record.house = cleanText(tag.getString("House"), "", 32);
@@ -1342,11 +1318,10 @@ public final class SettlementData extends SavedData {
             this.firstName = cleanText(first, "", 24);
             this.middleName = cleanText(middle, "", 24);
             this.lastName = cleanText(last, "", 24);
-            this.faith = normalizeLegacyFaith(cleanText(faith, "Finnic Paganism", 32));
+            this.faith = validFaith(cleanText(faith, "Finnic Paganism", 32));
             this.address = cleanText(address, "Neutral", 16);
             this.title = cleanText(title, "Lord", 32);
             this.created = !this.firstName.isBlank() && !this.lastName.isBlank();
-            // Starting traits are selected explicitly in the three-card character creation flow. Legacy saves retain their existing traits.
         }
 
         public void rename(String first, String middle, String last) {
@@ -1359,14 +1334,12 @@ public final class SettlementData extends SavedData {
         public void setHouse(String house) { this.house = cleanText(house, "", 32); }
 
         public void setPrimarySeat(String value) { primarySeat = normalizeId(value); }
-        public void setFaith(String value) { this.faith = normalizeLegacyFaith(cleanText(value, "Finnic Paganism", 32)); }
+        public void setFaith(String value) { this.faith = validFaith(cleanText(value, "Finnic Paganism", 32)); }
         public void setBody(CharacterBodyData value) { body = value == null ? null : value.sanitized(); }
         public void setTraits(List<String> values) { traits.clear(); if (values != null) values.stream().map(CampaignDefinitions::normalize).filter(id -> CampaignDefinitions.trait(id) != null).distinct().limit(3).forEach(traits::add); }
 
-        private static String normalizeLegacyFaith(String value) {
+        private static String validFaith(String value) {
             if (value == null || value.isBlank()) return "Finnic Paganism";
-            if (value.equalsIgnoreCase("Pagan")) return "Finnic Paganism";
-            if (value.equalsIgnoreCase("Christian")) return "Catholic Christianity";
             return CampaignDefinitions.isValidReligion(value) ? value : "Other";
         }
     }

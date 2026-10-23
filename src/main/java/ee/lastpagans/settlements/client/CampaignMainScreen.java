@@ -69,7 +69,7 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
 
         stat(graphics, "Settlements", snapshot.settlementCount(), 22, 225);
         stat(graphics, "Population", snapshot.totalPopulation(), 170, 225);
-        stat(graphics, "Wealth", snapshot.totalWealth(), 330, 225);
+        stat(graphics, "Treasury", snapshot.totalTreasury(), 330, 225);
         stat(graphics, "Manpower", snapshot.availableManpower() + "/" + snapshot.maximumManpower(), 22, 247);
         stat(graphics, "Stability", snapshot.averageStability() + "%", 170, 247);
         stat(graphics, "Food", snapshot.totalFood(), 330, 247);

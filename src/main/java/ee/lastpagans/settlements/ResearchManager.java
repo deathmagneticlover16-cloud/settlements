@@ -146,28 +146,18 @@ public final class ResearchManager {
     public static int speedPercent(MinecraftServer server, Polity polity) {
         if (server == null || polity == null) return 100;
         SettlementData settlements = SettlementData.get(server.overworld());
-        CampaignSystemsData extra = CampaignSystemsData.get(server.overworld());
         UUID rulerId = null;
-        int prosperity = 0;
         if ("independent".equals(polity.kind())) {
             try { rulerId = UUID.fromString(polity.id()); } catch (IllegalArgumentException ignored) { rulerId = null; }
-            if (rulerId != null) {
-                List<SettlementData.SettlementRecord> holdings = settlements.getOwnedSettlements(rulerId).stream()
-                        .filter(value -> value.getFactionTeam().isBlank()).toList();
-                if (!holdings.isEmpty()) prosperity = (int)Math.round(holdings.stream().mapToInt(value -> extra.prosperity(value.getId())).average().orElse(0.0D));
-            }
         } else if (FactionEvents.recruitsFactionManager != null) {
             RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(polity.id());
             if (faction != null) rulerId = faction.getTeamLeaderUUID();
-            List<SettlementData.SettlementRecord> holdings = settlements.settlementsForFaction(polity.id());
-            if (!holdings.isEmpty()) prosperity = (int)Math.round(holdings.stream().mapToInt(value -> extra.prosperity(value.getId())).average().orElse(0.0D));
         }
         int speed = 100;
         SettlementData.CharacterRecord ruler = rulerId == null ? null : settlements.getCharacter(rulerId);
         if (ruler != null && ruler.isCreated() && ruler.getTraits().stream().anyMatch("scholarly"::equals)) {
             speed += SettlementConfig.SCHOLARLY_RESEARCH_BONUS_PERCENT.get();
         }
-        speed += (int)Math.round((Math.max(0, Math.min(100, prosperity)) / 100.0D) * SettlementConfig.RESEARCH_MAX_PROSPERITY_BONUS_PERCENT.get());
         return Math.max(10, Math.min(500, speed));
     }
 

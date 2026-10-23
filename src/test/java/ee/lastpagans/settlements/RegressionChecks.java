@@ -178,14 +178,21 @@ public final class RegressionChecks {
 
     private static void treasuryAccounting() {
         CampaignSystemsData systems = new CampaignSystemsData();
-        systems.setFactionWealth("polity", 100);
-        check(!systems.spendFactionWealth("polity", 101) && systems.factionWealth("polity") == 100, "failed spend is lossless");
-        check(systems.spendFactionWealth("polity", 100) && systems.factionWealth("polity") == 0, "exact balance can be spent");
-        systems.setFactionWealth("polity", Integer.MAX_VALUE);
-        systems.changeFactionWealth("polity", 1);
-        check(systems.factionWealth("polity") == Integer.MAX_VALUE, "positive overflow cannot wipe treasury");
-        systems.changeFactionWealth("polity", Integer.MIN_VALUE);
-        check(systems.factionWealth("polity") == 0, "negative balance clamps to zero");
+        systems.setTreasuryBalance("polity", 100);
+        check(!systems.spendTreasury("polity", 101) && systems.treasuryBalance("polity") == 100, "failed spend is lossless");
+        check(systems.spendTreasury("polity", 100) && systems.treasuryBalance("polity") == 0, "exact balance can be spent");
+        systems.setTreasuryBalance("polity", Integer.MAX_VALUE);
+        systems.changeTreasury("polity", 1);
+        check(systems.treasuryBalance("polity") == Integer.MAX_VALUE, "positive overflow cannot wipe treasury");
+        systems.changeTreasury("polity", Integer.MIN_VALUE);
+        check(systems.treasuryBalance("polity") == 0, "negative balance clamps to zero");
+        systems.setTreasuryBalance("polity", 725);
+        CompoundTag saved = systems.save(new CompoundTag());
+        check(saved.contains("StateTreasuries") && !saved.contains("FactionWealth")
+                        && !saved.contains("Prosperity") && !saved.contains("WealthDeposits"),
+                "campaign save contains only the current state treasury economy");
+        check(CampaignSystemsData.load(saved).treasuryBalance("polity") == 725,
+                "state treasury survives an NBT round trip");
     }
 
     private static void dyeNames() {
@@ -284,9 +291,6 @@ public final class RegressionChecks {
         SettlementData data = new SettlementData();
         SettlementData.CharacterRecord record = data.getOrCreateCharacter(playerId);
         record.create("Test", "", "Character", "Other", "Neutral", "Lord");
-        CompoundTag legacyTag = data.save(new CompoundTag());
-        check(!SettlementData.load(legacyTag).getCharacter(playerId).hasBodyData(),
-                "legacy character without Body remains unmanaged");
         record.setBody(body);
         SettlementData.CharacterRecord restored = SettlementData.load(data.save(new CompoundTag())).getCharacter(playerId);
         check(restored.hasBodyData() && restored.getBody().equals(body), "authoritative body persists nested in CharacterRecord");

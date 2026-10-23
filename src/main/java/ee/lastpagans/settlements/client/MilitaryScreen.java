@@ -16,7 +16,7 @@ import java.util.Locale;
 /** Strategic recruitment and upkeep screen. This deliberately is not an RTS unit overview. */
 public final class MilitaryScreen extends ScaledCampaignScreen {
     private static final int W = 540, H = 360;
-    private static final int PAGE_FORCES = 0, PAGE_LEVIES = 1, PAGE_SUPPORT = 2;
+    private static final int PAGE_FORCES = 0, PAGE_LEVIES = 1, PAGE_MERCENARIES = 2;
 
     private SettlementSnapshot snapshot;
     private int left, top;
@@ -52,12 +52,12 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         clearWidgets();
         unitDropdown = null;
 
-        addCampaignTabs(new String[]{"Forces", "Levies", "Support"}, page, left + 24, top + 68, 160, 20, 6,
+        addCampaignTabs(new String[]{"Forces", "Levies", "Mercenaries"}, page, left + 24, top + 68, 160, 20, 6,
                 index -> { page = index; rebuildWidgets(); });
 
         if (page == PAGE_FORCES) buildForcesWidgets();
         else if (page == PAGE_LEVIES) buildLevyWidgets();
-        else buildSupportWidgets();
+        else buildMercenaryWidgets();
 
         addRenderableWidget(Button.builder(Component.literal("◀ Previous"), button -> switchSettlement(false))
                 .bounds(left + 14, top + 331, 92, 18).build());
@@ -101,7 +101,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                 .bounds(left + 378, top + 274, 112, 20).build());
     }
 
-    private void buildSupportWidgets() {
+    private void buildMercenaryWidgets() {
         addRenderableWidget(Button.builder(Component.literal("Mercenary Rosters"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MERCENARIES)))
                 .bounds(left + 40, top + 196, 180, 20).build());
@@ -146,7 +146,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
 
         if (page == PAGE_FORCES) renderForces(graphics);
         else if (page == PAGE_LEVIES) renderLevies(graphics);
-        else renderSupport(graphics);
+        else renderMercenaries(graphics);
 
         if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fitText(snapshot.message(), W - 40), left + W / 2, top + 306, CAMPAIGN_MESSAGE);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
@@ -173,7 +173,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Selected: " + selected.displayName(), left + 24, top + 212, 0xFFFFFFFF, false);
         graphics.drawString(font, "Source: " + (selected.configured() ? "Configured recruit template" : "Recruits fallback"), left + 24, top + 230, 0xFFB8B0A0, false);
         if (selected.mercenary()) {
-            graphics.drawString(font, "Contract: " + selected.wage() + " wealth every " + selected.paymentIntervalDays() + " days", left + 24, top + 248, 0xFFFFC27A, false);
+            graphics.drawString(font, "Contract: " + selected.wage() + " treasury every " + selected.paymentIntervalDays() + " days", left + 24, top + 248, 0xFFFFC27A, false);
             graphics.drawWordWrap(font, Component.literal("Unpaid mercenaries lose morale and can eventually desert."), left + 24, top + 266, 470, 0xFFFFB0A0);
         } else {
             graphics.drawString(font, "Contract: no recurring wage", left + 24, top + 248, 0xFFB8B0A0, false);
@@ -205,10 +205,10 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                 left + 24, top + 240, 470, 0xFFAAAAAA);
     }
 
-    private void renderSupport(GuiGraphics graphics) {
+    private void renderMercenaries(GuiGraphics graphics) {
         graphics.drawString(font, "MERCENARIES", left + 24, top + 104, 0xFFE7D8B0, false);
         graphics.drawString(font, "Active mercenaries: " + snapshot.mercenaries(), left + 24, top + 126, 0xFFFFFFFF, false);
-        graphics.drawString(font, "Obligation: " + snapshot.mercenaryWages() + " wealth / cycle", left + 24, top + 144, 0xFFB8B0A0, false);
+        graphics.drawString(font, "Obligation: " + snapshot.mercenaryWages() + " treasury / cycle", left + 24, top + 144, 0xFFB8B0A0, false);
         String timing = snapshot.mercenaries() <= 0 ? "No active contracts"
                 : snapshot.mercenaryStatus() + " · next payment day " + snapshot.mercenaryNextPaymentDay();
         graphics.drawString(font, "Status: " + timing, left + 24, top + 162,

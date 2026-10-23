@@ -193,10 +193,6 @@ public final class SettlementManager {
         String result;
         if (!canView(player, settlement)) result = "You cannot access this settlement.";
         else result = switch (action) {
-            case RECRUIT_ONE -> requireManager(player, settlement, () -> recruitProfessionals(player, settlement, CampaignData.UnitType.RECRUIT, 1));
-            case RECRUIT_FIVE -> requireManager(player, settlement, () -> recruitProfessionals(player, settlement, CampaignData.UnitType.RECRUIT, 5));
-            case RECRUIT_TEN -> requireManager(player, settlement, () -> recruitProfessionals(player, settlement, CampaignData.UnitType.RECRUIT, 10));
-            case RECRUIT_TWENTY_FIVE -> requireManager(player, settlement, () -> recruitProfessionals(player, settlement, CampaignData.UnitType.RECRUIT, 25));
             case RECRUIT_UNIT -> requireManager(player, settlement, () -> {
                 CampaignData.UnitType type = CampaignData.UnitType.parse(argument);
                 if (type == null || type == CampaignData.UnitType.LEVY) return "Choose a professional unit type.";
@@ -228,19 +224,8 @@ public final class SettlementManager {
             case ADD_MEMBER_COOWNER -> requireManager(player, settlement, () -> setSettlementMember(player, settlement, argument, SettlementData.SettlementRole.CO_OWNER));
             case REMOVE_MEMBER -> requireManager(player, settlement, () -> removeSettlementMember(player, settlement, argument));
             case SET_TOWN_SQUARE -> requireManager(player, settlement, () -> setTownSquareHere(player, settlement));
-            case SET_BARRACKS -> requireManager(player, settlement, () -> setBarracksHere(player, settlement));
             case SET_UPKEEP_CHEST -> requireManager(player, settlement, () -> setUpkeepChest(player, settlement));
             case CLEAR_UPKEEP_CHEST -> requireManager(player, settlement, () -> { settlement.setUpkeepChest("", null); return "City Upkeep Chest cleared."; });
-            case HOUSING_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Housing"));
-            case HOUSING_POS2 -> requireManager(player, settlement, () -> regionPos2(player, settlement, "housing"));
-            case MUSTER_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Muster Ground"));
-            case MUSTER_POS2 -> requireManager(player, settlement, () -> regionPos2(player, settlement, "muster"));
-            case PRAYER_POS1 -> requireManager(player, settlement, () -> regionPos1(player, settlement, "Prayer Site"));
-            case PRAYER_POS2 -> requireManager(player, settlement, () -> regionPos2(player, settlement, "prayer"));
-            case CAPTURE_MAIN_POS1 -> requireManager(player, settlement, () -> CaptureZoneManager.setPosition(player, settlement, CaptureZoneData.ZoneType.MAIN, true));
-            case CAPTURE_MAIN_POS2 -> requireManager(player, settlement, () -> CaptureZoneManager.setPosition(player, settlement, CaptureZoneData.ZoneType.MAIN, false));
-            case CAPTURE_SECONDARY_POS1 -> requireManager(player, settlement, () -> CaptureZoneManager.setPosition(player, settlement, CaptureZoneData.ZoneType.SECONDARY, true));
-            case CAPTURE_SECONDARY_POS2 -> requireManager(player, settlement, () -> CaptureZoneManager.setPosition(player, settlement, CaptureZoneData.ZoneType.SECONDARY, false));
             case REMOVE_CAPTURE_ZONE -> requireManager(player, settlement, () -> CaptureZoneManager.removeNearest(player, settlement));
             case RECALCULATE_HOUSING -> requireManager(player, settlement, () -> "Housing recalculated: " + CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement) + " bed(s).");
             case DELETE_SETTLEMENT -> "Deletion handled separately.";
@@ -355,13 +340,13 @@ public final class SettlementManager {
         if (amount <= 0) return "Invalid recruitment amount.";
         String validation = validateMilitarySpawnSetup(player.getServer(), settlement);
         if (validation != null) return validation;
-        int wealthPerUnit = professionalCost(unitType);
-        int wealthCost = amount * wealthPerUnit;
+        int treasuryPerUnit = professionalCost(unitType);
+        int treasuryCost = amount * treasuryPerUnit;
         CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
         int foreignAvailable = campaignSystems.foreignManpower(settlement.getId());
         if (settlement.getAvailableManpower() + foreignAvailable < amount)
             return "Not enough recruitable manpower. Available: " + settlement.getAvailableManpower() + " native + " + foreignAvailable + " foreign.";
-        if (StateTreasury.balance(player.serverLevel(), settlement) < wealthCost) return "Not enough State Treasury funds. Required: " + wealthCost + ".";
+        if (StateTreasury.balance(player.serverLevel(), settlement) < treasuryCost) return "Not enough State Treasury funds. Required: " + treasuryCost + ".";
 
         ServerLevel level = resolveMusterGroundLevel(player.getServer(), settlement);
         if (level == null) return "The saved Muster Ground dimension is unavailable.";
@@ -369,7 +354,7 @@ public final class SettlementManager {
         List<UUID> spawned = new ArrayList<>();
         for (int i = 0; i < amount; i++) {
             AbstractRecruitEntity recruit = spawnRecruit(level, player, settlement, unitType, i, team, false, null);
-            if (recruit == null) { discardSpawned(level, spawned); return "Recruit spawning failed; no MP or wealth was charged."; }
+            if (recruit == null) { discardSpawned(level, spawned); return "Recruit spawning failed; no MP or treasury was charged."; }
             spawned.add(recruit.getUUID());
         }
         // Use treaty-transferred foreign manpower first so its stability penalty disappears once those soldiers
@@ -379,7 +364,7 @@ public final class SettlementManager {
         int nativeSpent = amount - foreignSpent;
         if (nativeSpent > 0) settlement.spendAvailableManpower(nativeSpent);
         if (campaignSystems.foreignManpower(settlement.getId()) <= 0) campaignSystems.removeModifier(settlement.getId(), "foreign_soldiers");
-        StateTreasury.spend(player.serverLevel(), settlement, wealthCost);
+        StateTreasury.spend(player.serverLevel(), settlement, treasuryCost);
         spawned.forEach(settlement::addProfessional);
         settlement.addChronicle("Recruited " + amount + " " + unitType.displayName() + (amount == 1 ? "" : "s") + ".");
         return "Spawned " + amount + " unhired " + unitType.displayName() + (amount == 1 ? "" : "s") + ". Recruits' normal hiring cost still applies.";
@@ -768,16 +753,15 @@ public final class SettlementManager {
             return "Hold an item in the #settlements:currency tag.";
         }
         int coins = held.getCount();
-        int value = coins * SettlementConfig.CURRENCY_ITEM_WEALTH_VALUE.get();
+        int value = coins * SettlementConfig.CURRENCY_ITEM_TREASURY_VALUE.get();
         held.shrink(coins);
         StateTreasury.change(player.serverLevel(), settlement, value);
-        CampaignSystemsData.get(player.serverLevel()).recordWealthDeposit(settlement.getId(), value, player.serverLevel().getDayTime() / 24000L);
         settlement.addContribution(characterOrAccountName(player) + " deposited " + coins + " currency into the State Treasury.");
         return "Deposited " + coins + " currency into the State Treasury (+" + value + ").";
     }
 
     private static String withdrawCurrency(ServerPlayer player, SettlementData.SettlementRecord settlement, int coins) {
-        int cost = coins * SettlementConfig.CURRENCY_ITEM_WEALTH_VALUE.get();
+        int cost = coins * SettlementConfig.CURRENCY_ITEM_TREASURY_VALUE.get();
         if (!StateTreasury.spend(player.serverLevel(), settlement, cost)) return "Not enough State Treasury funds. Required: " + cost + ".";
         Item item = getCurrencyItem();
         ItemStack stack = new ItemStack(item, coins);
@@ -805,10 +789,7 @@ public final class SettlementManager {
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
         int rate;
         try { rate = Integer.parseInt(rawPolicy == null ? "100" : rawPolicy.trim()); }
-        catch (NumberFormatException exception) {
-            CampaignSystemsData.TaxPolicy legacy = CampaignSystemsData.TaxPolicy.parse(rawPolicy);
-            rate = legacy.ratePercent();
-        }
+        catch (NumberFormatException exception) { return "Taxation must be a percentage from 50 to 150."; }
         rate = Math.max(50, Math.min(150, rate));
         int previous = extra.taxRatePercent(settlement.getId());
         if (previous == rate) return "Taxation is already set to " + rate + "%.";
@@ -817,8 +798,7 @@ public final class SettlementManager {
         settlement.addChronicle("Taxation changed from " + previous + "% to " + rate + "%.");
         int projected = CampaignSystemsManager.projectedTaxIncome(settlement, extra);
         return "Taxation set to " + rate + "% (" + extra.taxDisplayName(settlement.getId()) + "). Projected State Treasury revenue: "
-                + projected + "/day; stability " + signed(extra.taxStabilityPerDay(settlement.getId())) + "/day; prosperity "
-                + signed(extra.taxProsperityModifier(settlement.getId())) + ".";
+                + projected + "/day; stability " + signed(extra.taxStabilityPerDay(settlement.getId())) + "/day.";
     }
 
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
@@ -1154,7 +1134,7 @@ public final class SettlementManager {
         tag.putBoolean(TAG_MERCENARY, true);
         tag.putInt(TAG_MERCENARY_WAGE, Math.max(1, wage));
         tag.putInt(TAG_MERCENARY_INTERVAL_DAYS, Math.max(1, intervalDays));
-        return "Held unit template marked as a mercenary: " + Math.max(1, wage) + " wealth every " + Math.max(1, intervalDays) + " days.";
+        return "Held unit template marked as a mercenary: " + Math.max(1, wage) + " treasury every " + Math.max(1, intervalDays) + " days.";
     }
 
     public static String clearHeldTemplateMercenary(ServerPlayer player) {
@@ -1425,28 +1405,6 @@ public final class SettlementManager {
         }
     }
 
-    private static String setBarracksHere(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        settlement.setBarracks(player.serverLevel().dimension().location().toString(), player.blockPosition());
-        return "Barracks centre moved to your current position.";
-    }
-
-    private static String regionPos1(ServerPlayer player, SettlementData.SettlementRecord settlement, String label) {
-        CampaignSystemsManager.setRegionPos1(player);
-        return label + " pos1 set. Stand at the opposite corner and press pos2.";
-    }
-
-    private static String regionPos2(ServerPlayer player, SettlementData.SettlementRecord settlement, String type) {
-        CampaignSystemsData.RegionRecord region = CampaignSystemsManager.completeRegion(player);
-        if (region == null || !region.valid()) return "Set pos1 first, in the same dimension.";
-        CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
-        return switch (type) {
-            case "housing" -> { extra.addHousingArea(settlement.getId(), region); int beds = CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement); yield "Dwelling registered: " + beds + " total housing bed(s)."; }
-            case "muster" -> { extra.setMusterArea(settlement.getId(), region); settlement.setMusterGround(region.dimension(), region.min()); yield "Muster Ground registered with capacity for about " + region.horizontalArea() + " soldiers."; }
-            case "prayer" -> { extra.setPrayerSite(settlement.getId(), region); yield "Prayer Site registered."; }
-            default -> "Unknown region type.";
-        };
-    }
-
     private static String renameSettlement(ServerPlayer player, SettlementData.SettlementRecord settlement, String value) {
         String clean = SettlementData.cleanText(value, settlement.getName(), 64);
         if (clean.isBlank()) return "Settlement name cannot be blank.";
@@ -1621,13 +1579,12 @@ public final class SettlementManager {
     }
 
     public enum SettlementAction {
-        RECRUIT_ONE, RECRUIT_FIVE, RECRUIT_TEN, RECRUIT_TWENTY_FIVE, RECRUIT_UNIT,
+        RECRUIT_UNIT,
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_CURRENCY,
         WITHDRAW_CURRENCY_ONE, WITHDRAW_CURRENCY_TEN, SET_TAX_POLICY, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
         RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, DELETE_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
-        SET_TOWN_SQUARE, SET_BARRACKS, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST, HOUSING_POS1, HOUSING_POS2, MUSTER_POS1, MUSTER_POS2,
-        PRAYER_POS1, PRAYER_POS2, CAPTURE_MAIN_POS1, CAPTURE_MAIN_POS2, CAPTURE_SECONDARY_POS1, CAPTURE_SECONDARY_POS2, REMOVE_CAPTURE_ZONE,
+        SET_TOWN_SQUARE, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST, REMOVE_CAPTURE_ZONE,
         RECALCULATE_HOUSING, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
 

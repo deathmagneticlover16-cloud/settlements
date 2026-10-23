@@ -5,7 +5,7 @@ import net.minecraft.world.item.DyeColor;
 
 import java.util.Locale;
 
-/** Color bridge between Settlements' dynamic DyeColor palette and Recruits' legacy color formats. */
+/** Color bridge between Settlements' dynamic DyeColor palette and Recruits' Recruits color formats. */
 public final class FactionColorUtil {
     // Recruits 1.15.2 FactionEditScreen palette, index-for-index with RecruitsFaction.unitColor.
     private static final int[] RECRUITS_UNIT_RGB = {

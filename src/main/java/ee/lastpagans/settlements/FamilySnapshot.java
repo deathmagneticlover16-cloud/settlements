@@ -70,11 +70,11 @@ public record FamilySnapshot(
                 spouseTraits = spouse != null ? traitNames(spouse.getTraits()) : "Unknown";
                 if (spouse != null && spouse.isCreated()) {
                     int stability = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
-                    int wealth = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.WEALTH);
+                    int treasury = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.TREASURY);
                     int morale = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.MORALE);
                     List<String> effects = new ArrayList<>();
                     if (stability != 0) effects.add((stability > 0 ? "+" : "") + stability + " stability/day");
-                    if (wealth != 0) effects.add((wealth > 0 ? "+" : "") + wealth + " wealth/day");
+                    if (treasury != 0) effects.add((treasury > 0 ? "+" : "") + treasury + " State Treasury/day");
                     if (morale != 0) effects.add((morale > 0 ? "+" : "") + morale + " recruit morale");
                     spouseEffect = effects.isEmpty() ? "Marriage Alliance; no direct capital trait effects"
                             : "Marriage Alliance; capital receives " + String.join(", ", effects);
@@ -116,7 +116,7 @@ public record FamilySnapshot(
                 .filter(value -> canMarryAdditional ? value.gender().equalsIgnoreCase("FEMALE") : (preferredGender.equals("ANY") || value.gender().equalsIgnoreCase(preferredGender)))
                 .map(value -> new Candidate(
                         value.id(), value.name(), value.gender(), value.faith(), value.culture(), value.traitsText(), value.effect(),
-                        value.stabilityBonus(), value.wealthPerDay(), value.moraleBonus()
+                        value.stabilityBonus(), value.treasuryPerDay(), value.moraleBonus()
                 )).toList();
 
         return new FamilySnapshot(
@@ -237,7 +237,7 @@ public record FamilySnapshot(
             String traits,
             String effect,
             int stabilityBonus,
-            int wealthPerDay,
+            int treasuryPerDay,
             int moraleBonus
     ) {
         private void encode(FriendlyByteBuf buffer) {
@@ -249,7 +249,7 @@ public record FamilySnapshot(
             buffer.writeUtf(traits, 128);
             buffer.writeUtf(effect, 160);
             buffer.writeInt(stabilityBonus);
-            buffer.writeInt(wealthPerDay);
+            buffer.writeInt(treasuryPerDay);
             buffer.writeInt(moraleBonus);
         }
 

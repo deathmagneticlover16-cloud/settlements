@@ -42,7 +42,7 @@ public final class MercenaryRosterManager {
 
     private static void send(ServerPlayer player, SettlementData.SettlementRecord settlement, String message) {
         String factionId = settlement.getFactionTeam();
-        int wealth = StateTreasury.balance(player.serverLevel(), settlement);
+        int treasury = StateTreasury.balance(player.serverLevel(), settlement);
         int reliability = factionId.isBlank() ? 0 : CampaignData.get(player.serverLevel()).getFactionReliability(factionId);
         String employerKey = employerKey(settlement);
         MercenaryCompanyData companyData = MercenaryCompanyData.get(player.serverLevel());
@@ -63,8 +63,8 @@ public final class MercenaryRosterManager {
             if (!canManage) { canHire = false; reason = "You do not manage this settlement."; }
             else if (contract != null && !yours && refusesPoaching(player.serverLevel(), definition, contract, loyalty)) {
                 canHire = false; reason = "The company refuses to break loyalty with " + employer + ".";
-            } else if (!yours && wealth < price) {
-                canHire = false; reason = "Requires " + price + " State Treasury; available " + wealth + ".";
+            } else if (!yours && treasury < price) {
+                canHire = false; reason = "Requires " + price + " State Treasury; available " + treasury + ".";
             }
             entries.add(new MercenaryRosterSnapshot.Entry(definition.id(), definition.name(), definition.iconItem(), definition.composition(),
                     definition.size(), definition.hireCost(), price, definition.upkeep(), definition.paymentIntervalDays(), loyalty,
@@ -72,7 +72,7 @@ public final class MercenaryRosterManager {
         }
         SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
                 new MercenaryRosterSnapshotPacket(new MercenaryRosterSnapshot(settlement.getId(), settlement.getName(),
-                        factionId.isBlank() ? "Independent" : CampaignManager.factionName(factionId), wealth, reliability, List.copyOf(entries), message == null ? "" : message)));
+                        factionId.isBlank() ? "Independent" : CampaignManager.factionName(factionId), treasury, reliability, List.copyOf(entries), message == null ? "" : message)));
     }
 
     public static void handleAction(ServerPlayer player, String companyId, String action) {
@@ -121,10 +121,9 @@ public final class MercenaryRosterManager {
                 AbstractRecruitEntity recruit = SettlementManager.spawnRecruitFromTemplate(level, player, settlement, unit.type(), index, team, false, null, template, definition.id());
                 if (recruit == null) {
                     rollbackSpawnedRecruits(player.getServer(), spawned);
-                    return "Mercenary spawning failed; no Wealth was charged.";
+                    return "Mercenary spawning failed; no Treasury was charged.";
                 }
-                // Company contracts are paid once per company, not once per soldier. Strip any legacy
-                // per-unit mercenary contract that may have been inherited from an old marked template.
+                // Company contracts are paid once per company, never once per soldier.
                 CampaignSystemsData.get(level).removeMercenaryContract(recruit.getUUID());
                 recruit.getPersistentData().remove(SettlementManager.TAG_MERCENARY_WAGE);
                 recruit.getPersistentData().remove(SettlementManager.TAG_MERCENARY_INTERVAL_DAYS);
@@ -151,10 +150,10 @@ public final class MercenaryRosterManager {
         int bidderReliability = factionId.isBlank() ? 0 : campaign.getFactionReliability(factionId);
         int starting = Math.max(definition.startingLoyalty(), definition.startingLoyalty() + bidderReliability / 10);
         data.setTrust(definition.id(), newKey, Math.max(data.trust(definition.id(), newKey, definition.startingLoyalty()), starting));
-        settlement.addChronicle(definition.name() + " was contracted for " + price + " Wealth (" + definition.size() + " mercenaries)." );
+        settlement.addChronicle(definition.name() + " was contracted for " + price + " Treasury (" + definition.size() + " mercenaries)." );
         campaign.addNews(CampaignData.NewsCategory.MILITARY, CampaignData.NewsImportance.MINOR, "Mercenaries hired",
                 settlement.getName() + " contracted " + definition.name() + ".", day, factionId, settlement.getId(), CampaignData.NewsVisibility.FACTION);
-        return "Hired " + definition.name() + " for " + price + " Wealth. Upkeep: " + definition.upkeep() + " every " + definition.paymentIntervalDays() + " day(s).";
+        return "Hired " + definition.name() + " for " + price + " Treasury. Upkeep: " + definition.upkeep() + " every " + definition.paymentIntervalDays() + " day(s).";
     }
 
     public static String release(ServerPlayer player, SettlementData.SettlementRecord settlement, String companyId) {
@@ -188,10 +187,6 @@ public final class MercenaryRosterManager {
                 continue;
             }
             MercenaryCompanyData.CompanyContract contract = original;
-            for (UUID unit : contract.unitIds()) {
-                AbstractRecruitEntity recruit = findLoaded(server, unit);
-                if (recruit != null) repairLegacyRecruit(server, contract, recruit);
-            }
             String currentFaction = settlement.getFactionTeam();
             if (!currentFaction.equals(contract.factionId())) {
                 // Founding a proper faction should not throw away an independent ruler's existing company.
@@ -278,8 +273,6 @@ public final class MercenaryRosterManager {
         if (data.consumeRetiredUnit(recruit.getUUID()) || (!company.isBlank() && !data.isActiveUnit(recruit.getUUID()))) {
             recruit.discard(); return true;
         }
-        MercenaryCompanyData.CompanyContract contract = data.contractForUnit(recruit.getUUID());
-        if (contract != null) repairLegacyRecruit(level.getServer(), contract, recruit);
         return false;
     }
 
@@ -318,44 +311,6 @@ public final class MercenaryRosterManager {
             }
             recruit.discard();
         }
-    }
-
-    /** Repairs companies spawned before the Recruits hire lifecycle was used. Runs once per unit. */
-    private static void repairLegacyRecruit(MinecraftServer server, MercenaryCompanyData.CompanyContract contract,
-                                            AbstractRecruitEntity recruit) {
-        if (server == null || contract == null || recruit == null
-                || recruit.getPersistentData().getInt(TAG_LIFECYCLE_VERSION) >= LIFECYCLE_VERSION) return;
-        UUID ownerId = contract.hiringPlayer();
-        resetRuntimeState(recruit);
-        if (ownerId != null) {
-            recruit.setOwnerUUID(Optional.of(ownerId));
-            recruit.setIsOwned(true);
-            if (RecruitEvents.recruitsPlayerUnitManager != null)
-                RecruitEvents.recruitsPlayerUnitManager.addRecruits(ownerId, 1);
-            MercenaryRosterRegistry.Definition definition = MercenaryRosterRegistry.get(contract.companyId());
-            String groupName = definition == null ? contract.companyId() : definition.name();
-            ServerPlayer owner = server.getPlayerList().getPlayer(ownerId);
-            String ownerName = owner == null ? ownerId.toString() : owner.getGameProfile().getName();
-            if (recruit.level() instanceof ServerLevel level) {
-                RecruitsGroup group = ensureCompanyGroup(level, ownerId, ownerName, groupName, owner);
-                if (group != null && RecruitEvents.recruitsGroupsManager != null) {
-                    recruit.setGroupUUID(group.getUUID());
-                    RecruitEvents.recruitsGroupsManager.addMember(group.getUUID(), recruit.getUUID(), level);
-                }
-            }
-        }
-        resetOrdersAfterHire(recruit);
-        SettlementData.SettlementRecord settlement = SettlementData.get(server.overworld()).getSettlement(contract.settlementId());
-        if (settlement != null && recruit.level() instanceof ServerLevel level) {
-            PlayerTeam expected = level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
-            if (expected != null && !expected.equals(recruit.getTeam())) {
-                try { FactionEvents.addRecruitToTeam(recruit, expected, level); }
-                catch (RuntimeException exception) { level.getScoreboard().addPlayerToTeam(recruit.getScoreboardName(), expected); }
-            }
-        }
-        recruit.getPersistentData().putBoolean(SettlementManager.TAG_MERCENARY, true);
-        recruit.getPersistentData().putString(SettlementManager.TAG_MERCENARY_COMPANY, contract.companyId());
-        recruit.getPersistentData().putInt(TAG_LIFECYCLE_VERSION, LIFECYCLE_VERSION);
     }
 
     private static RecruitsGroup ensureCompanyGroup(ServerLevel level, UUID ownerId, String ownerName,
