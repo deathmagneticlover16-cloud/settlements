@@ -632,8 +632,9 @@ public final class CampaignData extends SavedData {
     }
 
     public String factionRankTitle(String factionId, UUID playerId, boolean factionLeader) {
+        FactionProfile profile = factionProfile(factionId);
         int tier = factionRankTier(factionId, playerId, factionLeader);
-        return CampaignDefinitions.defaultRankTitle(tier);
+        return profile.rankTitles.getOrDefault(tier, CampaignDefinitions.defaultRankTitle(tier));
     }
 
     public void setFactionMemberRank(String factionId, UUID playerId, int tier) {
@@ -646,6 +647,12 @@ public final class CampaignData extends SavedData {
         if (factionId == null || factionId.isBlank() || playerId == null) return;
         FactionProfile profile = factionProfiles.get(factionId);
         if (profile != null && profile.memberRanks.remove(playerId) != null) setDirty();
+    }
+
+    public void setFactionRankTitle(String factionId, int tier, String title) {
+        if (factionId == null || factionId.isBlank()) return;
+        factionProfile(factionId).rankTitles.put(clamp(tier, 0, 4), SettlementData.cleanText(title, CampaignDefinitions.defaultRankTitle(tier), 24));
+        setDirty();
     }
 
     public void setFactionGovernment(String factionId, GovernmentType government) {
@@ -1557,6 +1564,7 @@ public final class CampaignData extends SavedData {
 
     public static final class FactionProfile {
         private final String factionId;
+        private final Map<Integer, String> rankTitles = new HashMap<>();
         private final Map<UUID, Integer> memberRanks = new HashMap<>();
         private GovernmentType government = GovernmentType.MONARCHY;
         private String teamDye = "white";
@@ -1564,6 +1572,7 @@ public final class CampaignData extends SavedData {
 
         private FactionProfile(String factionId) {
             this.factionId = factionId == null ? "" : factionId;
+            for (int tier = 0; tier <= 4; tier++) rankTitles.put(tier, CampaignDefinitions.defaultRankTitle(tier));
         }
 
         private CompoundTag toNBT() {
@@ -1572,6 +1581,14 @@ public final class CampaignData extends SavedData {
             tag.putString("Government", government.name());
             tag.putString("TeamDye", teamDye);
             tag.putString("UnitDye", unitDye);
+            ListTag titles = new ListTag();
+            rankTitles.forEach((tier, title) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.putInt("Tier", tier);
+                entry.putString("Title", title);
+                titles.add(entry);
+            });
+            tag.put("RankTitles", titles);
             ListTag members = new ListTag();
             memberRanks.forEach((player, tier) -> {
                 CompoundTag entry = new CompoundTag();
@@ -1590,6 +1607,11 @@ public final class CampaignData extends SavedData {
             String unitDye = tag.getString("UnitDye");
             if (!teamDye.isBlank()) profile.teamDye = teamDye;
             if (!unitDye.isBlank()) profile.unitDye = unitDye;
+            for (Tag raw : tag.getList("RankTitles", Tag.TAG_COMPOUND)) {
+                CompoundTag entry = (CompoundTag) raw;
+                int tier = clamp(entry.getInt("Tier"), 0, 4);
+                profile.rankTitles.put(tier, SettlementData.cleanText(entry.getString("Title"), CampaignDefinitions.defaultRankTitle(tier), 24));
+            }
             for (Tag raw : tag.getList("MemberRanks", Tag.TAG_COMPOUND)) {
                 CompoundTag entry = (CompoundTag) raw;
                 if (entry.hasUUID("Player")) profile.memberRanks.put(entry.getUUID("Player"), clamp(entry.getInt("Tier"), 0, 4));
@@ -1601,6 +1623,7 @@ public final class CampaignData extends SavedData {
         public GovernmentType government() { return government; }
         public String teamDye() { return teamDye; }
         public String unitDye() { return unitDye; }
+        public Map<Integer, String> rankTitles() { return Map.copyOf(rankTitles); }
         public Map<UUID, Integer> memberRanks() { return Map.copyOf(memberRanks); }
     }
 

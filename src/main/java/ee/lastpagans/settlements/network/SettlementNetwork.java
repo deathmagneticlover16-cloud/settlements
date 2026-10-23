@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SettlementNetwork {
-    private static final String PROTOCOL = "44";
+    private static final String PROTOCOL = "43";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Settlements.MOD_ID, "main"),
@@ -28,6 +28,7 @@ public final class SettlementNetwork {
         CHANNEL.messageBuilder(ApplyCharacterBodyPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(ApplyCharacterBodyPacket::encode).decoder(ApplyCharacterBodyPacket::decode).consumerMainThread(ApplyCharacterBodyPacket::handle).add();
         CHANNEL.messageBuilder(ClearCharacterBodyPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(ClearCharacterBodyPacket::encode).decoder(ClearCharacterBodyPacket::decode).consumerMainThread(ClearCharacterBodyPacket::handle).add();
         CHANNEL.messageBuilder(CharacterSheetPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(CharacterSheetPacket::encode).decoder(CharacterSheetPacket::decode).consumerMainThread(CharacterSheetPacket::handle).add();
+        CHANNEL.messageBuilder(UpdateCharacterIdentityPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(UpdateCharacterIdentityPacket::encode).decoder(UpdateCharacterIdentityPacket::decode).consumerMainThread(UpdateCharacterIdentityPacket::handle).add();
         CHANNEL.messageBuilder(ProfileSyncPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(ProfileSyncPacket::encode).decoder(ProfileSyncPacket::decode).consumerMainThread(ProfileSyncPacket::handle).add();
         CHANNEL.messageBuilder(OpenCampaignRequestPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(OpenCampaignRequestPacket::encode).decoder(OpenCampaignRequestPacket::decode).consumerMainThread(OpenCampaignRequestPacket::handle).add();
         CHANNEL.messageBuilder(CampaignSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(CampaignSnapshotPacket::encode).decoder(CampaignSnapshotPacket::decode).consumerMainThread(CampaignSnapshotPacket::handle).add();

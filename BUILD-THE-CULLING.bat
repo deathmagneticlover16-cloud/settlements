@@ -9,5 +9,5 @@ if errorlevel 1 (
   exit /b 1
 )
 echo BUILD COMPLETE
-echo JAR: build\libs\settlements-4.0.0.jar
+echo JAR: build\libs\settlements-3.0.0.jar
 pause

@@ -6,15 +6,20 @@ The Culling is the economy and interface cleanup release. Every political state 
 
 Settlement-local Wealth, its migration code, and the Prosperity mechanic have been removed. Development now depends on population, Stability, housing, and capture objectives. Research speed comes from its technology duration and ruler traits.
 
-The interface starts with a two-branch campaign tree:
+The interface is arranged around reusable workspaces:
 
-- The Settlement branch contains local overview and management, founding, and research.
-- The Realm branch contains character, family, faction, military, diplomacy, and world news.
+- Campaign dashboard
+- Character workspace
+- Settlement dashboard with Overview, Residents, Treasury, Effects, and Management tabs
+- Military workspace with Forces, Levies, and Mercenaries tabs
+- Faction workspace with Overview, Members, Settlements, and Ranks tabs
+- Diplomacy workspace with Relations, Declare, Proposals, and Wars tabs
+- Research
+- World News
+- In-world area editor
 
-The branch screens share one implementation while their leaves remain focused workspaces. Settlement names generate stable internal IDs automatically; duplicate names receive `_2`, `_3`, and later suffixes without exposing that bookkeeping in the normal interface.
+Character creation now moves directly from identity/body editing to trait selection. Main Seat selection lives directly on the Character Sheet. War aid and peace terms remain contextual editors attached to the selected war.
 
-Character creation moves directly from identity/body editing to trait selection. Names are fixed after creation, Main House has been removed, and Main Seat selection lives directly on the Character Sheet. War aid and peace terms remain contextual editors attached to the selected war.
-
-Run `BUILD-THE-CULLING.bat` on Windows or `./gradlew clean build` elsewhere. The output is `build/libs/settlements-4.0.0.jar`; clients and servers must use network protocol 44 and matching mod dependencies.
+Run `BUILD-THE-CULLING.bat` on Windows or `./gradlew clean build` elsewhere. The output is `build/libs/settlements-3.0.0.jar`; clients and servers must use network protocol 43 and matching mod dependencies.
 
 This release targets fresh worlds. Removed data formats are deliberately not migrated.

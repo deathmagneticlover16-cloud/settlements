@@ -30,7 +30,6 @@ public final class RegressionChecks {
         bannerValidation();
         treasuryAccounting();
         dyeNames();
-        settlementIdsFromNames();
         researchTiers();
         capturePacket();
         recruitTemplateSanitization();
@@ -212,23 +211,12 @@ public final class RegressionChecks {
 
     private static void researchTiers() {
         SettlementData data = new SettlementData();
-        SettlementData.SettlementRecord settlement = data.createSettlement("Tier test", UUID.randomUUID());
+        SettlementData.SettlementRecord settlement = data.createSettlement("tier_test", "Tier test", UUID.randomUUID());
         settlement.setCapital(true);
         for (SettlementData.SettlementRank rank : SettlementData.SettlementRank.values()) {
             settlement.setRank(rank);
             check(ResearchManager.settlementTier(settlement) == rank.ordinal() + 1, "capital does not elevate research tier: " + rank);
         }
-    }
-
-    private static void settlementIdsFromNames() {
-        SettlementData data = new SettlementData();
-        UUID founder = UUID.randomUUID();
-        SettlementData.SettlementRecord first = data.createSettlement("White Harbor", founder);
-        SettlementData.SettlementRecord second = data.createSettlement("White Harbor", founder);
-        SettlementData.SettlementRecord third = data.createSettlement("White Harbor", founder);
-        check(first != null && first.getId().equals("white_harbor"), "settlement ID derives from its name");
-        check(second != null && second.getId().equals("white_harbor_2"), "second matching settlement name receives suffix 2");
-        check(third != null && third.getId().equals("white_harbor_3"), "later matching settlement names increment their suffix");
     }
 
     private static void capturePacket() {

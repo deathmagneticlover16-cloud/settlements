@@ -52,8 +52,8 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Military"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MILITARY)))
                 .bounds(left + 350, top + 340, 86, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Realm Branch"), button ->
-                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH)))
+        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
+                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
                 .bounds(left + 442, top + 340, 104, 18).build());
     }
 

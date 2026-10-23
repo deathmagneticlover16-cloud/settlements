@@ -46,11 +46,24 @@ public final class SettlementCommands {
                                 .executes(context -> open(context.getSource(), StringArgumentType.getString(context, "id")))))
                 .then(Commands.literal("list").executes(context -> list(context.getSource())))
                 .then(Commands.literal("create")
-                        .then(Commands.argument("name", StringArgumentType.greedyString())
-                                .executes(context -> create(context.getSource(), StringArgumentType.getString(context, "name")))))
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(context -> create(
+                                                context.getSource(),
+                                                StringArgumentType.getString(context, "id"),
+                                                StringArgumentType.getString(context, "name")
+                                        )))))
                 .then(Commands.literal("delete").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .executes(context -> delete(context.getSource(), StringArgumentType.getString(context, "id")))))
+                .then(Commands.literal("rename")
+                        .then(Commands.argument("id", StringArgumentType.word())
+                                .then(Commands.argument("name", StringArgumentType.greedyString())
+                                        .executes(context -> rename(
+                                                context.getSource(),
+                                                StringArgumentType.getString(context, "id"),
+                                                StringArgumentType.getString(context, "name")
+                                        )))))
                 .then(Commands.literal("settownsquare")
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .executes(context -> setTownSquare(context.getSource(), StringArgumentType.getString(context, "id")))))
@@ -436,16 +449,16 @@ public final class SettlementCommands {
         return 1;
     }
 
-    private static int create(CommandSourceStack source, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private static int create(CommandSourceStack source, String id, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
         SettlementData data = SettlementData.get(player.serverLevel());
         if (CampaignManager.factionId(player).isBlank() && data.getSettlements().stream().filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
             source.sendFailure(Component.literal("Independent rulers may own at most two settlements. Create a faction before founding another."));
             return 0;
         }
-        SettlementData.SettlementRecord settlement = data.createSettlement(name, player.getUUID());
+        SettlementData.SettlementRecord settlement = data.createSettlement(id, name, player.getUUID());
         if (settlement == null) {
-            source.sendFailure(Component.literal("The settlement name must contain letters or numbers."));
+            source.sendFailure(Component.literal("That settlement ID is invalid or already used."));
             return 0;
         }
         settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
@@ -466,6 +479,15 @@ public final class SettlementCommands {
             return 0;
         }
         source.sendSuccess(() -> Component.literal("Settlement deleted."), true);
+        return 1;
+    }
+
+    private static int rename(CommandSourceStack source, String id, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayer player = player(source);
+        SettlementData.SettlementRecord settlement = requireManage(player, id);
+        if (settlement == null) return 0;
+        settlement.rename(name);
+        source.sendSuccess(() -> Component.literal("Renamed settlement to " + settlement.getName() + "."), true);
         return 1;
     }
 

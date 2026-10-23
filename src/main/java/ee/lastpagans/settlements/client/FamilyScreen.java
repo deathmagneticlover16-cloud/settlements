@@ -75,8 +75,8 @@ public final class FamilyScreen extends ScaledCampaignScreen {
                     .bounds(left + 18, top + 262, 128, 20).build());
             divorce.active = snapshot.canDivorce();
         }
-        addRenderableWidget(Button.builder(Component.literal("Realm Branch"), button ->
-                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH)))
+        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
+                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
                 .bounds(left + 18, top + 292, 120, 18).build());
     }
 

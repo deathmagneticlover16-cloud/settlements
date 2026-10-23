@@ -35,14 +35,7 @@ public final class SettlementClientHandler {
         Minecraft.getInstance().setScreen(new CharacterCreationScreen());
     }
     public static void openCharacterSheet(CharacterSnapshot snapshot, boolean returnToMain) { Minecraft.getInstance().setScreen(new CharacterSheetScreen(snapshot, returnToMain)); }
-    public static void openCampaign(CampaignSnapshot snapshot, ee.lastpagans.settlements.network.OpenCampaignRequestPacket.ScreenTarget landing) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (landing == ee.lastpagans.settlements.network.OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT_BRANCH)
-            minecraft.setScreen(new CampaignBranchScreen(snapshot, CampaignBranchScreen.Branch.SETTLEMENT));
-        else if (landing == ee.lastpagans.settlements.network.OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH)
-            minecraft.setScreen(new CampaignBranchScreen(snapshot, CampaignBranchScreen.Branch.REALM));
-        else minecraft.setScreen(new CampaignMainScreen(snapshot));
-    }
+    public static void openCampaign(CampaignSnapshot snapshot) { Minecraft.getInstance().setScreen(new CampaignMainScreen(snapshot)); }
     public static void openDiplomacy(DiplomacySnapshot snapshot) { Minecraft.getInstance().setScreen(new CampaignDiplomacyScreen(snapshot)); }
     public static void openFamily(FamilySnapshot snapshot) { Minecraft.getInstance().setScreen(new FamilyScreen(snapshot)); }
     public static void openFaction(FactionSnapshot snapshot) {

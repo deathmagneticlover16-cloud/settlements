@@ -11,7 +11,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 public record OpenCampaignRequestPacket(ScreenTarget target) {
-    public enum ScreenTarget { MAIN, SETTLEMENT_BRANCH, REALM_BRANCH, CHARACTER, SETTLEMENT, FACTION, MILITARY, DIPLOMACY, FAMILY, WORLD_NEWS, RESEARCH, MERCENARIES }
+    public enum ScreenTarget { MAIN, CHARACTER, SETTLEMENT, FACTION, MILITARY, DIPLOMACY, FAMILY, WORLD_NEWS, RESEARCH, MERCENARIES }
 
     public static void encode(OpenCampaignRequestPacket packet, FriendlyByteBuf buffer) { buffer.writeEnum(packet.target); }
     public static OpenCampaignRequestPacket decode(FriendlyByteBuf buffer) { return new OpenCampaignRequestPacket(buffer.readEnum(ScreenTarget.class)); }
@@ -20,7 +20,7 @@ public record OpenCampaignRequestPacket(ScreenTarget target) {
         ServerPlayer player = context.getSender();
         if (player != null) context.enqueueWork(() -> {
             switch (packet.target) {
-                case MAIN, SETTLEMENT_BRANCH, REALM_BRANCH -> CampaignManager.openMain(player, packet.target);
+                case MAIN -> CampaignManager.openMain(player);
                 case CHARACTER -> SettlementManager.openCharacterSheet(player, true);
                 case SETTLEMENT -> SettlementManager.open(player);
                 case FACTION -> CampaignManager.openFaction(player, "");

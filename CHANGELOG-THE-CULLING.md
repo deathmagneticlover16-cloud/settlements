@@ -1,14 +1,5 @@
 # The Culling
 
-## 4.0.0 campaign tree
-
-- Replaced the flat campaign launcher with distinct Settlement and Realm branches rendered by one reusable branch screen.
-- Removed cross-links that mixed character and military controls into settlement management.
-- Made custom Casus Belli text appear verbatim in declaration summaries and removed the conflict implementation note.
-- Removed settlement, character, and faction-rank renaming, along with the Main House field and its network/configuration paths.
-- Settlement creation now derives IDs from names and adds `_2`, `_3`, and later suffixes when needed.
-- Bumped the major version because this removes saved character/faction fields and commands; network protocol is now 44.
-
 ## Economy
 
 - Replaced the old faction-wealth backing field with a direct `StateTreasuries` store.
@@ -35,4 +26,4 @@
 
 - Removed historical documentation and active compatibility code for retired formats.
 - Removed missing-body, old-faith, old-contract, old-mercenary, and one-click-war compatibility branches.
-- The original Culling economy overhaul was introduced in semantic version `3.0.0` with network protocol 43.
+- Bumped the mod to semantic version `3.0.0` because this release intentionally breaks removed save, command, API, and network formats; network protocol is now 43.

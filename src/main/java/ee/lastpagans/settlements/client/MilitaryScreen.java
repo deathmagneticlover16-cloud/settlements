@@ -63,8 +63,11 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                 .bounds(left + 14, top + 331, 92, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Next ▶"), button -> switchSettlement(true))
                 .bounds(left + 112, top + 331, 78, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Realm Branch"), button ->
-                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH)))
+        addRenderableWidget(Button.builder(Component.literal("Settlement"), button ->
+                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT)))
+                .bounds(left + 322, top + 331, 92, 18).build());
+        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
+                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
                 .bounds(left + 420, top + 331, 106, 18).build());
     }
 

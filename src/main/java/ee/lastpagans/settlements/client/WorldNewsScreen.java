@@ -37,8 +37,8 @@ public final class WorldNewsScreen extends ScaledCampaignScreen {
             filter = value;
             scroll = 0;
         }));
-        addRenderableWidget(Button.builder(Component.literal("Realm Branch"), button ->
-                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH)))
+        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
+                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
                 .bounds(left + 392, top + 282, 116, 18).build());
     }
 

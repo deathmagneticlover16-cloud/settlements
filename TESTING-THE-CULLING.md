@@ -15,5 +15,3 @@ Required manual checks when convenient:
 3. Send aid, hire mercenaries, pay upkeep, negotiate lump treasury transfers, and process reparations.
 4. Advance Village to Town, Town to City, and City to Major City using population, Stability, housing, and capture zones; no Prosperity requirement should appear.
 5. Complete character creation in two steps and change Main Seat directly on the Character Sheet.
-6. Verify the campaign root separates local settlement tools from character, faction, military, and diplomacy tools.
-7. Create settlements with the same name and verify their internal IDs receive sequential suffixes without appearing in the normal creation UI.
