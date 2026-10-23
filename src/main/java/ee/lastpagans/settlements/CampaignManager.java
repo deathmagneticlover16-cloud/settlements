@@ -14,6 +14,7 @@ import ee.lastpagans.settlements.network.FactionCreatePacket;
 import ee.lastpagans.settlements.network.FamilySnapshotPacket;
 import ee.lastpagans.settlements.network.MapMarkersPacket;
 import ee.lastpagans.settlements.network.MilitarySnapshotPacket;
+import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.WorldNewsSnapshotPacket;
 import net.minecraft.ChatFormatting;
@@ -58,8 +59,14 @@ public final class CampaignManager {
     }
 
     public static void openMain(ServerPlayer player) {
+        openMain(player, OpenCampaignRequestPacket.ScreenTarget.MAIN);
+    }
+
+    public static void openMain(ServerPlayer player, OpenCampaignRequestPacket.ScreenTarget landing) {
+        OpenCampaignRequestPacket.ScreenTarget destination = landing == OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT_BRANCH
+                || landing == OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH ? landing : OpenCampaignRequestPacket.ScreenTarget.MAIN;
         SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                new CampaignSnapshotPacket(CampaignSnapshot.from(player)));
+                new CampaignSnapshotPacket(CampaignSnapshot.from(player), destination));
     }
 
     public static void openFaction(ServerPlayer player, String message) {
@@ -123,10 +130,8 @@ public final class CampaignManager {
             return;
         }
         if ("CREATE_SETTLEMENT".equals(action)) {
-            String[] parts = value == null ? new String[0] : value.split("\\|", 2);
-            String id = parts.length > 0 ? SettlementData.normalizeId(parts[0]) : "";
-            String name = parts.length > 1 ? SettlementData.cleanText(parts[1], id, 64) : id;
-            String result = createSettlementFromGui(player, id, name);
+            String name = SettlementData.cleanText(value, "", 64);
+            String result = createSettlementFromGui(player, name);
             player.sendSystemMessage(Component.literal(result));
             openMain(player);
             return;
@@ -176,14 +181,6 @@ public final class CampaignManager {
                         SettlementManager.broadcastProfiles(player.getServer());
                         result = "Faction rank updated.";
                     }
-                }
-            }
-            case "SET_RANK_TITLE" -> {
-                if (!leader) result = "Only the faction leader may rename faction ranks.";
-                else {
-                    data.setFactionRankTitle(factionId, Math.max(0, Math.min(4, tier)), value);
-                    SettlementManager.broadcastProfiles(player.getServer());
-                    result = "Tier " + Math.max(0, Math.min(4, tier)) + " title updated.";
                 }
             }
             case "SET_CAPITAL" -> {
@@ -1567,7 +1564,7 @@ public final class CampaignManager {
     }
 
 
-    private static String createSettlementFromGui(ServerPlayer player, String id, String name) {
+    private static String createSettlementFromGui(ServerPlayer player, String name) {
         SettlementData data = SettlementData.get(player.serverLevel());
         CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
         long gameTime = player.serverLevel().getGameTime();
@@ -1577,13 +1574,13 @@ public final class CampaignManager {
             long seconds = Math.max(1L, (cooldownTicks - elapsed + 19L) / 20L);
             return "You recently founded a settlement. You may found another in " + (seconds / 60L) + "m " + (seconds % 60L) + "s.";
         }
-        if (id.isBlank()) return "Settlement creation failed: enter a short settlement ID.";
+        if (name.isBlank()) return "Settlement creation failed: enter a settlement name.";
         if (factionId(player).isBlank() && data.getSettlements().stream()
                 .filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
             return "Independent rulers may own at most two settlements. Create a faction before founding another.";
         }
-        SettlementData.SettlementRecord settlement = data.createSettlement(id, name, player.getUUID());
-        if (settlement == null) return "Settlement creation failed: that ID is invalid or already used.";
+        SettlementData.SettlementRecord settlement = data.createSettlement(name, player.getUUID());
+        if (settlement == null) return "Settlement creation failed: enter a name containing letters or numbers.";
         settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
         String politicalFaction = factionId(player);
         if (!politicalFaction.isBlank()) settlement.setFactionTeam(politicalFaction);

@@ -162,15 +162,6 @@ public final class SettlementManager {
             player.sendSystemMessage(Component.literal("That settlement no longer exists."));
             return;
         }
-        if (action == SettlementAction.OPEN_CHARACTER) {
-            if (canView(player, settlement)) openCharacterSheet(player, true);
-            else player.sendSystemMessage(Component.literal("You cannot access this settlement."));
-            return;
-        }
-        if (action == SettlementAction.OPEN_MAIN) {
-            CampaignManager.openMain(player);
-            return;
-        }
         if (action == SettlementAction.SELECT_PREVIOUS || action == SettlementAction.SELECT_NEXT) {
             cycleSettlement(player, data, settlement, action == SettlementAction.SELECT_NEXT, "MILITARY".equalsIgnoreCase(argument));
             return;
@@ -218,7 +209,6 @@ public final class SettlementManager {
             case LINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> linkCurrentClaim(player, settlement));
             case UNLINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> unlinkCurrentClaim(player, settlement));
             case CLEAR_CLAIMS -> requireManager(player, settlement, () -> clearClaims(player, settlement));
-            case RENAME_SETTLEMENT -> requireManager(player, settlement, () -> renameSettlement(player, settlement, argument));
             case TRANSFER_SETTLEMENT -> requireOwner(player, settlement, () -> transferSettlement(player, settlement, argument));
             case ADD_MEMBER_CITIZEN -> requireManager(player, settlement, () -> setSettlementMember(player, settlement, argument, SettlementData.SettlementRole.CITIZEN));
             case ADD_MEMBER_COOWNER -> requireManager(player, settlement, () -> setSettlementMember(player, settlement, argument, SettlementData.SettlementRole.CO_OWNER));
@@ -229,7 +219,7 @@ public final class SettlementManager {
             case REMOVE_CAPTURE_ZONE -> requireManager(player, settlement, () -> CaptureZoneManager.removeNearest(player, settlement));
             case RECALCULATE_HOUSING -> requireManager(player, settlement, () -> "Housing recalculated: " + CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement) + " bed(s).");
             case DELETE_SETTLEMENT -> "Deletion handled separately.";
-            case OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT -> "Screen opened.";
+            case SELECT_PREVIOUS, SELECT_NEXT -> "Screen opened.";
             case REFRESH -> "Stats refreshed.";
         };
         sendSnapshot(player, settlement, false, result);
@@ -897,78 +887,6 @@ public final class SettlementManager {
         return allowed.stream().anyMatch(option -> option.equalsIgnoreCase(value.trim()));
     }
 
-    public static void updateCharacterIdentity(ServerPlayer player, String firstName, String middleName, String lastName, String house, boolean returnToMain) {
-        SettlementData data = SettlementData.get(player.serverLevel());
-        SettlementData.CharacterRecord character = data.getCharacter(player.getUUID());
-        if (character == null || !character.isCreated()) {
-            promptCharacterCreation(player);
-            return;
-        }
-
-        String cleanFirst = SettlementData.cleanText(firstName, "", 24);
-        String cleanMiddle = SettlementData.cleanText(middleName, "", 24);
-        String cleanLast = SettlementData.cleanText(lastName, "", 24);
-        if (cleanFirst.isBlank() || cleanLast.isBlank()) {
-            player.sendSystemMessage(Component.literal("Character renaming requires both a first and last name."));
-            openCharacterSheet(player, returnToMain);
-            return;
-        }
-
-        String proposed = String.join(" ", List.of(cleanFirst, cleanMiddle, cleanLast).stream().filter(value -> !value.isBlank()).toList()).trim();
-        boolean nameChanged = !cleanFirst.equals(character.getFirstName())
-                || !cleanMiddle.equals(character.getMiddleName())
-                || !cleanLast.equals(character.getLastName());
-        if (nameChanged) {
-            boolean duplicate = data.getCharacters().stream()
-                    .filter(other -> !player.getUUID().equals(other.getPlayerId()))
-                    .anyMatch(other -> other.isCreated() && other.getDisplayName().equalsIgnoreCase(proposed));
-            if (duplicate) {
-                player.sendSystemMessage(Component.literal("That character name is already in use."));
-                openCharacterSheet(player, returnToMain);
-                return;
-            }
-            int cost = Math.max(0, SettlementConfig.CHARACTER_RENAME_CURRENCY_COST.get());
-            if (!consumeCurrencyItems(player, cost)) {
-                player.sendSystemMessage(Component.literal("Renaming costs " + cost + " item(s) from #settlements:currency."));
-                openCharacterSheet(player, returnToMain);
-                return;
-            }
-            character.rename(cleanFirst, cleanMiddle, cleanLast);
-        }
-        character.setHouse(house);
-        data.setDirty();
-        if (nameChanged) {
-            player.refreshDisplayName();
-            player.refreshTabListName();
-            broadcastProfiles(player.getServer());
-            player.sendSystemMessage(Component.literal("Character renamed to " + character.getDisplayName() + "."));
-        } else {
-            player.sendSystemMessage(Component.literal("Character identity updated."));
-        }
-        openCharacterSheet(player, returnToMain);
-    }
-
-    private static boolean consumeCurrencyItems(ServerPlayer player, int amount) {
-        int required = Math.max(0, amount);
-        if (required == 0) return true;
-        int available = 0;
-        for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
-            if (!stack.isEmpty() && stack.is(CURRENCY)) available += stack.getCount();
-        }
-        if (available < required) return false;
-        int remaining = required;
-        for (int slot = 0; slot < player.getInventory().getContainerSize() && remaining > 0; slot++) {
-            ItemStack stack = player.getInventory().getItem(slot);
-            if (stack.isEmpty() || !stack.is(CURRENCY)) continue;
-            int take = Math.min(remaining, stack.getCount());
-            player.getInventory().removeItem(slot, take);
-            remaining -= take;
-        }
-        player.getInventory().setChanged();
-        return remaining == 0;
-    }
-
     public static void setMainSeatFromGui(ServerPlayer player, String settlementId, boolean returnToMain) {
         SettlementData data = SettlementData.get(player.serverLevel());
         SettlementData.CharacterRecord character = data.getCharacter(player.getUUID());
@@ -1405,14 +1323,6 @@ public final class SettlementManager {
         }
     }
 
-    private static String renameSettlement(ServerPlayer player, SettlementData.SettlementRecord settlement, String value) {
-        String clean = SettlementData.cleanText(value, settlement.getName(), 64);
-        if (clean.isBlank()) return "Settlement name cannot be blank.";
-        settlement.rename(clean);
-        CampaignManager.broadcastMapMarkers(player.getServer());
-        return "Settlement renamed to " + settlement.getName() + ".";
-    }
-
     private static String setSettlementMember(ServerPlayer actor, SettlementData.SettlementRecord settlement, String rawPlayerId, SettlementData.SettlementRole role) {
         UUID targetId;
         try { targetId = UUID.fromString(rawPlayerId == null ? "" : rawPlayerId.trim()); }
@@ -1583,9 +1493,9 @@ public final class SettlementManager {
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_CURRENCY,
         WITHDRAW_CURRENCY_ONE, WITHDRAW_CURRENCY_TEN, SET_TAX_POLICY, CLAIM_CONTRACT,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
-        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, DELETE_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
+        TRANSFER_SETTLEMENT, DELETE_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
         SET_TOWN_SQUARE, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST, REMOVE_CAPTURE_ZONE,
-        RECALCULATE_HOUSING, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
+        RECALCULATE_HOUSING, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
 
     public record ContractUseResult(boolean success, String message) {

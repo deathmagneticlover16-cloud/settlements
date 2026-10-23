@@ -49,7 +49,7 @@ public final class CharacterCreationDraftSession {
     public void identity(String first, String middle, String last, String faith, String address, String title) {
         if (state != State.DRAFT) return;
         CharacterDraft next = new CharacterDraft(first, middle, last, faith, addressFor(draft.body().gender()), title, draft.body());
-        // Trait cards are seeded by the complete display name. Preserve the spent reroll on a rename.
+        // Trait cards are seeded by the complete display name. Preserve the spent reroll after a name edit.
         if (!next.displayName().equalsIgnoreCase(draft.displayName())) {
             selected.clear();
             error = "";

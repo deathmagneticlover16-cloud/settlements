@@ -106,9 +106,8 @@ public record FactionSnapshot(
         enemies.sort(String.CASE_INSENSITIVE_ORDER);
 
         CampaignData.FactionProfile profile = campaign.factionProfile(factionId);
-        List<RankEntry> ranks = profile.rankTitles().entrySet().stream()
-                .sorted(Map.Entry.<Integer, String>comparingByKey().reversed())
-                .map(entry -> new RankEntry(entry.getKey(), entry.getValue()))
+        List<RankEntry> ranks = java.util.stream.IntStream.iterate(4, tier -> tier >= 0, tier -> tier - 1)
+                .mapToObj(tier -> new RankEntry(tier, CampaignDefinitions.defaultRankTitle(tier)))
                 .toList();
 
         return new FactionSnapshot(

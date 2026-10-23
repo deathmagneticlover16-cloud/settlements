@@ -96,12 +96,13 @@ public final class SettlementData extends SavedData {
         return tag;
     }
 
-    public SettlementRecord createSettlement(String rawId, String rawName, UUID founder) {
-        String id = normalizeId(rawId);
-        if (id.isBlank() || settlements.containsKey(id)) {
-            return null;
-        }
-        SettlementRecord settlement = new SettlementRecord(this, id, cleanText(rawName, id, 64));
+    public SettlementRecord createSettlement(String rawName, UUID founder) {
+        String name = cleanText(rawName, "", 64);
+        String baseId = normalizeId(name);
+        if (baseId.isBlank()) return null;
+        String id = baseId;
+        for (int suffix = 2; settlements.containsKey(id); suffix++) id = baseId + "_" + suffix;
+        SettlementRecord settlement = new SettlementRecord(this, id, name);
         settlement.ownerId = founder;
         settlement.members.put(founder, SettlementRole.OWNER);
         settlement.addChronicle("Settlement founded.");
@@ -715,12 +716,6 @@ public final class SettlementData extends SavedData {
             return members.getOrDefault(player, SettlementRole.OUTSIDER);
         }
 
-        public void rename(String value) {
-            name = cleanText(value, name, 64);
-            addChronicle("Settlement renamed to " + name + ".");
-            dirty();
-        }
-
         public void setOwner(UUID newOwner) {
             if (newOwner == null || newOwner.equals(ownerId)) return;
             UUID previousOwner = ownerId;
@@ -1256,7 +1251,6 @@ public final class SettlementData extends SavedData {
         private String faith = "Finnic Paganism";
         private String address = "Neutral";
         private String title = "Lord";
-        private String house = "";
         private String primarySeat = "";
         private CharacterBodyData body;
         private final List<String> traits = new ArrayList<>();
@@ -1272,7 +1266,6 @@ public final class SettlementData extends SavedData {
             record.faith = validFaith(cleanText(tag.getString("Faith"), "Finnic Paganism", 32));
             record.address = cleanText(tag.getString("Address"), "Neutral", 16);
             record.title = cleanText(tag.getString("Title"), "Lord", 32);
-            record.house = cleanText(tag.getString("House"), "", 32);
             record.primarySeat = normalizeId(tag.getString("PrimarySeat"));
             if (tag.contains("Body", Tag.TAG_COMPOUND)) record.body = CharacterBodyData.fromNBT(tag.getCompound("Body"));
             readStringList(tag, "Traits", record.traits);
@@ -1289,7 +1282,6 @@ public final class SettlementData extends SavedData {
             tag.putString("Faith", faith);
             tag.putString("Address", address);
             tag.putString("Title", title);
-            tag.putString("House", house);
             tag.putString("PrimarySeat", primarySeat);
             if (body != null) tag.put("Body", body.sanitized().toNBT());
             writeStringList(tag, "Traits", traits);
@@ -1304,7 +1296,6 @@ public final class SettlementData extends SavedData {
         public String getFaith() { return faith; }
         public String getAddress() { return address; }
         public String getTitle() { return title; }
-        public String getHouse() { return house; }
         public String getPrimarySeat() { return primarySeat; }
         public boolean hasBodyData() { return body != null; }
         public CharacterBodyData getBody() { return body; }
@@ -1323,15 +1314,6 @@ public final class SettlementData extends SavedData {
             this.title = cleanText(title, "Lord", 32);
             this.created = !this.firstName.isBlank() && !this.lastName.isBlank();
         }
-
-        public void rename(String first, String middle, String last) {
-            this.firstName = cleanText(first, "", 24);
-            this.middleName = cleanText(middle, "", 24);
-            this.lastName = cleanText(last, "", 24);
-            this.created = !this.firstName.isBlank() && !this.lastName.isBlank();
-        }
-
-        public void setHouse(String house) { this.house = cleanText(house, "", 32); }
 
         public void setPrimarySeat(String value) { primarySeat = normalizeId(value); }
         public void setFaith(String value) { this.faith = validFaith(cleanText(value, "Finnic Paganism", 32)); }

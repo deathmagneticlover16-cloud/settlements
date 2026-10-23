@@ -55,8 +55,8 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             case PROPOSALS -> proposalWidgets();
             case WARS -> warWidgets();
         }
-        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
-                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
+        addRenderableWidget(Button.builder(Component.literal("Realm Branch"), button ->
+                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH)))
                 .bounds(left + W - 132, top + H - 29, 120, 20).build());
     }
 
@@ -132,7 +132,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         }
 
         Button declare = addRenderableWidget(Button.builder(Component.literal("Declare " + type.displayName()), b -> declareConflict())
-                .bounds(left + 330, top + 290, 210, 24).build());
+                .bounds(left + 330, top + 312, 210, 24).build());
         declare.active = snapshot.canDeclareWar() && declarationValid();
     }
 
@@ -305,7 +305,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             case PROPOSALS -> renderProposals(graphics);
             case WARS -> renderWars(graphics);
         }
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, snapshot.message(), left + W / 2, top + H - 52, 0xFFFFD27A);
+        if (!snapshot.message().isBlank()) graphics.drawString(font, ellipsize(snapshot.message(), 294), left + 20, top + 320, 0xFFFFD27A, false);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -337,7 +337,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         }
         if (selectedGoal() == CampaignData.WarGoal.CUSTOM) graphics.drawString(font, "Custom Casus Belli", left + 20, top + 176, 0xFFE7D8B0, false);
 
-        drawCampaignInset(graphics, left + 20, top + 218, left + W - 20, top + 282);
+        drawCampaignInset(graphics, left + 20, top + 218, left + W - 20, top + 304);
         graphics.drawString(font, "DECLARATION SUMMARY", left + 30, top + 227, 0xFFFFD27A, false);
         if (type == CampaignData.WarType.SETTLEMENT_WAR) {
             DiplomacySnapshot.SettlementTarget source = selectedSourceSettlement();
@@ -349,13 +349,15 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         } else {
             stat(graphics, "Attacker", snapshot.ownFactionName(), 30, 246);
             stat(graphics, "Defender", selectedFactionName(), 285, 246);
-            stat(graphics, "Casus Belli", selectedGoal().displayName(), 30, 264);
             stat(graphics, "Conflict tier", type.displayName(), 285, 264);
         }
-        graphics.drawString(font, type == CampaignData.WarType.SETTLEMENT_WAR
-                ? "Parent factions are observers until they send aid or explicitly join; joining escalates the conflict."
-                : "A full faction declaration changes Recruits relations to Enemy only after server-side verification.",
-                left + 20, top + 320, 0xFFB8B0A0, false);
+        graphics.drawWordWrap(font, Component.literal("Casus Belli: " + displayedCasusBelli()), left + 30, top + 282, 500, 0xFFFFFFFF);
+    }
+
+    private String displayedCasusBelli() {
+        if (selectedGoal() != CampaignData.WarGoal.CUSTOM) return selectedGoal().displayName();
+        String custom = customCasusBelli == null ? "" : customCasusBelli.getValue().trim();
+        return custom.isBlank() ? "Enter a custom casus belli" : custom;
     }
 
     private void renderProposals(GuiGraphics graphics) {

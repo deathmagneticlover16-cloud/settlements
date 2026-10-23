@@ -14,7 +14,6 @@ import ee.lastpagans.settlements.network.HousingAreaActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -37,7 +36,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private boolean confirmDeleteSettlement;
     private ManagePage managePage = ManagePage.LOCATIONS;
     private int effectScroll;
-    private EditBox renameBox, transferBox;
+    private EditBox transferBox;
     private DropdownWidget memberDropdown, memberCandidateDropdown;
     private TaxRateSlider taxSlider;
     private final Map<String, String> memberIdsByLabel = new LinkedHashMap<>();
@@ -76,19 +75,13 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 .bounds(left + 14, top + 301, 92, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Next ▶"), button -> switchSettlement(true))
                 .bounds(left + 112, top + 301, 78, 18).build());
-        if (!isLimitedView()) {
-            addRenderableWidget(Button.builder(Component.literal("Military"), button -> open(OpenCampaignRequestPacket.ScreenTarget.MILITARY))
-                    .bounds(left + 322, top + 301, 92, 18).build());
-        }
-        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button -> open(OpenCampaignRequestPacket.ScreenTarget.MAIN))
+        addRenderableWidget(Button.builder(Component.literal("Settlement Branch"), button -> open(OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT_BRANCH))
                 .bounds(left + 420, top + 301, 106, 18).build());
     }
 
     private void overviewButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Character"), button -> send(SettlementManager.SettlementAction.OPEN_CHARACTER))
-                .bounds(left + 20, top + 260, 100, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Refresh"), button -> send(SettlementManager.SettlementAction.REFRESH))
-                .bounds(left + 126, top + 260, 80, 20).build());
+                .bounds(left + 20, top + 260, 80, 20).build());
     }
 
     private void residentButtons() {
@@ -171,18 +164,12 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("No Banner"), button -> send(SettlementManager.SettlementAction.CLEAR_BANNER))
                 .bounds(left + 336, top + 154, 112, 18).build());
 
-        renameBox = new EditBox(font, left + 30, top + 208, 224, 20, Component.literal("New settlement name"));
-        renameBox.setMaxLength(64);
-        addRenderableWidget(renameBox);
-        addRenderableWidget(Button.builder(Component.literal("Rename"), b -> send(SettlementManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
-                .bounds(left + 260, top + 208, 78, 20).build());
-
         if ("OWNER".equals(snapshot.role())) {
-            transferBox = new EditBox(font, left + 30, top + 252, 224, 20, Component.literal("Online player"));
+            transferBox = new EditBox(font, left + 30, top + 214, 224, 20, Component.literal("Online player"));
             transferBox.setMaxLength(32);
             addRenderableWidget(transferBox);
             addRenderableWidget(Button.builder(Component.literal("Transfer Ownership"), b -> send(SettlementManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
-                    .bounds(left + 260, top + 252, 128, 20).build());
+                    .bounds(left + 260, top + 214, 128, 20).build());
 
             addRenderableWidget(Button.builder(Component.literal(confirmDeleteSettlement ? "CONFIRM DELETE" : "Delete Settlement"), b -> {
                         if (confirmDeleteSettlement) {
@@ -193,7 +180,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                             send(SettlementManager.SettlementAction.DELETE_SETTLEMENT, "ARM");
                             buildWidgets();
                         }
-                    }).bounds(left + 30, top + 278, 158, 18).build());
+                    }).bounds(left + 30, top + 258, 158, 18).build());
         }
     }
 
@@ -474,15 +461,14 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "SETTLEMENT IDENTITY", left + 30, top + 128, 0xFFE7D8B0, false);
         graphics.drawString(font, "Banner mode: " + pretty(snapshot.bannerMode()), left + 30, top + 138, 0xFFAAAAAA, false);
         graphics.drawString(font, "Faction: " + (snapshot.factionId().isBlank() ? "Independent" : fitText(snapshot.factionName(), 250)), left + 30, top + 184, CAMPAIGN_MUTED, false);
-        graphics.drawString(font, "Rename settlement", left + 30, top + 198, 0xFFE7D8B0, false);
         if ("OWNER".equals(snapshot.role())) {
-            graphics.drawString(font, "Transfer ownership to an online player", left + 30, top + 242, 0xFFE7D8B0, false);
+            graphics.drawString(font, "Transfer ownership to an online player", left + 30, top + 204, 0xFFE7D8B0, false);
             graphics.drawWordWrap(font, Component.literal(confirmDeleteSettlement
                             ? "PERMANENT: press CONFIRM DELETE to erase this settlement and its linked claims."
                             : "Delete settlement permanently. All stored settlement data and linked claims are erased."),
-                    left + 198, top + 278, 310, confirmDeleteSettlement ? 0xFFFF7070 : 0xFFB08080);
+                    left + 198, top + 258, 310, confirmDeleteSettlement ? 0xFFFF7070 : 0xFFB08080);
         } else {
-            graphics.drawString(font, "Only the settlement owner may transfer ownership.", left + 30, top + 242, 0xFF888888, false);
+            graphics.drawString(font, "Only the settlement owner may transfer ownership.", left + 30, top + 220, 0xFF888888, false);
         }
     }
 

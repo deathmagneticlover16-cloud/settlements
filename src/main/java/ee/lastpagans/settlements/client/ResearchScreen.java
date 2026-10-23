@@ -39,8 +39,8 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         cancelButton = addRenderableWidget(Button.builder(Component.literal("Cancel Current"), b ->
                 SettlementNetwork.CHANNEL.sendToServer(new ResearchActionPacket("CANCEL", "")))
                 .bounds(left + 466, top + 330, 166, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Return to Main"), b ->
-                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
+        addRenderableWidget(Button.builder(Component.literal("Settlement Branch"), b ->
+                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT_BRANCH)))
                 .bounds(left + 528, top + 370, 104, 18).build());
         refreshButtons();
     }

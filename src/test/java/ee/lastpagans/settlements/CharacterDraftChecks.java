@@ -108,7 +108,7 @@ public final class CharacterDraftChecks {
         check(session.submit(), "retained draft can be retried");
         session.reject(session.id(), "Change name");
         session.identity("Grace", draft.middle(), draft.last(), draft.faith(), draft.address(), draft.title());
-        check(session.selectedTraits().isEmpty() && session.rerollUsed(), "rename resets seeded cards without granting another reroll");
+        check(session.selectedTraits().isEmpty() && session.rerollUsed(), "name edit resets seeded cards without granting another reroll");
         while (!session.completeTraits()) session.choose(session.choices().get(0));
         check(CampaignDefinitions.validateTraitSelection(session.playerId(), session.draft().displayName(),
                 session.selectedTraits(), session.rerollRound()), "new-name cards remain server-verifiable");

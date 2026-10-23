@@ -145,7 +145,7 @@ public final class CharacterCreationScreen extends ScaledCampaignScreen implemen
         drawCampaignFrame(graphics, left, top, PANEL_WIDTH, PANEL_HEIGHT, 40);
         drawCampaignPanel(graphics, left + 14, top + 50, left + 154, top + 303);
         graphics.drawCenteredString(font, "CREATE YOUR CHARACTER", left + PANEL_WIDTH / 2, top + 13, CAMPAIGN_TITLE);
-        graphics.drawCenteredString(font, "Your account, UUID and Recruits faction remain unchanged.", left + PANEL_WIDTH / 2, top + 28, 0xFFAA9D7F);
+        graphics.drawCenteredString(font, "Choose the identity your character will keep.", left + PANEL_WIDTH / 2, top + 28, 0xFFAA9D7F);
         graphics.drawCenteredString(font, "Character", left + 84, top + 57, CAMPAIGN_TITLE);
         if (minecraft != null && minecraft.player != null) {
             SettlementsWildfirePreviewSession.renderDraft(session, () ->

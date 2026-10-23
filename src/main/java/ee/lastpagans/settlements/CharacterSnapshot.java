@@ -11,10 +11,6 @@ import java.util.List;
 public record CharacterSnapshot(
         String accountName,
         String displayName,
-        String firstName,
-        String middleName,
-        String lastName,
-        int renameCurrencyCost,
         String titleLine,
         String faith,
         int devotion,
@@ -23,7 +19,6 @@ public record CharacterSnapshot(
         int reliability,
         String reliabilityTier,
         String address,
-        String house,
         String faction,
         String factionRank,
         String primarySeat,
@@ -34,7 +29,7 @@ public record CharacterSnapshot(
     public static CharacterSnapshot from(SettlementData data, ServerPlayer player) {
         SettlementData.CharacterRecord character = data.getCharacter(player.getUUID());
         if (character == null) {
-            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", "", SettlementConfig.CHARACTER_RENAME_CURRENCY_COST.get(), "", "", 0, "Uncommitted", false, 0, "Independent", "", "",
+            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", 0, "Uncommitted", false, 0, "Independent", "",
                     "Independent", "", "", "", List.of(), List.of());
         }
 
@@ -102,10 +97,6 @@ public record CharacterSnapshot(
         return new CharacterSnapshot(
                 player.getGameProfile().getName(),
                 character.getDisplayName(),
-                character.getFirstName(),
-                character.getMiddleName(),
-                character.getLastName(),
-                SettlementConfig.CHARACTER_RENAME_CURRENCY_COST.get(),
                 titleLine,
                 character.getFaith(),
                 devotion,
@@ -114,7 +105,6 @@ public record CharacterSnapshot(
                 reliability,
                 reliabilityTier,
                 character.getAddress(),
-                character.getHouse(),
                 factionName,
                 factionRank,
                 seatName,
@@ -127,10 +117,6 @@ public record CharacterSnapshot(
     public void encode(FriendlyByteBuf buffer) {
         buffer.writeUtf(accountName, 32);
         buffer.writeUtf(displayName, 80);
-        buffer.writeUtf(firstName, 24);
-        buffer.writeUtf(middleName, 24);
-        buffer.writeUtf(lastName, 24);
-        buffer.writeVarInt(Math.max(0, renameCurrencyCost));
         buffer.writeUtf(titleLine, 96);
         buffer.writeUtf(faith, 48);
         buffer.writeInt(devotion);
@@ -139,7 +125,6 @@ public record CharacterSnapshot(
         buffer.writeInt(reliability);
         buffer.writeUtf(reliabilityTier, 24);
         buffer.writeUtf(address, 16);
-        buffer.writeUtf(house, 32);
         buffer.writeUtf(faction, 64);
         buffer.writeUtf(factionRank, 32);
         buffer.writeUtf(primarySeat, 64);
@@ -153,10 +138,6 @@ public record CharacterSnapshot(
     public static CharacterSnapshot decode(FriendlyByteBuf buffer) {
         String accountName = buffer.readUtf(32);
         String displayName = buffer.readUtf(80);
-        String firstName = buffer.readUtf(24);
-        String middleName = buffer.readUtf(24);
-        String lastName = buffer.readUtf(24);
-        int renameCurrencyCost = buffer.readVarInt();
         String titleLine = buffer.readUtf(96);
         String faith = buffer.readUtf(48);
         int devotion = buffer.readInt();
@@ -165,7 +146,6 @@ public record CharacterSnapshot(
         int reliability = buffer.readInt();
         String reliabilityTier = buffer.readUtf(24);
         String address = buffer.readUtf(16);
-        String house = buffer.readUtf(32);
         String faction = buffer.readUtf(64);
         String factionRank = buffer.readUtf(32);
         String primarySeat = buffer.readUtf(64);
@@ -176,7 +156,7 @@ public record CharacterSnapshot(
         int traitCount = Math.min(32, buffer.readVarInt());
         List<TraitEntry> traits = new ArrayList<>(traitCount);
         for (int i = 0; i < traitCount; i++) traits.add(TraitEntry.decode(buffer));
-        return new CharacterSnapshot(accountName, displayName, firstName, middleName, lastName, renameCurrencyCost, titleLine, faith, devotion, devotionTier, reliabilityTracked, reliability, reliabilityTier, address, house,
+        return new CharacterSnapshot(accountName, displayName, titleLine, faith, devotion, devotionTier, reliabilityTracked, reliability, reliabilityTier, address,
                 faction, factionRank, primarySeat, spouse, holdings, traits);
     }
 

@@ -35,13 +35,11 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private BannerRenderer banner;
     private DropdownWidget memberDrop;
     private DropdownWidget rankDrop;
-    private DropdownWidget titleRankDrop;
     private DropdownWidget settlementDrop;
     private DropdownWidget availableFactionDrop;
     private DropdownWidget requestDrop;
     private DropdownWidget invitationDrop;
     private DropdownWidget inviteCandidateDrop;
-    private EditBox titleEdit;
     private EditBox factionNameEdit;
     private String factionNameDraft = "";
     private DropdownWidget teamColorDrop;
@@ -63,7 +61,6 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private final List<BannerLayerChoice> bannerLayers = new ArrayList<>();
     private int memberIndex;
     private int rankIndex;
-    private int titleRankIndex;
     private int settlementIndex;
     private int availableFactionIndex;
     private int requestIndex;
@@ -106,13 +103,11 @@ public final class FactionScreen extends ScaledCampaignScreen {
         clearWidgets();
         memberDrop = null;
         rankDrop = null;
-        titleRankDrop = null;
         settlementDrop = null;
         availableFactionDrop = null;
         requestDrop = null;
         invitationDrop = null;
         inviteCandidateDrop = null;
-        titleEdit = null;
         factionNameEdit = null;
         teamColorDrop = null;
         unitColorDrop = null;
@@ -122,8 +117,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
         bannerPatternDrop = null;
         bannerPatternColorDrop = null;
 
-        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
-                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
+        addRenderableWidget(Button.builder(Component.literal("Realm Branch"), button ->
+                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH)))
                 .bounds(left + W - 128, top + H - 28, 112, 18).build());
 
         if (snapshot.factionId().isBlank()) {
@@ -266,22 +261,6 @@ public final class FactionScreen extends ScaledCampaignScreen {
                         .bounds(left + 424, top + 368, 114, 20).build());
             }
         }
-        if (tab == Tab.RANKS && snapshot.viewerLeader() && !snapshot.ranks().isEmpty()) {
-            List<String> rankOptions = snapshot.ranks().stream()
-                    .map(rank -> "Tier " + rank.tier() + " — " + rank.title()).toList();
-            titleRankIndex = Math.max(0, Math.min(titleRankIndex, rankOptions.size() - 1));
-            titleRankDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 336, 178, 20,
-                    rankOptions, titleRankIndex, value -> {
-                        titleRankIndex = Math.max(0, rankOptions.indexOf(value));
-                        if (titleEdit != null) titleEdit.setValue(snapshot.ranks().get(titleRankIndex).title());
-                    }));
-            titleEdit = new EditBox(font, left + 206, top + 336, 220, 20, Component.literal("Visible rank title"));
-            titleEdit.setMaxLength(24);
-            titleEdit.setValue(snapshot.ranks().get(titleRankIndex).title());
-            addRenderableWidget(titleEdit);
-            addRenderableWidget(Button.builder(Component.literal("Rename"), button -> renameRank())
-                    .bounds(left + 432, top + 336, 106, 20).build());
-        }
         if (tab == Tab.SETTLEMENTS && snapshot.viewerLeader() && !snapshot.settlements().isEmpty()) {
             List<String> names = snapshot.settlements().stream().map(FactionSnapshot.SettlementEntry::name).toList();
             settlementIndex = Math.max(0, Math.min(settlementIndex, names.size() - 1));
@@ -348,14 +327,6 @@ public final class FactionScreen extends ScaledCampaignScreen {
         if (selectable.isEmpty()) return;
         FactionSnapshot.MemberEntry member = selectable.get(Math.min(memberIndex, selectable.size() - 1));
         SettlementNetwork.CHANNEL.sendToServer(new FactionActionPacket("KICK_MEMBER", member.playerId(), 0, ""));
-    }
-
-    private void renameRank() {
-        if (snapshot.ranks().isEmpty() || titleEdit == null) return;
-        FactionSnapshot.RankEntry rank = snapshot.ranks().get(Math.min(titleRankIndex, snapshot.ranks().size() - 1));
-        String title = titleEdit.getValue().trim();
-        if (title.isBlank()) return;
-        SettlementNetwork.CHANNEL.sendToServer(new FactionActionPacket("SET_RANK_TITLE", null, rank.tier(), title));
     }
 
     private void setRank() {
@@ -509,10 +480,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             };
             graphics.drawString(font, permission, left + 214, y, 0xFFAAAAAA, false);
         }
-        graphics.drawString(font, snapshot.viewerLeader()
-                        ? "Rename the selected visible title below."
-                        : "Visible titles do not change Minecraft usernames or UUIDs.",
-                left + 24, top + 318, 0xFFAA9D7F, false);
+        graphics.drawString(font, "Ranks control faction authority and use fixed titles.", left + 24, top + 318, 0xFFAA9D7F, false);
     }
 
     private void stat(GuiGraphics graphics, String label, Object value, int x, int y) {

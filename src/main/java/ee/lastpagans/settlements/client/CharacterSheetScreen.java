@@ -42,15 +42,12 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Donate to Faith"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new FamilyActionPacket("DONATE_FAITH", "", null)))
                 .bounds(left + 18, top + 376, 135, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Identity"), button ->
-                minecraft.setScreen(new CharacterIdentityEditScreen(snapshot, returnToMain)))
-                .bounds(left + 159, top + 376, 105, 20).build());
         List<String> seats = snapshot.holdings().stream().map(CharacterSnapshot.HoldingEntry::display).toList();
         if (!seats.isEmpty()) {
             int currentSeat = 0;
             for (int i = 0; i < snapshot.holdings().size(); i++)
                 if (snapshot.holdings().get(i).settlementName().equals(snapshot.primarySeat())) currentSeat = i;
-            addRenderableWidget(new DropdownWidget(left + 270, top + 376, 110, 20, seats, currentSeat, selected -> {
+            addRenderableWidget(new DropdownWidget(left + 159, top + 376, 220, 20, seats, currentSeat, selected -> {
                 int index = seats.indexOf(selected);
                 if (index >= 0) SettlementNetwork.CHANNEL.sendToServer(
                         new SetMainSeatPacket(snapshot.holdings().get(index).settlementId(), returnToMain));
@@ -59,9 +56,9 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         addRenderableWidget(Button.builder(Component.literal("Family"), button ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.FAMILY)))
                 .bounds(left + 386, top + 376, 72, 20).build());
-        String text = returnToMain ? "Return to Main" : "Close";
+        String text = returnToMain ? "Realm Branch" : "Close";
         addRenderableWidget(Button.builder(Component.literal(text), button -> {
-            if (returnToMain) SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN));
+            if (returnToMain) SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.REALM_BRANCH));
             else onClose();
         }).bounds(left + 464, top + 376, 100, 20).build());
     }
@@ -93,9 +90,8 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         line(graphics, "Reliability", reliability, x, y + 32);
         line(graphics, "Faction", snapshot.faction(), x, y + 48);
         line(graphics, "Faction rank", snapshot.factionRank(), x, y + 64);
-        line(graphics, "Main house", blank(snapshot.house()), x, y + 80);
-        line(graphics, "Main seat", blank(snapshot.primarySeat()), x, y + 96);
-        line(graphics, "Spouse", blank(snapshot.spouse()), x, y + 112);
+        line(graphics, "Main seat", blank(snapshot.primarySeat()), x, y + 80);
+        line(graphics, "Spouse", blank(snapshot.spouse()), x, y + 96);
 
         graphics.drawString(font, "CHARACTER TRAITS", x, top + 218, 0xFFE7D8B0, false);
         CharacterSnapshot.TraitEntry hovered = null;
@@ -126,7 +122,6 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
                 ? "None"
                 : snapshot.holdings().stream().map(CharacterSnapshot.HoldingEntry::display).collect(Collectors.joining(", "));
         graphics.drawString(font, "Holdings: " + scrollingText(holdings, 490), left + 18, top + 340, 0xFF999999, false);
-        graphics.drawString(font, "Account: " + snapshot.accountName(), left + 18, top + 357, 0xFF666666, false);
 
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
