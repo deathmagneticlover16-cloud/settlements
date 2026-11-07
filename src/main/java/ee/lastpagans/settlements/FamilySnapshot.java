@@ -65,11 +65,12 @@ public record FamilySnapshot(
 
         List<PlayerCandidate> playerCandidates = marriage == null
                 ? player.getServer().getPlayerList().getPlayers().stream()
-                .filter(other -> !other.getUUID().equals(player.getUUID()))
-                .filter(other -> campaign.getMarriage(other.getUUID()) == null)
-                .map(other -> {
-                    SettlementData.CharacterRecord other = characters.getCharacter(other.getUUID());
-                    return other != null && other.isCreated() ? new PlayerCandidate(other.getUUID(), other.getDisplayName()) : null;
+                .filter(onlinePlayer -> !onlinePlayer.getUUID().equals(player.getUUID()))
+                .filter(onlinePlayer -> campaign.getMarriage(onlinePlayer.getUUID()) == null)
+                .map(onlinePlayer -> {
+                    SettlementData.CharacterRecord candidateCharacter = characters.getCharacter(onlinePlayer.getUUID());
+                    return candidateCharacter != null && candidateCharacter.isCreated()
+                            ? new PlayerCandidate(onlinePlayer.getUUID(), candidateCharacter.getDisplayName()) : null;
                 })
                 .filter(java.util.Objects::nonNull)
                 .sorted(java.util.Comparator.comparing(PlayerCandidate::name, String.CASE_INSENSITIVE_ORDER))
