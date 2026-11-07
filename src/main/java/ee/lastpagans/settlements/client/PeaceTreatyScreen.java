@@ -24,8 +24,8 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private final DiplomacySnapshot snapshot;
     private final DiplomacySnapshot.WarEntry war;
     private int left, top;
-    private EditBox treasury, manpower, reparations, reparationsDays, napDays;
-    private String treasuryValue = "0", manpowerValue = "0", reparationsValue = "0", reparationsDaysValue = "0", napDaysValue = "0";
+    private EditBox treasury, manpower, napDays;
+    private String treasuryValue = "0", manpowerValue = "0", napDaysValue = "0";
     private DropdownWidget faith, settlement, claimSettlement, claim, destination, independenceSettlement;
     private int faithIndex, settlementIndex, claimSettlementIndex, claimIndex, destinationIndex, independenceSettlementIndex;
     private final Set<UUID> selectedClaimIds = new LinkedHashSet<>();
@@ -38,8 +38,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     @Override protected void init() {
         setupCampaignScale(W, H); left = campaignLeft(W); top = campaignTop(H);
         treasury = number(left + 142, top + 68, 104, treasuryValue); manpower = number(left + 142, top + 96, 104, manpowerValue);
-        reparations = number(left + 142, top + 124, 104, reparationsValue); reparationsDays = number(left + 142, top + 152, 104, reparationsDaysValue);
-        napDays = number(left + 142, top + 180, 104, napDaysValue);
+        napDays = number(left + 142, top + 124, 104, napDaysValue);
 
         addRenderableWidget(Button.builder(Component.literal(convertFaith ? "☑ Force faith conversion" : "☐ Force faith conversion"), b -> { preserveValues(); convertFaith = !convertFaith; rebuildWidgets(); })
                 .bounds(left + 272, top + 68, 220, 20).build());
@@ -103,8 +102,6 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private void preserveValues() {
         if (treasury != null) treasuryValue = treasury.getValue();
         if (manpower != null) manpowerValue = manpower.getValue();
-        if (reparations != null) reparationsValue = reparations.getValue();
-        if (reparationsDays != null) reparationsDaysValue = reparationsDays.getValue();
         if (napDays != null) napDaysValue = napDays.getValue();
         if (faith != null) faithIndex = Math.max(0, CampaignDefinitions.RELIGIONS.indexOf(faith.value()));
     }
@@ -163,7 +160,6 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         List<String> terms = new ArrayList<>();
         if (value(treasury) > 0) terms.add("TREASURY~~" + value(treasury) + "~0~");
         if (value(manpower) > 0) terms.add("MANPOWER~~" + value(manpower) + "~0~");
-        if (value(reparations) > 0 && value(reparationsDays) > 0) terms.add("REPARATIONS~~" + value(reparations) + "~" + value(reparationsDays) + "~");
         if (value(napDays) > 0) terms.add("NAP~~0~" + value(napDays) + "~");
         if (convertFaith && faith != null) terms.add("CONVERT_FAITH~~0~0~" + clean(faith.value()));
         DiplomacySnapshot.SettlementTarget enemy = selectedEnemySettlement();
@@ -186,8 +182,6 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     }
     private int estimatedTreatyCost() {
         int cost = ceilDiv(value(treasury), 100) + ceilDiv(value(manpower), 5);
-        long reparationTotal = (long)value(reparations) * (long)value(reparationsDays);
-        cost += (int)Math.min(100L, (reparationTotal + 99L) / 100L);
         cost += Math.min(20, ceilDiv(value(napDays), 7));
         if (convertFaith) cost += 25;
         DiplomacySnapshot.SettlementTarget whole = selectedEnemySettlement();
@@ -222,8 +216,8 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         g.drawCenteredString(font, "NEGOTIATE PEACE", left + W / 2, top + 13, CAMPAIGN_TITLE);
         g.drawCenteredString(font, war.typeName() + " · War score " + (war.warScore() > 0 ? "+" : "") + war.warScore(), left + W / 2, top + 29, 0xFFAAAAAA);
         g.drawString(font, "Lump treasury", left + 25, top + 74, 0xFFFFFFFF, false); g.drawString(font, "Manpower", left + 25, top + 102, 0xFFFFFFFF, false);
-        g.drawString(font, "Reparations/day", left + 25, top + 130, 0xFFFFFFFF, false); g.drawString(font, "Reparation days", left + 25, top + 158, 0xFFFFFFFF, false); g.drawString(font, "Forced NAP days", left + 25, top + 186, 0xFFFFFFFF, false);
-        g.drawWordWrap(font, Component.literal("Terms are demands on the opposing side. At 90+ war score, a capitulated side cannot reject valid terms within the dominant side's current war-score budget."), left + 25, top + 224, 220, 0xFFFFD27A);
+        g.drawString(font, "Forced NAP days", left + 25, top + 130, 0xFFFFFFFF, false);
+        g.drawWordWrap(font, Component.literal("Treasury payments are immediate. At 90+ war score, a capitulated side cannot reject valid terms within the dominant side's current war-score budget."), left + 25, top + 170, 220, 0xFFFFD27A);
         if (transferClaim || renounceClaim) g.drawString(font, (renounceClaim ? "Claims to renounce: " : "Claims to transfer: ") + selectedClaimIds.size() + "/" + MAX_SELECTED_CLAIMS, left + 272, top + 330, 0xFFAAAAAA, false);
         int treatyCost = estimatedTreatyCost();
         int budget = enforcementBudget();

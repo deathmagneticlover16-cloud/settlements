@@ -17,12 +17,12 @@ The interface is organized as a small set of reusable workspaces. Tabs are modes
 ## Contextual views
 
 - **Character Identity Editor** — edits an existing name and Main House from the Character workspace.
-- **Family and Marriage** — NPC candidates, player proposals, additional spouses, rejection, and divorce.
+- **Family and Marriage** — player proposals, acceptance, rejection, spouse details, and divorce.
 - **Found Settlement** — focused settlement-creation form.
 - **Housing Areas** — multi-area list attached to Settlement Management, with add, edit, delete, and world-view actions.
 - **Mercenary Company Roster** — hiring and contract details attached to the Military workspace.
-- **War Aid Ledger** — one-time and recurring manpower, treasury, and food aid attached to a selected war.
-- **Peace Terms** — treaty builder attached to a selected war.
+- **War Aid** — one-time manpower, treasury, and food aid attached to a selected war.
+- **Peace Terms** — treaty builder with immediate treasury payments attached to a selected war.
 - **Wildfire Body Editor** — authorized body customization attached to character creation.
 
 ## Persistent overlays

@@ -18,7 +18,6 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.scores.PlayerTeam;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -90,8 +89,6 @@ public final class CampaignSystemsManager {
         }
         processLevyMobilizations(server, extra, settlements);
         processLevyServicePenalties(server, extra, settlements);
-        processRecurringWarAid(server, extra, settlements, day);
-        processReparations(server, extra, day);
         processForcedNapExpiry(server, extra, day);
         processPassiveRelations(server, extra, day);
         processDevotionSites(server, extra, settlements, day);
@@ -99,7 +96,7 @@ public final class CampaignSystemsManager {
 
     /**
      * Advances only settlement-local campaign simulation for admin testing. Global diplomacy
-     * clocks (reparations, forced NAPs, spouse refreshes, etc.) are deliberately excluded so
+     * clocks (forced NAPs and other campaign-day obligations) are deliberately excluded so
      * testing a five-day levy modifier in one town cannot age the entire server campaign.
      */
     public static void processDebugSettlement(MinecraftServer server, SettlementData.SettlementRecord settlement, long simulatedDay) {
@@ -304,16 +301,6 @@ public final class CampaignSystemsManager {
             case "civic_pride" -> new CampaignSystemsData.ModifierRecord(id, "Civic Pride", "minecraft:bell", "POSITIVE", "Settlement progression", "+5 stability and +3 morale while citizens celebrate advancement.", 5, 3, expires);
             case "local_religious_unrest" -> new CampaignSystemsData.ModifierRecord(id, "Local Religious Unrest", "minecraft:rotten_flesh", "NEGATIVE", "Religious diplomacy", "The population dislikes close political ties with a strongly incompatible faith.", -3, -2, expires);
             case "foreign_soldiers" -> new CampaignSystemsData.ModifierRecord(id, "Foreign Soldiers", "minecraft:iron_sword", "MIXED", "Peace treaty", "Foreign manpower is available, but locals resent relying on outside soldiers.", -8, 0, expires);
-            case "families_in_mourning" -> new CampaignSystemsData.ModifierRecord(id, "Families in Mourning", "minecraft:wither_rose", "NEGATIVE", "Levy casualties", "Families mourn levymen who did not return.", -3, -2, expires);
-            case "heavy_levy_losses" -> new CampaignSystemsData.ModifierRecord(id, "Heavy Levy Losses", "minecraft:wither_rose", "NEGATIVE", "Levy casualties", "A large share of the settlement's levy was lost.", -6, -4, expires);
-            case "devastating_losses" -> new CampaignSystemsData.ModifierRecord(id, "Devastating Losses", "minecraft:skeleton_skull", "NEGATIVE", "Levy casualties", "The settlement has suffered devastating losses among its common people.", -10, -7, expires);
-            case "a_generation_lost" -> new CampaignSystemsData.ModifierRecord(id, "A Generation Lost", "minecraft:skeleton_skull", "NEGATIVE", "Levy casualties", "An entire generation has been scarred by the levy disaster.", -15, -10, expires);
-            case "levy_massacre" -> new CampaignSystemsData.ModifierRecord(id, "Levy Massacre", "minecraft:wither_skeleton_skull", "NEGATIVE", "Levy casualties", "Almost nobody returned from the levy. The settlement is in social crisis.", -20, -15, expires);
-            case "extended_service" -> new CampaignSystemsData.ModifierRecord(id, "Extended Service", "minecraft:clock", "NEGATIVE", "Levy service", "Families are beginning to demand the return of the levy.", -2, -2, expires);
-            case "weary_levies" -> new CampaignSystemsData.ModifierRecord(id, "Weary Levies", "minecraft:clock", "NEGATIVE", "Levy service", "The levy has remained in the field for too long.", -5, -6, expires);
-            case "levy_exhaustion" -> new CampaignSystemsData.ModifierRecord(id, "Levy Exhaustion", "minecraft:clock", "NEGATIVE", "Levy service", "Prolonged mobilisation is seriously harming settlement life.", -10, -10, expires);
-            case "popular_outrage" -> new CampaignSystemsData.ModifierRecord(id, "Popular Outrage", "minecraft:fire_charge", "NEGATIVE", "Levy service", "The ruler's refusal to return the levy has caused crippling popular anger.", -20, -15, expires);
-            case "levy_recovery" -> new CampaignSystemsData.ModifierRecord(id, "Levy Recovery", "minecraft:clock", "NEGATIVE", "Returned levy", "The levy is home, but families and local work need time to recover from prolonged mobilisation.", -3, -1, expires);
             case "plague" -> new CampaignSystemsData.ModifierRecord(id, "Plague", "minecraft:spider_eye", "NEGATIVE", "Campaign event", "Disease is disrupting settlement life and military confidence.", -3, -5, expires);
             default -> new CampaignSystemsData.ModifierRecord(id, pretty(id), "minecraft:book", "NEUTRAL", "Debug", "Administrative test modifier.", 0, 0, expires);
         };
@@ -431,8 +418,8 @@ public final class CampaignSystemsManager {
                 AttributeInstance health = recruit.getAttribute(Attributes.MAX_HEALTH);
                 if (health != null) health.setBaseValue(maxHealth);
                 recruit.setHealth(maxHealth);
-                int startXp = extra.levyTradition(settlement.getId())
-                        + (commander == null ? 0 : CampaignDefinitions.totalEffect(commander.getTraits(), CampaignDefinitions.EffectKind.LEVY_XP));
+                int startXp = commander == null ? 0
+                        : CampaignDefinitions.totalEffect(commander.getTraits(), CampaignDefinitions.EffectKind.LEVY_XP);
                 if (startXp > 0) recruit.addXp(startXp);
                 int levyCap = SettlementConfig.effectiveLevyLevelCap();
                 if (recruit.getXpLevel() > levyCap) recruit.setXpLevel(levyCap);
@@ -514,17 +501,13 @@ public final class CampaignSystemsManager {
             }
         }
         settleLevyServicePenaltyAfterReturn(player.serverLevel(), settlement, extra, oldestServiceAge);
-        int traditionGain = levyTraditionGain(totalInitial, totalSurvivors, oldestServiceAge);
-        int tradition = extra.levyTradition(settlement.getId());
-        if (traditionGain > 0) tradition = extra.changeLevyTradition(settlement.getId(), traditionGain);
         long fullCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_FULL_COOLDOWN_HOURS);
         long minimumCooldown = SettlementConfig.hoursMillis(SettlementConfig.LEVY_MIN_COOLDOWN_HOURS);
         long cooldown = Math.max(minimumCooldown, Math.round(fullCooldown * Math.min(1.0D, totalInitial / 300.0D)));
         extra.setLevyCooldown(player.getUUID(), now + cooldown);
         // Returned/dead levy MP becomes vacant and recovers through the normal manpower checker, preserving the existing design.
-        String traditionText = traditionGain > 0 ? " Levy Tradition +" + traditionGain + " (" + tradition + "/50)." : "";
-        settlement.addChronicle("The levy returned: " + totalSurvivors + "/" + totalInitial + " men came home (" + losses + " lost). Cooldown: " + formatDuration(cooldown) + "." + traditionText);
-        return "Returned " + totalSurvivors + " surviving levymen. Losses: " + losses + ". Levy cooldown: " + formatDuration(cooldown) + "." + traditionText;
+        settlement.addChronicle("The levy returned: " + totalSurvivors + "/" + totalInitial + " men came home (" + losses + " lost). Cooldown: " + formatDuration(cooldown) + ".");
+        return "Returned " + totalSurvivors + " surviving levymen. Losses: " + losses + ". Levy cooldown: " + formatDuration(cooldown) + ".";
     }
 
     /** Administrative hard reset for a player's levy state. Loaded levy entities are removed,
@@ -575,80 +558,47 @@ public final class CampaignSystemsManager {
         for (String settlementId : touchedSettlements) {
             boolean stillMobilised = extra.levyDeployments().stream().anyMatch(value -> settlementId.equals(value.settlementId))
                     || extra.levyMobilizations().stream().anyMatch(value -> settlementId.equals(value.settlementId));
-            if (!stillMobilised) clearLevyServiceModifiers(extra, settlementId, "");
+            if (!stillMobilised) extra.removeModifier(settlementId, "levy_service_pressure");
         }
         return retired;
     }
 
-    private static int levyTraditionGain(int initial, int survivors, long serviceAge) {
-        // A levy must actually remain in service before a settlement learns anything from it.
-        // The multi-day cooldown already makes this difficult to farm; the service/survivor
-        // requirements also prevent raise-and-return loops and massacres from becoming bonuses.
-        if (initial < 10 || serviceAge < 30L * 60L * 1000L || survivors <= 0) return 0;
-        double survivalRate = Math.min(1.0D, (double) survivors / initial);
-        if (survivalRate < 0.25D) return 0;
-        return survivalRate < 0.50D ? 2 : 5;
-    }
-
     private static CampaignSystemsData.ModifierRecord applyLevyCasualtyModifier(ServerLevel level, SettlementData.SettlementRecord settlement, CampaignSystemsData extra, double lossRate) {
-        String modifier;
-        long duration;
-        if (lossRate < 0.10D) return null;
-        if (lossRate < 0.25D) { modifier = "families_in_mourning"; duration = 24L * 60L * 60L * 1000L; }
-        else if (lossRate < 0.50D) { modifier = "heavy_levy_losses"; duration = 2L * 24L * 60L * 60L * 1000L; }
-        else if (lossRate < 0.75D) { modifier = "devastating_losses"; duration = 3L * 24L * 60L * 60L * 1000L; }
-        else if (lossRate < 0.90D) { modifier = "a_generation_lost"; duration = 5L * 24L * 60L * 60L * 1000L; }
-        else { modifier = "levy_massacre"; duration = 7L * 24L * 60L * 60L * 1000L; }
-        CampaignSystemsData.ModifierRecord record = standardModifier(level, settlement.getId(), modifier, duration);
+        double safeRate = Math.max(0.0D, Math.min(1.0D, lossRate));
+        if (safeRate < 0.05D) return null;
+        int stability = -Math.max(1, (int)Math.round(20.0D * safeRate * safeRate));
+        int morale = -Math.max(1, (int)Math.round(15.0D * safeRate * safeRate));
+        long duration = SettlementConfig.hoursMillis(24L + Math.round(144.0D * safeRate));
+        int percent = (int)Math.round(safeRate * 100.0D);
+        long expires = extra.nowMillis(settlement.getId()) + duration;
+        CampaignSystemsData.ModifierRecord existing = extra.modifiers(settlement.getId()).stream()
+                .filter(value -> value.id.equals("levy_casualties")).findFirst().orElse(null);
+        if (existing != null) {
+            stability = Math.min(stability, existing.stabilityPerDay);
+            morale = Math.min(morale, existing.morale);
+            expires = Math.max(expires, existing.expiresAtMillis);
+        }
+        CampaignSystemsData.ModifierRecord record = new CampaignSystemsData.ModifierRecord(
+                "levy_casualties", "Levy Casualties", "minecraft:wither_rose", "NEGATIVE",
+                "Levy casualties", percent + "% of the levy was lost. Penalties scale with the casualty rate.",
+                stability, morale, expires);
         extra.addModifier(settlement.getId(), record);
         return record;
     }
 
-    private static final List<String> LEVY_SERVICE_MODIFIER_IDS = List.of(
-            "extended_service", "weary_levies", "levy_exhaustion", "popular_outrage"
-    );
-
-    private static String levyServiceModifier(long age) {
-        long extendedAt = SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXTENDED_SERVICE_HOURS);
-        long wearyAt = Math.max(extendedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_WEARY_SERVICE_HOURS));
-        long exhaustedAt = Math.max(wearyAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_EXHAUSTION_HOURS));
-        long outrageAt = Math.max(exhaustedAt, SettlementConfig.hoursMillis(SettlementConfig.LEVY_OUTRAGE_HOURS));
-        return age >= outrageAt ? "popular_outrage" : age >= exhaustedAt ? "levy_exhaustion"
-                : age >= wearyAt ? "weary_levies" : age >= extendedAt ? "extended_service" : "";
-    }
-
-    private static int levyServiceStage(String id) {
-        return switch (SettlementData.normalizeId(id)) {
-            case "extended_service" -> 1;
-            case "weary_levies" -> 2;
-            case "levy_exhaustion" -> 3;
-            case "popular_outrage" -> 4;
-            default -> 0;
-        };
-    }
-
-    private static void clearLevyServiceModifiers(CampaignSystemsData extra, String settlementId, String except) {
-        for (String id : LEVY_SERVICE_MODIFIER_IDS) {
-            if (!id.equals(except)) extra.removeModifier(settlementId, id);
-        }
+    private static int levyServicePressure(long age) {
+        long grace = SettlementConfig.hoursMillis(SettlementConfig.LEVY_SERVICE_GRACE_HOURS);
+        if (age < grace) return 0;
+        long step = Math.max(1L, SettlementConfig.hoursMillis(SettlementConfig.LEVY_SERVICE_PRESSURE_STEP_HOURS));
+        return (int)Math.min(10L, 1L + Math.max(0L, age - grace) / step);
     }
 
     private static void settleLevyServicePenaltyAfterReturn(ServerLevel level, SettlementData.SettlementRecord settlement,
                                                               CampaignSystemsData extra, long oldestServiceAge) {
         boolean stillMobilised = extra.levyDeployments().stream().anyMatch(value -> settlement.getId().equals(value.settlementId));
         if (stillMobilised) return;
-        String endedStage = levyServiceModifier(oldestServiceAge);
-        clearLevyServiceModifiers(extra, settlement.getId(), "");
-        if (endedStage.isBlank()) return;
-        int stage = levyServiceStage(endedStage);
-        long recoveryHours = switch (stage) {
-            case 1 -> 12L;
-            case 2 -> 24L;
-            case 3 -> 48L;
-            default -> 72L;
-        };
-        extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "levy_recovery", SettlementConfig.hoursMillis(recoveryHours)));
-        settlement.addChronicle("The overdue levy returned. Mobilisation unrest is now recovering for " + recoveryHours + " hours.");
+        if (extra.removeModifier(settlement.getId(), "levy_service_pressure") && levyServicePressure(oldestServiceAge) > 0)
+            settlement.addChronicle("Domestic pressure eased when the levy returned.");
     }
 
     private static void processLevyServicePenalties(MinecraftServer server, CampaignSystemsData extra, SettlementData settlements) {
@@ -659,12 +609,11 @@ public final class CampaignSystemsManager {
 
     private static void updateLevyServicePenaltyForSettlement(MinecraftServer server, CampaignSystemsData extra,
                                                                 SettlementData.SettlementRecord settlement) {
-        String desired = "";
+        int pressure = 0;
         for (CampaignSystemsData.LevyDeployment deployment : extra.levyDeployments()) {
             if (!settlement.getId().equals(deployment.settlementId)) continue;
             long age = extra.nowMillis(settlement.getId()) - deployment.deployedAtMillis;
-            String stage = levyServiceModifier(age);
-            if (levyServiceStage(stage) > levyServiceStage(desired)) desired = stage;
+            pressure = Math.max(pressure, levyServicePressure(age));
 
             // Enforce the low level cap while preserving XP earned in real combat below that cap.
             for (UUID unitId : settlement.getLevyUnitsForBatch(deployment.batchId)) {
@@ -676,70 +625,24 @@ public final class CampaignSystemsManager {
             }
         }
 
-        String current = LEVY_SERVICE_MODIFIER_IDS.stream()
-                .filter(id -> extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals(id)))
-                .max(Comparator.comparingInt(CampaignSystemsManager::levyServiceStage)).orElse("");
-        final String desiredModifier = desired;
-        clearLevyServiceModifiers(extra, settlement.getId(), desiredModifier);
-        if (desiredModifier.isBlank()) return;
-        if (!desiredModifier.equals(current) || extra.modifiers(settlement.getId()).stream().noneMatch(value -> value.id.equals(desiredModifier))) {
-            extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), desiredModifier, 0));
-            if (levyServiceStage(desiredModifier) > levyServiceStage(current)) {
-                settlement.addChronicle("Levy service penalty began: " + pretty(desiredModifier) + ".");
-            }
+        CampaignSystemsData.ModifierRecord current = extra.modifiers(settlement.getId()).stream()
+                .filter(value -> value.id.equals("levy_service_pressure")).findFirst().orElse(null);
+        if (pressure <= 0) {
+            if (current != null) extra.removeModifier(settlement.getId(), "levy_service_pressure");
+            return;
+        }
+        int stability = -Math.min(20, pressure * 2);
+        int morale = -Math.min(15, pressure + (pressure / 2));
+        if (current == null || current.stabilityPerDay != stability || current.morale != morale) {
+            extra.addModifier(settlement.getId(), new CampaignSystemsData.ModifierRecord(
+                    "levy_service_pressure", "Levy Service Pressure", "minecraft:clock", "NEGATIVE",
+                    "Prolonged mobilisation", "Domestic pressure increases for every configured interval beyond the service grace period.",
+                    stability, morale, 0L));
+            settlement.addChronicle(current == null ? "Domestic pressure began over prolonged levy service."
+                    : "Domestic pressure increased as levy service continued.");
         }
     }
 
-
-    private static void processRecurringWarAid(MinecraftServer server, CampaignSystemsData extra, SettlementData settlements, long day) {
-        CampaignData campaign = CampaignData.get(server.overworld());
-        for (CampaignData.WarRecord war : campaign.getWars()) {
-            List<CampaignSystemsData.AidRecord> current = extra.warAid(war.id());
-            if (current.isEmpty()) continue;
-            if (war.status() != CampaignData.WarStatus.ACTIVE) { extra.removeWarAid(war.id()); continue; }
-            List<CampaignSystemsData.AidRecord> next = new ArrayList<>();
-            for (CampaignSystemsData.AidRecord aid : current) {
-                if (!aid.recurring()) continue;
-                if (aid.nextDay() > day) { next.add(aid); continue; }
-                SettlementData.SettlementRecord target = settlements.getSettlement(aid.targetSettlement());
-                if (target == null) continue;
-                String error = CampaignManager.transferFactionAid(server.overworld(), aid.fromFaction(), target, aid.manpower(), aid.treasury(), aid.food());
-                if (error == null) {
-                    next.add(new CampaignSystemsData.AidRecord(aid.id(), aid.fromFaction(), aid.targetSettlement(), aid.manpower(), aid.treasury(), aid.food(), true, day + 1));
-                    if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(server, target.getId(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
-                    else CampaignToastSender.faction(server, target.getFactionTeam(), "AID RECEIVED", CampaignManager.factionName(aid.fromFaction()) + " sent recurring aid to " + target.getName() + ".");
-                } else {
-                    CampaignToastSender.faction(server, aid.fromFaction(), "AID SUSPENDED", "Recurring aid to " + target.getName() + " stopped: " + error);
-                }
-            }
-            extra.replaceWarAid(war.id(), next);
-        }
-    }
-
-    private static void processReparations(MinecraftServer server, CampaignSystemsData extra, long day) {
-        List<CampaignSystemsData.ReparationRecord> next = new ArrayList<>();
-        for (CampaignSystemsData.ReparationRecord value : extra.reparations()) {
-            if (value.remainingDays() <= 0) continue;
-            if (value.nextDay() > day) { next.add(value); continue; }
-            int available = extra.treasuryBalance(value.payerFaction());
-            int paid = Math.min(available, value.treasuryPerDay());
-            if (paid > 0) { extra.changeTreasury(value.payerFaction(), -paid); extra.changeTreasury(value.receiverFaction(), paid); }
-            int remaining = value.remainingDays() - 1;
-            CampaignData campaign = CampaignData.get(server.overworld());
-            if (paid < value.treasuryPerDay()) {
-                CampaignManager.changeReliability(server.overworld(), campaign, value.payerFaction(), -2);
-                CampaignToastSender.faction(server, value.receiverFaction(), "REPARATIONS MISSED", CampaignManager.factionName(value.payerFaction()) + " could not pay the full daily reparations.");
-            } else if (remaining <= 0) {
-                // Completing the imposed payment schedule earns back a modest amount of
-                // reputation. Earlier missed instalments have already applied their own penalties.
-                CampaignManager.changeReliability(server.overworld(), campaign, value.payerFaction(), 6);
-                CampaignToastSender.faction(server, value.payerFaction(), "REPARATIONS COMPLETE", "Your faction has completed its war-reparation obligations.");
-                CampaignToastSender.faction(server, value.receiverFaction(), "REPARATIONS COMPLETE", CampaignManager.factionName(value.payerFaction()) + " completed its war-reparation obligations.");
-            }
-            if (remaining > 0) next.add(value.next(day + 1, remaining));
-        }
-        extra.replaceReparations(next);
-    }
 
     private static void processPassiveRelations(MinecraftServer server, CampaignSystemsData extra, long day) {
         CampaignData campaign = CampaignData.get(server.overworld());
@@ -863,10 +766,10 @@ public final class CampaignSystemsManager {
         long now = extra.nowMillis(settlement.getId());
         long serviceAge = Math.max(0L, now - deployment.deployedAtMillis);
         CampaignSystemsData.ModifierRecord massacre = applyLevyCasualtyModifier(level, settlement, extra, 1.0D);
-        CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "LEVY MASSACRE",
+        CampaignToastSender.settlementManagers(level.getServer(), settlement.getId(), "LEVY DESTROYED",
                 "The levy has been annihilated. 0 of " + deployment.initialUnits + " men returned; " + (massacre == null ? "the settlement is in mourning." : massacre.detail));
         CampaignData.get(level).addNews(CampaignData.NewsCategory.MILITARY, CampaignData.NewsImportance.MAJOR,
-                "Levy Massacre", settlement.getName() + " lost its entire levy of " + deployment.initialUnits + " men.",
+                "Levy destroyed", settlement.getName() + " lost its entire levy of " + deployment.initialUnits + " men.",
                 level.getDayTime() / 24000L, settlement.getFactionTeam(), settlement.getId(), CampaignData.NewsVisibility.PUBLIC);
         extra.removeLevyDeployment(batchId);
         settleLevyServicePenaltyAfterReturn(level, settlement, extra, serviceAge);

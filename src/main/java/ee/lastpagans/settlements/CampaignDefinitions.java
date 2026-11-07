@@ -69,8 +69,8 @@ public final class CampaignDefinitions {
                 "A restrained ruler whose subjects are less fearful of punishment.",
                 List.of(new TraitEffect("Settlement stability", "+1 per day", 1, EffectKind.STABILITY))));
         register(new TraitDefinition("charismatic", "Charismatic", "minecraft:emerald", TraitTone.POSITIVE,
-                "Naturally persuasive and more likely to attract desirable political marriage candidates.",
-                List.of(new TraitEffect("Spouse candidate quality", "+1 tier", 1, EffectKind.SPOUSE_QUALITY))));
+                "Naturally persuasive in court and political negotiations.",
+                List.of(new TraitEffect("Diplomatic relations", "+5", 5, EffectKind.RELATIONS))));
         register(new TraitDefinition("healthy", "Healthy", "minecraft:apple", TraitTone.POSITIVE,
                 "Robust and energetic; reduces the chance of plague taking hold in the ruler's settlements.",
                 List.of(new TraitEffect("Plague chance", "-50%", -50, EffectKind.HEALTH))));
@@ -220,7 +220,7 @@ public final class CampaignDefinitions {
     }
 
     public enum TraitTone { POSITIVE, NEGATIVE, MIXED, NEUTRAL }
-    public enum EffectKind { STABILITY, TREASURY, MORALE, RELATIONS, RELIABILITY, SPOUSE_QUALITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER, RESEARCH_SPEED, HEALTH }
+    public enum EffectKind { STABILITY, TREASURY, MORALE, RELATIONS, RELIABILITY, LEVY_HEALTH, LEVY_XP, LEVY_MUSTER, RESEARCH_SPEED, HEALTH }
 
     public record TraitEffect(String label, String displayValue, int amount, EffectKind kind) {}
 

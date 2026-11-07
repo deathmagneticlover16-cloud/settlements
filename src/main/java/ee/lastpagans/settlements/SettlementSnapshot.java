@@ -25,7 +25,7 @@ public record SettlementSnapshot(
         int housingCapacity, int freeHousing, int stability, int food, int treasury,
         String taxPolicy, int taxRatePercent, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay,
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
-        int professionals, int levymen, int pendingContracts, String settlerGrowthStatus,
+        int professionals, int levymen, boolean immigrationEnabled, String immigrationStatus,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet, boolean upkeepChestSet,
         int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, long mercenaryNextPaymentDay, String mercenaryStatus, LevyStatusEntry levyStatus,
         String factionTeam, boolean claimLinked, int claimCount, String claimName,
@@ -75,7 +75,7 @@ public record SettlementSnapshot(
                 limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
                 limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxStabilityPerDay(settlement.getId()),
                 limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
-                limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(), limitedView ? "Hidden" : settlement.getSettlerGrowthStatus(player.serverLevel().getGameTime()),
+                limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), !limitedView && settlement.isImmigrationEnabled(), limitedView ? "Hidden" : settlement.getImmigrationStatus(player.serverLevel().getGameTime()),
                 !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null, !limitedView && settlement.getUpkeepChest() != null,
                 limitedView ? 0 : settlement.getBarracksRadius(), limitedView ? 0 : settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
                 settlement.getFactionTeam(), !limitedView && settlement.hasClaim(), limitedView ? 0 : settlement.getClaimCount(), limitedView ? "" : settlement.getClaimSummary(), settlement.getNotice(), effects,
@@ -179,11 +179,9 @@ public record SettlementSnapshot(
         long mobilizationRemaining = mobilization == null ? 0L : Math.max(0L, mobilization.finishesAtMillis - now);
         long cooldownRemaining = Math.max(0L, extra.levyCooldownUntil(player.getUUID()) - now);
         String service = extra.modifiers(settlement.getId()).stream()
-                .filter(value -> value.id.equals("extended_service") || value.id.equals("weary_levies")
-                        || value.id.equals("levy_exhaustion") || value.id.equals("popular_outrage"))
-                .max(java.util.Comparator.comparingInt(value -> switch (value.id) {
-                    case "extended_service" -> 1; case "weary_levies" -> 2; case "levy_exhaustion" -> 3; case "popular_outrage" -> 4; default -> 0;
-                })).map(value -> value.name).orElse("Normal service");
+                .filter(value -> value.id.equals("levy_service_pressure"))
+                .findFirst().map(value -> value.name + " (" + value.stabilityPerDay + " Stability/day)")
+                .orElse("Normal service");
         return new LevyStatusEntry(playerDeployed, playerCap, factionDeployed, factionCap, mobilizingTotal, mobilizingSpawned,
                 mobilizationRemaining, cooldownRemaining, service);
     }
@@ -235,35 +233,15 @@ public record SettlementSnapshot(
             if (spouseStability != 0 || spouseTreasury != 0 || spouseMorale != 0) {
                 String details = joinEffects(spouseStability, spouseTreasury, spouseMorale);
                 String tone = spouseStability + spouseTreasury + spouseMorale >= 0 ? "POSITIVE" : "NEGATIVE";
-                String spouseName = marriage.spouseName();
-                if (marriage.kind() == CampaignData.MarriageKind.PLAYER && marriage.spousePlayerId() != null) {
-                    SettlementData.CharacterRecord spouseCharacter = data.getCharacter(marriage.spousePlayerId());
-                    spouseName = spouseCharacter != null && spouseCharacter.isCreated() ? spouseCharacter.getDisplayName() : "Player spouse";
-                    details += " — derived from spouse traits";
-                }
+                SettlementData.CharacterRecord spouseCharacter = data.getCharacter(marriage.spousePlayerId());
+                String spouseName = spouseCharacter != null && spouseCharacter.isCreated() ? spouseCharacter.getDisplayName() : "Player spouse";
+                details += " — derived from spouse traits";
                 values.add(new EffectEntry("Spouse: " + spouseName, "Marriage", "minecraft:rose_bush", tone, details, "While married"));
-            }
-        }
-        if (settlement.getOwnerId() != null && (settlement.isCapital() || (settlement.getFactionTeam().isBlank() && settlement.getRank().ordinal() >= SettlementData.SettlementRank.CITY.ordinal()))) {
-            int spouseIndex = 1;
-            for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(settlement.getOwnerId())) {
-                int stability = CampaignData.scaledSpouseEffect(additional.stabilityBonus(), spouseIndex);
-                int treasury = CampaignData.scaledSpouseEffect(additional.treasuryPerDay(), spouseIndex);
-                int extraMorale = CampaignData.scaledSpouseEffect(additional.moraleBonus(), spouseIndex);
-                String details = joinEffects(stability, treasury, extraMorale) + " (" + CampaignData.spouseEffectPercent(spouseIndex) + "% spouse scaling)";
-                String tone = stability + treasury + extraMorale >= 0 ? "POSITIVE" : "NEGATIVE";
-                values.add(new EffectEntry("Additional spouse: " + additional.spouseName(), "Marriage", "minecraft:rose_bush", tone, details, "While married"));
-                spouseIndex++;
             }
         }
 
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
         int foreignMp = extra.foreignManpower(settlement.getId());
-        int levyTradition = extra.levyTradition(settlement.getId());
-        if (levyTradition > 0) {
-            values.add(new EffectEntry("Levy Tradition: " + levyTradition + "/50", "Repeated levy service", "minecraft:iron_helmet", "POSITIVE",
-                    "New levies from this settlement begin with +" + levyTradition + " XP. Tradition only grows after meaningful service with enough survivors returning home.", "Persistent"));
-        }
         if (foreignMp > 0) {
             values.add(new EffectEntry("Foreign manpower: " + foreignMp, "Peace treaty", "minecraft:iron_sword", "MIXED",
                     "Treaty-transferred manpower can be used for professional recruitment. It does not increase native maximum manpower and causes Local Foreign Soldiers unrest until spent.", "Until recruited"));
@@ -318,7 +296,7 @@ public record SettlementSnapshot(
         buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(treasury);
         buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(taxRatePercent); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay);
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
-        buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeVarInt(pendingContracts); buffer.writeUtf(settlerGrowthStatus, 128);
+        buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeBoolean(immigrationEnabled); buffer.writeUtf(immigrationStatus, 128);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet); buffer.writeBoolean(upkeepChestSet);
         buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
@@ -335,7 +313,7 @@ public record SettlementSnapshot(
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
                 buffer.readUtf(16), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readInt(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(),
-                buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readUtf(128),
+                buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean(), buffer.readUtf(128),
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),
                 buffer.readUtf(64), buffer.readBoolean(), buffer.readVarInt(), buffer.readUtf(180), buffer.readUtf(160),

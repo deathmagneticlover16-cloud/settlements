@@ -6,7 +6,6 @@ import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.init.ModEntityTypes;
 import ee.lastpagans.settlements.item.ModItems;
-import ee.lastpagans.settlements.item.SettlerContractItem;
 import ee.lastpagans.settlements.network.CharacterSheetPacket;
 import ee.lastpagans.settlements.network.OpenCharacterCreationPacket;
 import ee.lastpagans.settlements.character.CharacterBodyData;
@@ -211,7 +210,10 @@ public final class SettlementManager {
             case WITHDRAW_CURRENCY_ONE -> requireManager(player, settlement, () -> withdrawCurrency(player, settlement, 1));
             case WITHDRAW_CURRENCY_TEN -> requireManager(player, settlement, () -> withdrawCurrency(player, settlement, 10));
             case SET_TAX_POLICY -> requireManager(player, settlement, () -> setTaxPolicy(player, settlement, argument));
-            case CLAIM_CONTRACT -> requireContributor(player, settlement, () -> claimSettlerContract(player, settlement));
+            case TOGGLE_IMMIGRATION -> requireManager(player, settlement, () -> {
+                settlement.setImmigrationEnabled(!settlement.isImmigrationEnabled());
+                return "Automatic immigration " + (settlement.isImmigrationEnabled() ? "enabled." : "paused.");
+            });
             case SET_CUSTOM_BANNER -> requireManager(player, settlement, () -> setSettlementBanner(player, settlement));
             case USE_FACTION_BANNER -> requireManager(player, settlement, () -> useFactionBanner(player, settlement));
             case CLEAR_BANNER -> requireManager(player, settlement, () -> clearSettlementBanner(player, settlement));
@@ -614,8 +616,8 @@ public final class SettlementManager {
                 settlement.addChronicle("The first settlers reached the village.");
                 owner.sendSystemMessage(Component.literal("The first settlers have reached your village."));
                 owner.sendSystemMessage(Component.literal("Provide free housing and keep at least "
-                        + SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get() + " Food with Stability at "
-                        + SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get() + "+ to attract more settlers."));
+                        + SettlementConfig.IMMIGRATION_FOOD_RESERVE.get() + " Food with Stability at "
+                        + SettlementConfig.IMMIGRATION_MIN_STABILITY.get() + "+ to attract immigrants automatically."));
             }
         }
     }
@@ -655,42 +657,18 @@ public final class SettlementManager {
         return null;
     }
 
-    public static ContractUseResult useSettlerContract(ServerPlayer player, String settlementId, UUID contractId) {
-        SettlementData data = SettlementData.get(player.serverLevel());
-        SettlementData.SettlementRecord settlement = data.getSettlement(settlementId);
-        if (settlement == null) return new ContractUseResult(false, "This contract's settlement no longer exists.");
-        if (data.isSettlerContractRedeemed(contractId)) return new ContractUseResult(false, "This Settler Contract has already been used.");
-        if (!canContribute(player, settlement)) return new ContractUseResult(false, "You are not a member of this settlement.");
-        if (!settlement.hasTownSquare()) return new ContractUseResult(false, "The settlement has no town square.");
-        if (settlement.getFreeHousing() <= 0) return new ContractUseResult(false, "The settlement has no free housing.");
-
-        ServerLevel level = resolveTownSquareLevel(player.getServer(), settlement);
-        if (level == null) return new ContractUseResult(false, "The town-square dimension is unavailable.");
-        Villager villager = EntityType.VILLAGER.create(level);
-        if (villager == null) return new ContractUseResult(false, "Villager spawning failed.");
-
-        // Redeem the unique contract token before spawning so duplicated packets or copied items cannot reuse it.
-        if (!data.redeemSettlerContract(contractId)) {
-            return new ContractUseResult(false, "This Settler Contract has already been used.");
+    public static void processImmigration(MinecraftServer server, long gameTime, long day, CampaignData campaign) {
+        if (server == null || !SettlementConfig.IMMIGRATION_ENABLED.get()) return;
+        for (SettlementData.SettlementRecord settlement : SettlementData.get(server.overworld()).getSettlements()) {
+            if (!settlement.isImmigrationReady(gameTime)) continue;
+            ServerLevel level = resolveTownSquareLevel(server, settlement);
+            if (level == null || !level.hasChunkAt(settlement.getTownSquare())) continue;
+            if (spawnFirstSettler(level, settlement, settlement.getVillagerCount())) {
+                settlement.recordImmigration(gameTime, day, campaign);
+                CampaignToastSender.settlementManagers(server, settlement.getId(), "NEW IMMIGRANT",
+                        "A new resident arrived in " + settlement.getName() + ".");
+            }
         }
-
-        BlockPos spawn = settlement.getTownSquare();
-        villager.moveTo(spawn.getX() + 0.5D, spawn.getY(), spawn.getZ() + 0.5D, 0.0F, 0.0F);
-        villager.finalizeSpawn(level, level.getCurrentDifficultyAt(spawn), MobSpawnType.COMMAND, null, null);
-        villager.getPersistentData().putBoolean(TAG_RESIDENT, true);
-        villager.getPersistentData().putString(TAG_SETTLEMENT, settlement.getId());
-        if (!level.addFreshEntity(villager)) {
-            data.unredeemSettlerContract(contractId);
-            return new ContractUseResult(false, "Villager spawning failed.");
-        }
-
-        reconcileResidentVillager(level, villager);
-        if (!settlement.getEffectiveRecruitsTeam().isBlank()) {
-            PlayerTeam team = level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
-            if (team != null) level.getScoreboard().addPlayerToTeam(villager.getScoreboardName(), team);
-        }
-        settlement.addChronicle("A new settler arrived.");
-        return new ContractUseResult(true, "A registered settler arrived at " + settlement.getName() + ".");
     }
 
     public static String registerVillager(ServerPlayer player, SettlementData.SettlementRecord settlement, Villager villager) {
@@ -720,7 +698,7 @@ public final class SettlementManager {
     }
 
     /**
-     * Reconciles a resident villager loaded from disk or spawned by a contract.
+     * Reconciles a resident villager loaded from disk or spawned by immigration.
      * This method is intentionally idempotent and is the only automatic registration path.
      */
     public static void reconcileResidentVillager(ServerLevel level, Villager villager) {
@@ -802,13 +780,6 @@ public final class SettlementManager {
     }
 
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
-
-    private static String claimSettlerContract(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        if (!settlement.claimContract()) return "No Settler Contract is currently available.";
-        ItemStack contract = SettlerContractItem.forSettlement(settlement.getId(), settlement.getName());
-        if (!player.getInventory().add(contract)) player.drop(contract, false);
-        return "Claimed one Settler Contract.";
-    }
 
     public static void promptCharacterCreation(ServerPlayer player) {
         SettlementNetwork.CHANNEL.send(
@@ -1331,9 +1302,6 @@ public final class SettlementManager {
         CampaignData.MarriageRecord marriage = settlement.getOwnerId() == null ? null : campaign.getMarriage(settlement.getOwnerId());
         if (marriage != null && (settlement.isCapital() || (settlement.getFactionTeam().isBlank() && settlement.getRank().ordinal() >= SettlementData.SettlementRank.CITY.ordinal()))) {
             target += marriage.effectiveMoraleBonus(settlements);
-            int spouseIndex = 1;
-            for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(settlement.getOwnerId()))
-                target += CampaignData.scaledSpouseEffect(additional.moraleBonus(), spouseIndex++);
         }
         if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())) {
             int radius = settlement.getBarracksRadius();
@@ -1378,7 +1346,7 @@ public final class SettlementManager {
             if (level == null || !level.isLoaded(pos) || !(level.getBlockEntity(pos) instanceof Container container)) continue;
             int mouths = settlement.getVillagerCount() + settlement.getProfessionalCount() + settlement.getMercenaryCompanyCount();
             if (mouths <= 0) continue;
-            int target = Math.max(SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get(), mouths * SettlementConfig.UPKEEP_CHEST_TARGET_DAYS.get());
+            int target = Math.max(SettlementConfig.IMMIGRATION_FOOD_RESERVE.get(), mouths * SettlementConfig.UPKEEP_CHEST_TARGET_DAYS.get());
             int needed = Math.max(0, target - settlement.getFood());
             if (needed <= 0) continue;
             int itemBudget = SettlementConfig.UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP.get();
@@ -1581,14 +1549,11 @@ public final class SettlementManager {
     public enum SettlementAction {
         RECRUIT_UNIT,
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_CURRENCY,
-        WITHDRAW_CURRENCY_ONE, WITHDRAW_CURRENCY_TEN, SET_TAX_POLICY, CLAIM_CONTRACT,
+        WITHDRAW_CURRENCY_ONE, WITHDRAW_CURRENCY_TEN, SET_TAX_POLICY, TOGGLE_IMMIGRATION,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
         RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, DELETE_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
         SET_TOWN_SQUARE, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST, REMOVE_CAPTURE_ZONE,
         RECALCULATE_HOUSING, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
-    }
-
-    public record ContractUseResult(boolean success, String message) {
     }
 
     private record PendingSettlementDeletion(String settlementId, long expiresAtMillis) { }

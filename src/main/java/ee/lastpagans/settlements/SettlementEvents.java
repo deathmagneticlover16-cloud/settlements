@@ -315,8 +315,8 @@ public final class SettlementEvents {
         long gameTime = server.overworld().getGameTime();
         data.getSettlements().forEach(settlement -> {
             settlement.processDaily(server.overworld(), day, campaign);
-            settlement.processSettlerContracts(gameTime, day, campaign);
         });
+        SettlementManager.processImmigration(server, gameTime, day, campaign);
         data.runAllCheckers();
         SettlementManager.processMilitarySystems(server, day);
         CampaignSystemsManager.processCampaignSystems(server, day);

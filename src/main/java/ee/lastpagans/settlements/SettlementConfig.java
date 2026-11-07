@@ -18,17 +18,10 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue LEVY_MAX_MUSTER_MINUTES;
     public static final ForgeConfigSpec.IntValue LEVY_FULL_COOLDOWN_HOURS;
     public static final ForgeConfigSpec.IntValue LEVY_MIN_COOLDOWN_HOURS;
-    public static final ForgeConfigSpec.IntValue LEVY_EXTENDED_SERVICE_HOURS;
-    public static final ForgeConfigSpec.IntValue LEVY_WEARY_SERVICE_HOURS;
-    public static final ForgeConfigSpec.IntValue LEVY_EXHAUSTION_HOURS;
-    public static final ForgeConfigSpec.IntValue LEVY_OUTRAGE_HOURS;
+    public static final ForgeConfigSpec.IntValue LEVY_SERVICE_GRACE_HOURS;
+    public static final ForgeConfigSpec.IntValue LEVY_SERVICE_PRESSURE_STEP_HOURS;
     public static final ForgeConfigSpec.IntValue LEVY_EMERGENCY_RELIEF_PERCENT;
     public static final ForgeConfigSpec.BooleanValue BLOCK_LEVY_ARMOR_STAND_XP;
-    public static final ForgeConfigSpec.IntValue DEFAULT_MAX_SPOUSES;
-    public static final ForgeConfigSpec.IntValue ISLAM_MAX_SPOUSES;
-    public static final ForgeConfigSpec.IntValue SECOND_SPOUSE_EFFECT_PERCENT;
-    public static final ForgeConfigSpec.IntValue THIRD_SPOUSE_EFFECT_PERCENT;
-    public static final ForgeConfigSpec.IntValue LATER_SPOUSE_EFFECT_PERCENT;
     public static final ForgeConfigSpec.IntValue PRAYER_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue CURRENCY_DONATION_DEVOTION_GAIN;
     public static final ForgeConfigSpec.IntValue CURRENCY_ITEM_TREASURY_VALUE;
@@ -41,12 +34,13 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_COUNT;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MIN_DELAY_SECONDS;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MAX_DELAY_SECONDS;
-    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FASTEST_MINUTES;
-    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_SLOWEST_MINUTES;
-    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_MIN_STABILITY;
-    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_RESERVE;
-    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_FOOD_COST;
-    public static final ForgeConfigSpec.IntValue SETTLER_CONTRACT_MAX_PENDING;
+    public static final ForgeConfigSpec.BooleanValue IMMIGRATION_ENABLED;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_FASTEST_MINUTES;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_SLOWEST_MINUTES;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_MIN_STABILITY;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_FOOD_RESERVE;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_FOOD_COST;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_MAX_PHYSICAL_RESIDENTS;
     public static final ForgeConfigSpec.IntValue SETTLEMENT_FOUNDING_COOLDOWN_MINUTES;
     public static final ForgeConfigSpec.IntValue RESEARCH_FALLBACK_HOURS;
     public static final ForgeConfigSpec.IntValue SCHOLARLY_RESEARCH_BONUS_PERCENT;
@@ -101,31 +95,14 @@ public final class SettlementConfig {
                 .defineInRange("fullLevyCooldownHours", 72, 1, 24 * 30);
         LEVY_MIN_COOLDOWN_HOURS = builder.comment("Minimum cooldown after returning any levy.")
                 .defineInRange("minimumLevyCooldownHours", 12, 0, 24 * 30);
-        LEVY_EXTENDED_SERVICE_HOURS = builder.comment("Hours deployed before Extended Service unrest begins.")
-                .defineInRange("extendedServiceHours", 72, 1, 24 * 90);
-        LEVY_WEARY_SERVICE_HOURS = builder.comment("Hours deployed before Weary Levies replaces Extended Service.")
-                .defineInRange("wearyServiceHours", 120, 1, 24 * 90);
-        LEVY_EXHAUSTION_HOURS = builder.comment("Hours deployed before Levy Exhaustion begins.")
-                .defineInRange("levyExhaustionHours", 168, 1, 24 * 90);
-        LEVY_OUTRAGE_HOURS = builder.comment("Hours deployed before Popular Outrage begins.")
-                .defineInRange("popularOutrageHours", 240, 1, 24 * 90);
+        LEVY_SERVICE_GRACE_HOURS = builder.comment("Hours a levy may remain deployed before domestic pressure begins.")
+                .defineInRange("serviceGraceHours", 72, 1, 24 * 90);
+        LEVY_SERVICE_PRESSURE_STEP_HOURS = builder.comment("Hours of overdue service per additional point of domestic pressure.")
+                .defineInRange("servicePressureStepHours", 24, 1, 24 * 30);
         LEVY_EMERGENCY_RELIEF_PERCENT = builder.comment("Percentage of remaining mobilisation/cooldown time removed when the faction is newly attacked. Never removes the timer entirely.")
                 .defineInRange("emergencyReliefPercent", 40, 0, 90);
         BLOCK_LEVY_ARMOR_STAND_XP = builder.comment("Prevents levy-tagged recruits from gaining Recruits combat XP by repeatedly attacking armor stands. Real combat XP is unaffected.")
                 .define("blockLevyArmorStandXp", true);
-        builder.pop();
-
-        builder.push("marriage");
-        DEFAULT_MAX_SPOUSES = builder.comment("Maximum active spouses for faiths without a special rule.")
-                .defineInRange("defaultMaximumSpouses", 1, 1, 8);
-        ISLAM_MAX_SPOUSES = builder.comment("Maximum active spouses for characters whose faith is Islam.")
-                .defineInRange("islamMaximumSpouses", 4, 1, 8);
-        SECOND_SPOUSE_EFFECT_PERCENT = builder.comment("Settlement-effect strength of the second spouse.")
-                .defineInRange("secondSpouseEffectPercent", 50, 0, 100);
-        THIRD_SPOUSE_EFFECT_PERCENT = builder.comment("Settlement-effect strength of the third spouse.")
-                .defineInRange("thirdSpouseEffectPercent", 25, 0, 100);
-        LATER_SPOUSE_EFFECT_PERCENT = builder.comment("Settlement-effect strength of the fourth and later spouses.")
-                .defineInRange("laterSpouseEffectPercent", 10, 0, 100);
         builder.pop();
 
         builder.push("religion");
@@ -162,18 +139,20 @@ public final class SettlementConfig {
                 .defineInRange("firstSettlerMinDelaySeconds", 10, 0, 300);
         FIRST_SETTLER_MAX_DELAY_SECONDS = builder.comment("Maximum real-time delay after founding before the first settlers can arrive.")
                 .defineInRange("firstSettlerMaxDelaySeconds", 60, 0, 600);
-        SETTLER_CONTRACT_FASTEST_MINUTES = builder.comment("Fastest possible Settler Contract interval when Stability, free Housing and Food are all excellent.")
-                .defineInRange("settlerContractFastestMinutes", 2, 1, 1440);
-        SETTLER_CONTRACT_SLOWEST_MINUTES = builder.comment("Slowest eligible Settler Contract interval when the settlement only barely meets the minimum requirements.")
-                .defineInRange("settlerContractSlowestMinutes", 12, 1, 1440);
-        SETTLER_CONTRACT_MIN_STABILITY = builder.comment("Minimum settlement Stability required to attract a new Settler Contract.")
-                .defineInRange("settlerContractMinimumStability", 60, 0, 100);
-        SETTLER_CONTRACT_FOOD_RESERVE = builder.comment("Minimum Food stockpile required before a new Settler Contract can be generated.")
-                .defineInRange("settlerContractFoodReserve", 20, 0, 1000000);
-        SETTLER_CONTRACT_FOOD_COST = builder.comment("Food consumed when a new Settler Contract is generated.")
-                .defineInRange("settlerContractFoodCost", 10, 0, 1000000);
-        SETTLER_CONTRACT_MAX_PENDING = builder.comment("Maximum unclaimed Settler Contracts that one settlement can accumulate.")
-                .defineInRange("settlerContractMaxPending", 3, 1, 64);
+        IMMIGRATION_ENABLED = builder.comment("Global switch for automatic settlement immigration. Individual settlements also have an owner-controlled toggle.")
+                .define("automaticImmigration", true);
+        IMMIGRATION_FASTEST_MINUTES = builder.comment("Fastest possible immigration interval when Stability, free Housing and Food are excellent.")
+                .defineInRange("immigrationFastestMinutes", 2, 1, 1440);
+        IMMIGRATION_SLOWEST_MINUTES = builder.comment("Slowest eligible immigration interval when a settlement barely meets the requirements.")
+                .defineInRange("immigrationSlowestMinutes", 12, 1, 1440);
+        IMMIGRATION_MIN_STABILITY = builder.comment("Minimum settlement Stability required for immigration.")
+                .defineInRange("immigrationMinimumStability", 60, 0, 100);
+        IMMIGRATION_FOOD_RESERVE = builder.comment("Minimum Food stockpile required before an immigrant can arrive.")
+                .defineInRange("immigrationFoodReserve", 20, 0, 1000000);
+        IMMIGRATION_FOOD_COST = builder.comment("Food consumed when an immigrant arrives.")
+                .defineInRange("immigrationFoodCost", 10, 0, 1000000);
+        IMMIGRATION_MAX_PHYSICAL_RESIDENTS = builder.comment("Hard cap on registered villager entities created by immigration in one settlement.")
+                .defineInRange("immigrationMaxPhysicalResidents", 128, 1, 4096);
         SETTLEMENT_FOUNDING_COOLDOWN_MINUTES = builder.comment("Active-server minutes one player must wait between founding settlements. Prevents joke-spam without imposing a hard daily limit.")
                 .defineInRange("settlementFoundingCooldownMinutes", 10, 0, 1440);
         builder.pop();
@@ -242,10 +221,6 @@ public final class SettlementConfig {
     public static int effectiveLevyLevelCap() {
         int cap = LEVY_LEVEL_CAP.get();
         return ENABLE_RECRUIT_LEVEL_OVERRIDE.get() ? Math.min(cap, RECRUIT_LEVEL_CAP.get()) : cap;
-    }
-
-    public static int maxSpousesForFaith(String faith) {
-        return faith != null && faith.equalsIgnoreCase("Islam") ? ISLAM_MAX_SPOUSES.get() : DEFAULT_MAX_SPOUSES.get();
     }
 
     public static long hoursMillis(ForgeConfigSpec.IntValue hours) {

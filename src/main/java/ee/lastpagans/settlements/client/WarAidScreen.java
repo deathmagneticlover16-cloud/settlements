@@ -9,117 +9,85 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
-/** One-time or daily material support for a parent faction's settlement war without joining it. */
+/** Direct one-time support for a parent faction's settlement without formally joining its war. */
 public final class WarAidScreen extends ScaledCampaignScreen {
     private final Screen parent;
     private final DiplomacySnapshot snapshot;
     private final DiplomacySnapshot.WarEntry war;
-    private EditBox manpower, treasury, food;
-    private String manpowerValue = "0", treasuryValue = "0", foodValue = "0";
-    private boolean manpowerDaily, treasuryDaily, foodDaily;
-    private int aidScroll;
-    private int left, top;
+    private EditBox manpower;
+    private EditBox treasury;
+    private EditBox food;
+    private int left;
+    private int top;
 
     public WarAidScreen(Screen parent, DiplomacySnapshot snapshot, DiplomacySnapshot.WarEntry war) {
-        super(Component.literal("Send War Aid")); this.parent = parent; this.snapshot = snapshot; this.war = war;
+        super(Component.literal("Send War Aid"));
+        this.parent = parent;
+        this.snapshot = snapshot;
+        this.war = war;
     }
-    @Override protected void init() {
-        setupCampaignScale(460, 370); left = campaignLeft(460); top = campaignTop(370);
+
+    @Override
+    protected void init() {
+        setupCampaignScale(420, 250);
+        left = campaignLeft(420);
+        top = campaignTop(250);
         boolean maySend = canSendAid();
-        manpower = numberField(left + 150, top + 78, 120, manpowerValue);
-        treasury = numberField(left + 150, top + 108, 120, treasuryValue);
-        food = numberField(left + 150, top + 138, 120, foodValue);
-        manpower.setEditable(maySend); treasury.setEditable(maySend); food.setEditable(maySend);
+        manpower = numberField(left + 150, top + 78);
+        treasury = numberField(left + 150, top + 108);
+        food = numberField(left + 150, top + 138);
+        manpower.setEditable(maySend);
+        treasury.setEditable(maySend);
+        food.setEditable(maySend);
+        Button send = addRenderableWidget(Button.builder(Component.literal("Send One-time Aid"), b -> send())
+                .bounds(left + 150, top + 176, 130, 20).build());
+        send.active = maySend;
+        addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent))
+                .bounds(left + 290, top + 176, 90, 20).build());
+    }
 
-        Button manpowerFrequency = addRenderableWidget(Button.builder(Component.literal(manpowerDaily ? "Daily" : "One-time"), b -> { preserveValues(); manpowerDaily = !manpowerDaily; rebuildWidgets(); })
-                .bounds(left + 285, top + 78, 125, 20).build());
-        Button treasuryFrequency = addRenderableWidget(Button.builder(Component.literal(treasuryDaily ? "Daily" : "One-time"), b -> { preserveValues(); treasuryDaily = !treasuryDaily; rebuildWidgets(); })
-                .bounds(left + 285, top + 108, 125, 20).build());
-        Button foodFrequency = addRenderableWidget(Button.builder(Component.literal(foodDaily ? "Daily" : "One-time"), b -> { preserveValues(); foodDaily = !foodDaily; rebuildWidgets(); })
-                .bounds(left + 285, top + 138, 125, 20).build());
-        Button send = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> send()).bounds(left + 210, top + 175, 100, 20).build());
-        manpowerFrequency.active = maySend; treasuryFrequency.active = maySend; foodFrequency.active = maySend; send.active = maySend;
-        addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 320, top + 175, 100, 20).build());
+    private EditBox numberField(int x, int y) {
+        EditBox box = new EditBox(font, x, y, 130, 20, Component.empty());
+        box.setValue("0");
+        box.setFilter(v -> v.isEmpty() || v.matches("[0-9]{0,7}"));
+        addRenderableWidget(box);
+        return box;
+    }
 
-        java.util.List<DiplomacySnapshot.AidEntry> commitments = commitments();
-        aidScroll = Math.max(0, Math.min(aidScroll, Math.max(0, commitments.size() - 4)));
-        for (int i = 0; i < Math.min(4, commitments.size() - aidScroll); i++) {
-            DiplomacySnapshot.AidEntry aid = commitments.get(aidScroll + i);
-            if (snapshot.canManage() && snapshot.ownFactionId().equals(aid.fromFactionId())) {
-                int y = top + 220 + i * 25;
-                addRenderableWidget(Button.builder(Component.literal("Cancel"), b -> cancel(aid))
-                        .bounds(left + 355, y - 5, 65, 20).build());
-            }
-        }
+    private int parse(EditBox box) {
+        try { return Math.max(0, Integer.parseInt(box.getValue().isBlank() ? "0" : box.getValue())); }
+        catch (NumberFormatException ignored) { return 0; }
     }
-    @Override protected void rebuildWidgets() { clearWidgets(); init(); }
-    private void preserveValues() {
-        if (manpower != null) manpowerValue = manpower.getValue();
-        if (treasury != null) treasuryValue = treasury.getValue();
-        if (food != null) foodValue = food.getValue();
-    }
-    private EditBox numberField(int x, int y, int width, String value) {
-        EditBox box = new EditBox(font, x, y, width, 20, Component.empty()); box.setValue(value); box.setFilter(v -> v.isEmpty() || v.matches("[0-9]{0,7}")); addRenderableWidget(box); return box;
-    }
-    private int parse(EditBox box) { try { return Math.max(0, Integer.parseInt(box.getValue().isBlank() ? "0" : box.getValue())); } catch (NumberFormatException ignored) { return 0; } }
+
     private void send() {
-        preserveValues();
-        String extra = parse(manpower) + "|" + parse(treasury) + "|" + parse(food) + "|"
-                + manpowerDaily + "|" + treasuryDaily + "|" + foodDaily;
+        String extra = parse(manpower) + "|" + parse(treasury) + "|" + parse(food);
         SettlementNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket("SEND_AID", "", null, war.id(), extra));
         minecraft.setScreen(parent);
     }
+
     private boolean canSendAid() {
         String own = snapshot.ownFactionId();
         return snapshot.canManage() && !own.isBlank()
                 && (own.equals(war.attackerFactionId()) || own.equals(war.defenderFactionId()));
     }
-    private void cancel(DiplomacySnapshot.AidEntry aid) {
-        SettlementNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket("CANCEL_AID", "", aid.id(), war.id(), ""));
-        minecraft.setScreen(parent);
-    }
-    private java.util.List<DiplomacySnapshot.AidEntry> commitments() {
-        return snapshot.aid().stream().filter(value -> war.id().equals(value.warId()) && value.recurring()).toList();
-    }
-    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        java.util.List<DiplomacySnapshot.AidEntry> values = commitments();
-        if (values.size() > 4) {
-            preserveValues();
-            aidScroll = Math.max(0, Math.min(values.size() - 4, aidScroll + (delta < 0 ? 1 : -1)));
-            rebuildWidgets();
-            return true;
-        }
-        return super.mouseScrolled(mouseX, mouseY, delta);
+
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        renderBackground(graphics);
+        int uiMouseX = campaignMouseX(mouseX);
+        int uiMouseY = campaignMouseY(mouseY);
+        beginCampaignRender(graphics);
+        drawCampaignFrame(graphics, left, top, 420, 250, 40);
+        graphics.drawCenteredString(font, "SEND ONE-TIME WAR AID", left + 210, top + 14, CAMPAIGN_TITLE);
+        graphics.drawCenteredString(font, war.attackerSettlementName() + " vs " + war.targetSettlementName(), left + 210, top + 49, 0xFFBBBBBB);
+        graphics.drawString(font, "Manpower", left + 34, top + 84, 0xFFFFFFFF, false);
+        graphics.drawString(font, "Treasury", left + 34, top + 114, 0xFFFFFFFF, false);
+        graphics.drawString(font, "Food", left + 34, top + 144, 0xFFFFFFFF, false);
+        if (!canSendAid()) graphics.drawString(font, "Only a parent faction may authorize aid.", left + 34, top + 205, 0xFFAAAAAA, false);
+        graphics.drawCenteredString(font, "Aid does not make your faction a belligerent.", left + 210, top + 225, 0xFFFFD27A);
+        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        endCampaignRender(graphics);
     }
 
-    @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g);
-        int uiMx = campaignMouseX(mx);
-        int uiMy = campaignMouseY(my);
-        beginCampaignRender(g);
-        drawCampaignFrame(g, left, top, 460, 360, 40);
-        g.drawCenteredString(font, canSendAid() ? "SEND AID / AID LEDGER" : "WAR AID LEDGER", left + 230, top + 14, CAMPAIGN_TITLE);
-        g.drawCenteredString(font, war.attackerSettlementName() + " vs " + war.targetSettlementName(), left + 230, top + 49, 0xFFBBBBBB);
-        g.drawString(font, "Manpower", left + 30, top + 84, 0xFFFFFFFF, false); g.drawString(font, "Treasury", left + 30, top + 114, 0xFFFFFFFF, false); g.drawString(font, "Food", left + 30, top + 144, 0xFFFFFFFF, false);
-        g.drawString(font, "Each resource can be one-time or daily.", left + 30, top + 160, 0xFFAAAAAA, false);
-        if (!canSendAid()) g.drawString(font, "Read-only: only a parent faction may authorize aid.", left + 30, top + 184, 0xFFAAAAAA, false);
-        g.drawString(font, "ACTIVE DAILY AID", left + 30, top + 208, 0xFFE7D8B0, false);
-        java.util.List<DiplomacySnapshot.AidEntry> commitments = commitments();
-        if (commitments.isEmpty()) {
-            g.drawString(font, "No recurring aid commitments are active for this war.", left + 30, top + 225, 0xFFAAAAAA, false);
-        } else {
-            for (int i = 0; i < Math.min(4, commitments.size() - aidScroll); i++) {
-                DiplomacySnapshot.AidEntry aid = commitments.get(aidScroll + i);
-                int y = top + 220 + i * 25;
-                String line = aid.fromFactionName() + " → " + aid.targetSettlementName() + ": " + aid.summary();
-                g.drawString(font, font.plainSubstrByWidth(line, 315), left + 30, y, 0xFFFFFFFF, false);
-            }
-            if (commitments.size() > 4) g.drawString(font, "Scroll aid ledger · " + (aidScroll + 1) + "-"
-                    + Math.min(commitments.size(), aidScroll + 4) + " / " + commitments.size(), left + 30, top + 320, 0xFFAAAAAA, false);
-        }
-        g.drawCenteredString(font, "Sending aid does not make your faction a belligerent.", left + 230, top + 345, 0xFFFFD27A);
-        super.render(g, uiMx, uiMy, pt);
-        endCampaignRender(g);
-    }
     @Override public boolean isPauseScreen() { return false; }
 }

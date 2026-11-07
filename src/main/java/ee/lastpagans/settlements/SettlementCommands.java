@@ -340,8 +340,6 @@ public final class SettlementCommands {
                                         .then(Commands.literal("end").then(Commands.argument("settlement", StringArgumentType.word())
                                                 .then(Commands.argument("event", StringArgumentType.word())
                                                         .executes(context -> adminDebugEvent(context.getSource(), StringArgumentType.getString(context, "settlement"), StringArgumentType.getString(context, "event"), 0, false))))))
-                                .then(Commands.literal("spouse_refresh").then(Commands.argument("player", EntityArgument.player())
-                                        .executes(context -> adminDebugSpouseRefresh(context.getSource(), EntityArgument.getPlayer(context, "player")))))
                                 .then(Commands.literal("mercenary_payment").then(Commands.argument("faction", StringArgumentType.word())
                                         .executes(context -> adminDebugMercenaryPayment(context.getSource(), StringArgumentType.getString(context, "faction")))))
                                 .then(Commands.literal("inspect").then(Commands.argument("settlement", StringArgumentType.word())
@@ -878,7 +876,7 @@ public final class SettlementCommands {
 
     private static int warnResetCharacter(CommandSourceStack source, ServerPlayer target) {
         source.sendFailure(Component.literal("WARNING: This will reset " + target.getGameProfile().getName()
-                + "'s character identity, traits, faith, marriage, devotion, divorce history, candidate history and character-specific levy cooldown. "
+                + "'s character identity, traits, faith, marriage, devotion, divorce history and character-specific levy cooldown. "
                 + "Their settlements and faction membership will remain. Add 'confirm' to proceed."));
         return 0;
     }
@@ -1041,11 +1039,9 @@ public final class SettlementCommands {
             case "housing", "housing_capacity" -> { if (add) settlement.changeHousingCapacity(value); else settlement.setHousingCapacity(value); }
             case "maximum_manpower", "max_manpower", "manpower_max" -> { if (add) settlement.changeMaximumManpower(value); else settlement.setMaximumManpower(value); }
             case "available_manpower", "manpower", "manpower_available" -> { if (add) settlement.changeAvailableManpower(value); else settlement.setAvailableManpower(value); }
-            case "contracts", "pending_contracts" -> { if (add) settlement.changePendingContracts(value); else settlement.setPendingContracts(value); }
-            case "levy_tradition", "tradition" -> { CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel()); extra.setLevyTradition(settlement.getId(), add ? extra.levyTradition(settlement.getId()) + value : value); }
             case "foreign_manpower", "foreign_mp" -> { CampaignSystemsData extra = CampaignSystemsData.get(source.getLevel()); extra.setForeignManpower(settlement.getId(), add ? extra.foreignManpower(settlement.getId()) + value : value); if (extra.foreignManpower(settlement.getId()) > 0) extra.addModifier(settlement.getId(), CampaignSystemsManager.standardModifier(source.getLevel(), settlement.getId(), "foreign_soldiers", 0)); else extra.removeModifier(settlement.getId(), "foreign_soldiers"); }
             default -> {
-                source.sendFailure(Component.literal("Unknown stat. Use stability, food, treasury, levy_tradition, housing, maximum_manpower, available_manpower, foreign_manpower, or contracts."));
+                source.sendFailure(Component.literal("Unknown stat. Use stability, food, treasury, housing, maximum_manpower, available_manpower, or foreign_manpower."));
                 return 0;
             }
         }
@@ -1053,9 +1049,7 @@ public final class SettlementCommands {
                 + ". Current values: stability=" + settlement.getStability() + ", food=" + settlement.getFood()
                 + ", treasury=" + StateTreasury.balance(source.getLevel(), settlement) + ", housing=" + settlement.getHousingCapacity()
                 + ", manpower=" + settlement.getAvailableManpower() + "/" + settlement.getMaximumManpower()
-                + ", foreignMP=" + CampaignSystemsData.get(source.getLevel()).foreignManpower(settlement.getId())
-                + ", levyTradition=" + CampaignSystemsData.get(source.getLevel()).levyTradition(settlement.getId())
-                + ", contracts=" + settlement.getPendingContracts() + "."), true);
+                + ", foreignMP=" + CampaignSystemsData.get(source.getLevel()).foreignManpower(settlement.getId()) + "."), true);
         return 1;
     }
 
@@ -1131,8 +1125,8 @@ public final class SettlementCommands {
         source.sendSuccess(() -> Component.literal("Traits reset for " + target.getGameProfile().getName() + ". They will be prompted to choose traits again."), true); return 1;
     }
     private static int adminResetMarriage(CommandSourceStack source, ServerPlayer target) {
-        CampaignData.get(target.serverLevel()).resetMarriage(target.getUUID()); CampaignSystemsData.get(target.serverLevel()).resetCandidateHistory(target.getUUID());
-        source.sendSuccess(() -> Component.literal("Marriage and candidate history reset for " + target.getGameProfile().getName() + "."), true); return 1;
+        CampaignData.get(target.serverLevel()).resetMarriage(target.getUUID());
+        source.sendSuccess(() -> Component.literal("Marriage reset for " + target.getGameProfile().getName() + "."), true); return 1;
     }
     private static int adminResetReligion(CommandSourceStack source, ServerPlayer target) {
         CampaignSystemsData.get(target.serverLevel()).resetReligion(target.getUUID()); source.sendSuccess(() -> Component.literal("Devotion/religion progression reset for " + target.getGameProfile().getName() + ". Character faith itself was preserved."), true); return 1;
@@ -1283,7 +1277,7 @@ public final class SettlementCommands {
                 + " | rank=" + s.getRank().displayName() + " | pop=" + s.getDisplayedPopulation() + " | villagers=" + s.getVillagerCount() + " | housing=" + s.getHousingCapacity()
                 + " | stability=" + s.getStability() + " | food=" + s.getFood() + " | treasury=" + StateTreasury.balance(source.getLevel(), s)
                 + " | manpower=" + s.getAvailableManpower() + "/" + s.getMaximumManpower() + " used=" + s.getUsedManpower() + " levyReserved=" + s.getLevyReservedManpower()
-                + " | levyTradition=" + extra.levyTradition(s.getId()) + "/50 | activeLevyBatches=" + activeLevies.size() + " units≈" + activeLevyUnits
+                + " | activeLevyBatches=" + activeLevies.size() + " units≈" + activeLevyUnits
                 + " | claims=" + s.getClaimCount() + " | protected=" + extra.settlementProtected(s.getId()) + " | modifiers=" + modifiers), false); return 1;
     }
 
@@ -1365,7 +1359,6 @@ public final class SettlementCommands {
         }
         return 1;
     }
-    private static int adminDebugSpouseRefresh(CommandSourceStack source, ServerPlayer target) { CampaignData data = CampaignData.get(target.serverLevel()); long day = target.serverLevel().getDayTime()/24000L; data.forceRefreshCandidates(target.getUUID(), day); source.sendSuccess(() -> Component.literal("Spouse candidates force-refreshed for " + target.getGameProfile().getName() + "."), true); return 1; }
     private static int reloadMercenaryRosters(CommandSourceStack source) {
         MercenaryRosterRegistry.forceReload();
         int count = MercenaryRosterRegistry.definitions().size();
