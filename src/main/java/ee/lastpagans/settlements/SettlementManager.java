@@ -240,7 +240,7 @@ public final class SettlementManager {
         };
         sendSnapshot(player, settlement, false, result);
         if (switch (action) {
-            case RECRUIT_UNIT, RAISE_LEVY, RETURN_LEVY, CLAIM_CONTRACT, SET_CUSTOM_BANNER,
+            case RECRUIT_UNIT, RAISE_LEVY, RETURN_LEVY, SET_CUSTOM_BANNER,
                     USE_FACTION_BANNER, CLEAR_BANNER, RENAME_SETTLEMENT, SET_TOWN_SQUARE -> true;
             default -> false;
         }) CampaignManager.broadcastMapMarkers(player.getServer());

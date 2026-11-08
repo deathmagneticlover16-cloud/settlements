@@ -33,7 +33,7 @@ public final class TaxRateSlider extends AbstractSliderButton {
     @Override protected void applyValue() { updateMessage(); }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         int trackY = getY() + height - 5;
         graphics.fill(getX(), getY(), getX() + width, getY() + height, active ? 0xFF9C8355 : 0xFF4B4740);
         graphics.fill(getX() + 1, getY() + 1, getX() + width - 1, getY() + height - 1, 0xFF24211C);
