@@ -36,8 +36,11 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         left = campaignLeft(W); top = campaignTop(H);
         startButton = addRenderableWidget(Button.builder(Component.literal("Begin Research"), b -> startSelected())
                 .bounds(left + 466, top + 304, 166, 20).build());
-        cancelButton = addRenderableWidget(Button.builder(Component.literal("Cancel Current"), b ->
-                SettlementNetwork.CHANNEL.sendToServer(new ResearchActionPacket("CANCEL", "")))
+        cancelButton = addRenderableWidget(Button.builder(Component.literal("Cancel Current"), b -> minecraft.setScreen(new ConfirmActionScreen(this,
+                Component.literal("Cancel current research?"),
+                Component.literal("This stops " + (snapshot.activeStageName().isBlank() ? "the current project" : snapshot.activeStageName())
+                        + ". Any progress handling is enforced by the server's research rules."),
+                () -> SettlementNetwork.CHANNEL.sendToServer(new ResearchActionPacket("CANCEL", "")))))
                 .bounds(left + 466, top + 330, 166, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Return to Main"), b ->
                 SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))

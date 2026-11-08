@@ -145,7 +145,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     }
 
     private void locationManagementButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Set Town Square Here"), b -> send(SettlementManager.SettlementAction.SET_TOWN_SQUARE))
+        addRenderableWidget(Button.builder(Component.literal("Relocate Town Square"), b -> TownSquareRelocationEditor.begin(snapshot.settlementId()))
                 .bounds(left + 30, top + 146, 150, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Set Upkeep Chest"), b -> send(SettlementManager.SettlementAction.SET_UPKEEP_CHEST))
                 .bounds(left + 195, top + 146, 150, 18).build());
@@ -211,12 +211,10 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
 
     private void captureManagementButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Edit Main Capture Zone"), b -> beginArea(AreaSelection.Type.CAPTURE_MAIN))
-                .bounds(left + 30, top + 166, 222, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Add Secondary Capture Zone"), b -> beginArea(AreaSelection.Type.CAPTURE_SECONDARY))
-                .bounds(left + 30, top + 214, 222, 18).build());
+                .bounds(left + 30, top + 166, 222, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Remove Nearest"), b -> send(SettlementManager.SettlementAction.REMOVE_CAPTURE_ZONE))
-                .bounds(left + 30, top + 262, 222, 18).build());
+                .bounds(left + 30, top + 214, 222, 18).build());
     }
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
@@ -306,7 +304,9 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     }
 
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (tab == Tab.EFFECTS && snapshot.effects().size() > 7) {
+        double ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
+        if (tab == Tab.EFFECTS && snapshot.effects().size() > 7
+                && ux >= left + 20 && ux <= left + W - 20 && uy >= top + 100 && uy <= top + 280) {
             int maximumScroll = snapshot.effects().size() - 7;
             effectScroll = Math.max(0, Math.min(maximumScroll, effectScroll + (delta < 0 ? 1 : -1)));
             return true;

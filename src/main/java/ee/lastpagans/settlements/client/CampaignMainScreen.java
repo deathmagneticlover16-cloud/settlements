@@ -7,20 +7,17 @@ import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 
+/** Responsive realm dashboard and sole top-level campaign navigation. */
 public final class CampaignMainScreen extends ScaledCampaignScreen {
-    private static final int W = 480, H = 350;
-    private static final ResourceLocation TREASURY_ICON = new ResourceLocation("settlements", "textures/gui/icons/treasury.png");
-    private static final ResourceLocation STABILITY_ICON = new ResourceLocation("settlements", "textures/gui/icons/stability.png");
+    private static final int W = 520, H = 300;
     private final CampaignSnapshot snapshot;
     private int left, top;
     private BannerRenderer banner;
 
     public CampaignMainScreen(CampaignSnapshot snapshot) {
-        super(Component.literal("Campaign Overview"));
+        super(Component.translatable("screen.settlements.realm_overview"));
         this.snapshot = snapshot;
         if (!snapshot.factionBanner().isEmpty() && !snapshot.factionId().isBlank()) {
             try { banner = new BannerRenderer(new RecruitsFaction(snapshot.factionId(), snapshot.factionName(), snapshot.factionBanner().copy())); }
@@ -30,69 +27,65 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
 
     @Override protected void init() {
         setupCampaignScale(W, H);
-        left = campaignLeft(W);
-        top = campaignTop(H);
-        addButton("CHARACTER", 18, 92, OpenCampaignRequestPacket.ScreenTarget.CHARACTER);
-        addButton("SETTLEMENT", 132, 92, OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT);
-        addButton("FACTION", 246, 92, OpenCampaignRequestPacket.ScreenTarget.FACTION);
-        addButton("MILITARY", 360, 92, OpenCampaignRequestPacket.ScreenTarget.MILITARY);
-        addButton("DIPLOMACY", 18, 134, OpenCampaignRequestPacket.ScreenTarget.DIPLOMACY);
-        addButton("FAMILY", 132, 134, OpenCampaignRequestPacket.ScreenTarget.FAMILY);
-        addRenderableWidget(Button.builder(Component.literal("WORLD NEWS"), button -> open(OpenCampaignRequestPacket.ScreenTarget.WORLD_NEWS))
-                .bounds(left + 246, top + 134, 108, 34).build());
-        addRenderableWidget(Button.builder(Component.literal("NEW SETTLEMENT"), button -> minecraft.setScreen(new SettlementCreationScreen()))
-                .bounds(left + 360, top + 134, 108, 34).build());
-        addButton("RESEARCH", 18, 176, OpenCampaignRequestPacket.ScreenTarget.RESEARCH);
-        addRenderableWidget(Button.builder(Component.literal("Close"), button -> onClose()).bounds(left + 404, top + 322, 60, 18).build());
+        left = campaignLeft(W); top = campaignTop(H);
+        nav("Realm Overview", 54, null);
+        nav("Settlements", 80, OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT);
+        nav("Realm / Faction", 106, OpenCampaignRequestPacket.ScreenTarget.FACTION);
+        nav("Military", 132, OpenCampaignRequestPacket.ScreenTarget.MILITARY);
+        nav("Diplomacy", 158, OpenCampaignRequestPacket.ScreenTarget.DIPLOMACY);
+        nav("Research", 184, OpenCampaignRequestPacket.ScreenTarget.RESEARCH);
+        nav("Chronicle", 210, OpenCampaignRequestPacket.ScreenTarget.WORLD_NEWS);
+        nav("Character", 236, OpenCampaignRequestPacket.ScreenTarget.CHARACTER);
+        addRenderableWidget(Button.builder(Component.literal("Found Settlement"), ignored -> minecraft.setScreen(new SettlementCreationScreen()))
+                .bounds(left + 166, top + 247, 128, 22).build());
+        addRenderableWidget(Button.builder(Component.literal("Close"), ignored -> onClose())
+                .bounds(left + W - 70, top + 12, 52, 18).build());
     }
 
-    private void addButton(String label, int x, int y, OpenCampaignRequestPacket.ScreenTarget target) {
-        addRenderableWidget(Button.builder(Component.literal(label), button -> open(target)).bounds(left + x, top + y, 108, 34).build());
-    }
-
-    private void open(OpenCampaignRequestPacket.ScreenTarget target) {
-        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target));
+    private void nav(String label, int y, OpenCampaignRequestPacket.ScreenTarget target) {
+        Button button = addRenderableWidget(Button.builder(Component.literal(label), ignored -> {
+            if (target != null) SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(target));
+        }).bounds(left + 14, top + y, 132, 22).build());
+        button.active = target != null;
     }
 
     @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        int uiMouseX = campaignMouseX(mouseX);
-        int uiMouseY = campaignMouseY(mouseY);
+        int uiX = campaignMouseX(mouseX), uiY = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
-        drawCampaignFrame(graphics, left, top, W, H, 82);
-        drawCampaignPanel(graphics, left + 10, top + 86, left + W - 10, top + 176);
-        drawCampaignPanel(graphics, left + 10, top + 216, left + W - 10, top + 285);
-        if (minecraft != null && minecraft.player != null) PortraitRenderer.render(graphics, minecraft.player, left + 16, top + 9, 64, 66, uiMouseX, uiMouseY);
-        if (banner != null) banner.renderBanner(graphics, left + W - 58, top + 7, 20, 40, CAMPAIGN_BANNER_SCALE);
+        drawCampaignFrame(graphics, left, top, W, H, 42);
+        graphics.drawString(font, "SETTLEMENTS", left + 16, top + 17, CampaignTheme.LINEN, false);
+        graphics.drawString(font, "REALM OVERVIEW", left + 166, top + 17, CampaignTheme.BRASS, false);
+        graphics.fill(left + 154, top + 48, left + 155, top + H - 14, CampaignTheme.BRASS_DARK);
 
-        graphics.drawString(font, snapshot.characterName(), left + 94, top + 13, 0xFFFFFFFF, false);
-        graphics.drawString(font, snapshot.titleLine(), left + 94, top + 29, 0xFFE7D8B0, false);
-        graphics.drawString(font, "Faith: " + snapshot.faith(), left + 94, top + 47, 0xFFCCCCCC, false);
-        graphics.drawString(font, "Faction: " + snapshot.factionName(), left + 94, top + 63, 0xFFCCCCCC, false);
+        drawCampaignPanel(graphics, left + 166, top + 54, left + W - 18, top + 123);
+        if (minecraft != null && minecraft.player != null)
+            PortraitRenderer.render(graphics, minecraft.player, left + 176, top + 60, 48, 54, uiX, uiY);
+        if (banner != null) banner.renderBanner(graphics, left + W - 66, top + 58, 20, 40, CAMPAIGN_BANNER_SCALE);
+        graphics.drawString(font, ellipsize(snapshot.characterName(), 205), left + 234, top + 65, CampaignTheme.LINEN, false);
+        graphics.drawString(font, ellipsize(snapshot.titleLine(), 205), left + 234, top + 82, CampaignTheme.BRASS, false);
+        graphics.drawString(font, "Faith  " + snapshot.faith(), left + 234, top + 99, CampaignTheme.MUTED, false);
 
-        stat(graphics, "Settlements", snapshot.settlementCount(), 22, 225);
-        stat(graphics, "Population", snapshot.totalPopulation(), 170, 225);
-        iconStat(graphics, TREASURY_ICON, "Treasury", snapshot.totalTreasury(), 330, 225);
-        stat(graphics, "Manpower", snapshot.availableManpower() + "/" + snapshot.maximumManpower(), 22, 247);
-        iconStat(graphics, STABILITY_ICON, "Stability", snapshot.averageStability() + "%", 170, 247);
-        stat(graphics, "Food", snapshot.totalFood(), 330, 247);
-        graphics.drawString(font, "Selected settlement: " + snapshot.selectedSettlementName(), left + 22, top + 267, 0xFFB8B0A0, false);
+        drawCampaignPanel(graphics, left + 166, top + 132, left + W - 18, top + 232);
+        graphics.drawString(font, "REALM AT A GLANCE", left + 178, top + 143, CampaignTheme.BRASS, false);
+        metric(graphics, "Settlements", snapshot.settlementCount(), 178, 164);
+        metric(graphics, "Population", snapshot.totalPopulation(), 332, 164);
+        metric(graphics, "Treasury", snapshot.totalTreasury(), 178, 184);
+        metric(graphics, "Stability", snapshot.averageStability() + "%", 332, 184);
+        metric(graphics, "Manpower", snapshot.availableManpower() + " / " + snapshot.maximumManpower(), 178, 204);
+        metric(graphics, "Food", snapshot.totalFood(), 332, 204);
+        graphics.drawString(font, "Selected  " + ellipsize(snapshot.selectedSettlementName(), 250), left + 178, top + 219, CampaignTheme.MUTED, false);
 
-        if (snapshot.pendingDiplomacy() + snapshot.pendingMarriage() + snapshot.activeWars() > 0) {
-            graphics.drawString(font, "Notices: treaties " + snapshot.pendingDiplomacy() + " · marriage " + snapshot.pendingMarriage()
-                    + " · wars " + snapshot.activeWars(), left + 16, top + 303, 0xFFFFD27A, false);
-        }
-        super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        int notices = snapshot.pendingDiplomacy() + snapshot.activeWars();
+        String notice = notices == 0 ? "No urgent diplomatic decisions." : snapshot.pendingDiplomacy() + " proposal(s)  ·  " + snapshot.activeWars() + " active war(s)";
+        graphics.drawString(font, notice, left + 306, top + 254, notices == 0 ? CampaignTheme.MUTED : CampaignTheme.WARN, false);
+        super.render(graphics, uiX, uiY, partialTick);
         endCampaignRender(graphics);
     }
 
-    private void stat(GuiGraphics graphics, String name, Object value, int x, int y) {
-        graphics.drawString(font, name + ": " + value, left + x, top + y, 0xFFFFFFFF, false);
-    }
-
-    private void iconStat(GuiGraphics graphics, ResourceLocation icon, String name, Object value, int x, int y) {
-        graphics.blit(icon, left + x, top + y - 3, 0, 0, 14, 14, 32, 32);
-        graphics.drawString(font, name + ": " + value, left + x + 18, top + y, 0xFFFFFFFF, false);
+    private void metric(GuiGraphics graphics, String label, Object value, int x, int y) {
+        graphics.drawString(font, label, left + x, top + y, CampaignTheme.MUTED, false);
+        graphics.drawString(font, String.valueOf(value), left + x + 76, top + y, CampaignTheme.LINEN, false);
     }
 
     @Override public boolean isPauseScreen() { return false; }

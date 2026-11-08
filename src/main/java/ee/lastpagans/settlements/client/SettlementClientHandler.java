@@ -15,13 +15,20 @@ import net.minecraft.client.Minecraft;
 
 public final class SettlementClientHandler {
     private static MapMarkerSnapshot mapMarkers = new MapMarkerSnapshot(java.util.List.of());
+    private static SettlementSnapshot lastSettlementSnapshot;
     private SettlementClientHandler() {}
 
     public static void accept(SnapshotPacket packet) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!packet.open() && minecraft.screen instanceof MilitaryScreen military) { military.updateSnapshot(packet.snapshot()); return; }
-        if (packet.open() || !(minecraft.screen instanceof SettlementScreen screen)) minecraft.setScreen(new SettlementScreen(packet.snapshot()));
-        else screen.updateSnapshot(packet.snapshot());
+        lastSettlementSnapshot = packet.snapshot();
+        if (!packet.open()) {
+            if (minecraft.screen instanceof MilitaryScreen military) military.updateSnapshot(packet.snapshot());
+            else if (minecraft.screen instanceof SettlementScreen settlement) settlement.updateSnapshot(packet.snapshot());
+            else if (!packet.snapshot().message().isBlank()) TransientAlertOverlay.show(packet.snapshot().message());
+            return;
+        }
+        if (minecraft.screen instanceof SettlementScreen screen) screen.updateSnapshot(packet.snapshot());
+        else minecraft.setScreen(new SettlementScreen(packet.snapshot()));
     }
     public static void acceptHousingAreas(HousingAreasPacket packet) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -57,5 +64,5 @@ public final class SettlementClientHandler {
     }
     public static void cacheMapMarkers(MapMarkerSnapshot snapshot) { mapMarkers = snapshot; }
     public static MapMarkerSnapshot mapMarkers() { return mapMarkers; }
-    public static void clearCaches() { mapMarkers = new MapMarkerSnapshot(java.util.List.of()); }
+    public static void clearCaches() { mapMarkers = new MapMarkerSnapshot(java.util.List.of()); lastSettlementSnapshot = null; }
 }

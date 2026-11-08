@@ -193,6 +193,22 @@ public record SettlementSnapshot(
     private static List<EffectEntry> buildEffects(ServerPlayer player, SettlementData.SettlementRecord settlement,
                                                    CampaignData campaign, int morale) {
         List<EffectEntry> values = new ArrayList<>();
+        SettlementData data = SettlementData.get(player.serverLevel());
+        String stateFaith = settlement.getFactionTeam().isBlank() ? settlement.getFaith() : factionLeaderFaith(settlement.getFactionTeam(), data);
+        int faithDistance = CampaignDefinitions.religiousDistance(settlement.getFaith(), stateFaith);
+        SettlementData.CharacterRecord founder = settlement.getFounderId() == null ? null : data.getCharacter(settlement.getFounderId());
+        String founderName = founder != null && founder.isCreated() ? founder.getDisplayName()
+                : settlement.getFounderId() == null ? "Unknown" : settlement.getFounderId().toString().substring(0, 8);
+        String conversion = settlement.isConvertingFaith() ? " · Converting to " + settlement.getConversionTargetFaith()
+                + " at " + settlement.getConversionProgress() + "% (resistance " + settlement.getConversionResistance() + ")" : "";
+        values.add(new EffectEntry("Local faith: " + settlement.getFaith(), "Founding & religion", "minecraft:book",
+                faithDistance == 0 ? "POSITIVE" : "MIXED", "Founder: " + founderName + " · State faith: " + stateFaith
+                + " · religious distance " + faithDistance + "/100" + conversion,
+                settlement.isConvertingFaith() ? "Conversion in progress" : "Persistent"));
+        values.add(new EffectEntry("Stability efficiency", "Public order", "settlements:textures/gui/icons/stability.png",
+                settlement.getStability() >= 75 ? "POSITIVE" : settlement.getStability() >= 40 ? "MIXED" : "NEGATIVE",
+                "Tax " + percent(settlement.taxEfficiency()) + " · resources " + percent(settlement.resourceEfficiency())
+                        + " · levy capacity " + percent(settlement.levyEfficiency()) + " compared with full stability.", "Current"));
         int mouths = settlement.getVillagerCount() + settlement.getProfessionalCount() + settlement.getMercenaryCompanyCount();
         if (mouths > 0 && settlement.getFood() >= mouths) {
             values.add(new EffectEntry("Well supplied", "Food stockpile", "minecraft:bread", "POSITIVE",
@@ -215,7 +231,6 @@ public record SettlementSnapshot(
                             ? "Loaded soldiers are suffering Recruits' low-morale penalties." : "Loaded soldiers have middling morale.", "Current"));
         }
 
-        SettlementData data = SettlementData.get(player.serverLevel());
         SettlementData.CharacterRecord ruler = settlement.getOwnerId() == null ? null : data.getCharacter(settlement.getOwnerId());
         if (ruler != null) {
             for (String traitId : ruler.getTraits()) {
@@ -260,11 +275,16 @@ public record SettlementSnapshot(
             if (!mechanical.isEmpty()) detail = detail.isBlank() ? String.join(", ", mechanical) : detail + " — " + String.join(", ", mechanical);
             values.add(new EffectEntry(modifier.name, modifier.source, modifier.iconItem, modifier.tone, detail, duration));
         }
-        values.add(new EffectEntry("Major City / Tier IV", "Settlement development", "minecraft:bricks", "MIXED",
-                "Requires City rank, " + SettlementConfig.MAJOR_CITY_MIN_POPULATION.get() + " civilian population, "
-                        + SettlementConfig.MAJOR_CITY_MIN_STABILITY.get() + " Stability, "
-                        + "housing for all registered villagers, and 1 Main + 2 Secondary Capture Zones. Capital is a political designation and grants no research tier.", "Server requirements"));
         return values.stream().limit(32).toList();
+    }
+
+    private static String percent(double value) { return Math.round(value * 100.0D) + "%"; }
+
+    private static String factionLeaderFaith(String factionId, SettlementData data) {
+        if (factionId == null || factionId.isBlank() || FactionEvents.recruitsFactionManager == null) return "Other";
+        RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
+        SettlementData.CharacterRecord ruler = faction == null || faction.getTeamLeaderUUID() == null ? null : data.getCharacter(faction.getTeamLeaderUUID());
+        return ruler == null ? "Other" : ruler.getFaith();
     }
 
     private static String joinEffects(int stability, int treasury, int morale) {

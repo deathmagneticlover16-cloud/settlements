@@ -92,6 +92,10 @@ public final class CampaignSystemsManager {
     public static void processCampaignSystems(MinecraftServer server, long day) {
         SettlementData settlements = SettlementData.get(server.overworld());
         CampaignSystemsData extra = CampaignSystemsData.get(server.overworld());
+        if (com.talhanation.recruits.FactionEvents.recruitsFactionManager != null) {
+            CampaignData.get(server.overworld()).removeInvalidVassalages(id ->
+                    com.talhanation.recruits.FactionEvents.recruitsFactionManager.getFactionByStringID(id) != null);
+        }
         for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
             extra.expireModifiers(settlement.getId());
             updateReligiousUnrest(server, settlement, extra, settlements);
@@ -154,19 +158,26 @@ public final class CampaignSystemsManager {
         }
         int populationPerCoin = Math.max(1, SettlementConfig.TAX_POPULATION_PER_COIN.get());
         int base = Math.max(1, (population + populationPerCoin - 1) / populationPerCoin);
-        int income = (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D));
+        int income = (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D) * settlement.taxEfficiency());
         income = Math.max(0, income);
-        if (income > 0) {
-            StateTreasury.change(level, settlement, income);
+        int retained = income;
+        CampaignData.VassalageRecord vassalage = CampaignData.get(level).vassalageFor(settlement.getFactionTeam());
+        if (income > 0 && vassalage != null) {
+            int due = Math.max(0, (int) ((long) income * vassalage.tributeRate() / 100L));
+            int room = Integer.MAX_VALUE - extra.treasuryBalance(vassalage.overlord());
+            int tribute = Math.min(due, Math.max(0, room));
+            retained = income - tribute;
+            if (tribute > 0) extra.changeTreasury(vassalage.overlord(), tribute);
         }
-        extra.setLastTaxIncome(settlement.getId(), income);
+        if (retained > 0) StateTreasury.change(level, settlement, retained);
+        extra.setLastTaxIncome(settlement.getId(), retained);
     }
 
     public static int projectedTaxIncome(SettlementData.SettlementRecord settlement, CampaignSystemsData extra) {
         if (settlement == null || extra == null || settlement.getCivilianPopulation() <= 0) return 0;
         int populationPerCoin = Math.max(1, SettlementConfig.TAX_POPULATION_PER_COIN.get());
         int base = Math.max(1, (settlement.getCivilianPopulation() + populationPerCoin - 1) / populationPerCoin);
-        return Math.max(0, (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D)));
+        return Math.max(0, (int)Math.round(base * (extra.taxRatePercent(settlement.getId()) / 100.0D) * settlement.taxEfficiency()));
     }
 
     private static void updateRulerDevotionBenefit(SettlementData.SettlementRecord settlement, CampaignSystemsData extra, SettlementData settlements) {
@@ -186,33 +197,48 @@ public final class CampaignSystemsManager {
 
     private static void updateReligiousUnrest(MinecraftServer server, SettlementData.SettlementRecord settlement, CampaignSystemsData extra, SettlementData settlements) {
         String factionId = settlement.getFactionTeam();
-        boolean unrest = false;
+        String stateFaith = factionId.isBlank() ? settlement.getFaith() : factionLeaderFaith(factionId, settlements);
+        int localDistance = CampaignDefinitions.religiousDistance(settlement.getFaith(), stateFaith);
+        replacePressure(extra, settlement.getId(), "local_religious_unrest", localDistance <= 0 ? 0 : -Math.max(1, localDistance / 18),
+                "Ruler and local faith differ", settlement.getFaith() + " ↔ " + stateFaith + " · distance " + localDistance + "/100");
+
+        int treatyDistance = 0;
         if (!factionId.isBlank()) {
-            String ownFaith = factionLeaderFaith(factionId, settlements);
             CampaignData campaign = CampaignData.get(server.overworld());
             for (CampaignData.DiplomacyRecord relation : campaign.getDiplomacy()) {
                 if (!relation.state().isAlliance()) continue;
                 String other = factionId.equals(relation.firstFaction()) ? relation.secondFaction()
                         : factionId.equals(relation.secondFaction()) ? relation.firstFaction() : "";
-                if (other.isBlank()) continue;
-                String otherFaith = factionLeaderFaith(other, settlements);
-                if (CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith) <= -8) { unrest = true; break; }
+                if (!other.isBlank()) treatyDistance = Math.max(treatyDistance,
+                        CampaignDefinitions.religiousDistance(stateFaith, factionLeaderFaith(other, settlements)));
             }
-            // Marriage Alliances are intentionally a separate diplomatic bond rather than a
-            // full military alliance, but the population still notices a ruler marrying into
-            // a strongly incompatible faith. Include those political marriages in unrest too.
-            if (!unrest && com.talhanation.recruits.FactionEvents.recruitsFactionManager != null) {
+            if (com.talhanation.recruits.FactionEvents.recruitsFactionManager != null) {
                 for (com.talhanation.recruits.world.RecruitsFaction otherFaction : com.talhanation.recruits.FactionEvents.recruitsFactionManager.getFactions()) {
-                    if (otherFaction == null || otherFaction.getStringID().equals(factionId)
-                            || !extra.marriageAlliance(factionId, otherFaction.getStringID())) continue;
-                    String otherFaith = factionLeaderFaith(otherFaction.getStringID(), settlements);
-                    if (CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith) <= -8) { unrest = true; break; }
+                    if (otherFaction != null && !otherFaction.getStringID().equals(factionId)
+                            && extra.marriageAlliance(factionId, otherFaction.getStringID()))
+                        treatyDistance = Math.max(treatyDistance, CampaignDefinitions.religiousDistance(stateFaith,
+                                factionLeaderFaith(otherFaction.getStringID(), settlements)));
                 }
             }
         }
-        boolean present = extra.modifiers(settlement.getId()).stream().anyMatch(value -> value.id.equals("local_religious_unrest"));
-        if (unrest && !present) extra.addModifier(settlement.getId(), standardModifier(server.overworld(), settlement.getId(), "local_religious_unrest", 0));
-        else if (!unrest && present) extra.removeModifier(settlement.getId(), "local_religious_unrest");
+        replacePressure(extra, settlement.getId(), "controversial_treaties", treatyDistance < 35 ? 0 : -Math.max(1, treatyDistance / 30),
+                "Controversial interfaith agreements", "Deep agreements across a religious distance of " + treatyDistance + "/100");
+        replacePressure(extra, settlement.getId(), "conversion_resistance", settlement.isConvertingFaith()
+                        ? -Math.max(1, settlement.getConversionResistance() / 20) : 0,
+                "Religious conversion resistance", settlement.isConvertingFaith()
+                        ? settlement.getConversionFromFaith() + " → " + settlement.getConversionTargetFaith() + " · " + settlement.getConversionProgress() + "%" : "");
+        CampaignData.VassalageRecord vassalage = factionId.isBlank() ? null : CampaignData.get(server.overworld()).vassalageFor(factionId);
+        int tributeRate = vassalage == null ? 0 : vassalage.tributeRate();
+        int tributePressure = switch (tributeRate) { case 5 -> -1; case 10 -> -2; case 25 -> -5; case 50 -> -10; default -> 0; };
+        replacePressure(extra, settlement.getId(), "vassal_tribute_unrest", tributePressure,
+                "Vassal tribute burden", tributeRate <= 0 ? "" : tributeRate + "% of actual tax receipts are diverted to the overlord");
+    }
+
+    private static void replacePressure(CampaignSystemsData extra, String settlementId, String id, int stability,
+                                        String source, String detail) {
+        if (stability == 0) { extra.removeModifier(settlementId, id); return; }
+        extra.addModifier(settlementId, new CampaignSystemsData.ModifierRecord(id, source, "minecraft:bell", "NEGATIVE",
+                source, detail, Math.max(-20, stability), Math.max(-10, stability / 2), 0L));
     }
 
     private static String factionLeaderFaith(String factionId, SettlementData settlements) {
@@ -258,7 +284,8 @@ public final class CampaignSystemsManager {
 
     private static void applyDailyModifierEffects(SettlementData.SettlementRecord settlement, CampaignSystemsData extra, long day) {
         if (!extra.beginModifierDay(settlement.getId(), day)) return;
-        int stability = extra.modifiers(settlement.getId()).stream().mapToInt(value -> value.stabilityPerDay).sum();
+        int stability = Math.max(-20, Math.min(20,
+                extra.modifiers(settlement.getId()).stream().mapToInt(value -> value.stabilityPerDay).sum()));
         if (stability != 0) settlement.changeStability(stability);
     }
 
@@ -670,6 +697,8 @@ public final class CampaignSystemsManager {
             };
             String before = CampaignManager.relationshipCategory(relation.relationship());
             if (!relation.passiveImprove(cap, day)) continue;
+            CampaignData.VassalageRecord vassalage = campaign.vassalageBetween(relation.firstFaction(), relation.secondFaction());
+            if (vassalage != null) CampaignManager.enforceTributeCeiling(server.overworld(), campaign, vassalage);
             String after = CampaignManager.relationshipCategory(relation.relationship());
             if (!before.equals(after)) {
                 CampaignToastSender.relationChanged(server, relation.firstFaction(), relation.secondFaction(),

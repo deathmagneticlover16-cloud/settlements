@@ -1,12 +1,10 @@
 package ee.lastpagans.settlements;
 
-import ee.lastpagans.settlements.network.PacketValidation;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /** Server-authoritative player-to-player marriage state. */
 public record FamilySnapshot(
@@ -16,11 +14,7 @@ public record FamilySnapshot(
         String spouseFaith,
         String spouseTraits,
         String spouseEffect,
-        boolean canDivorce,
-        UUID pendingProposer,
-        String pendingProposerName,
-        List<PlayerCandidate> playerCandidates,
-        long currentDay,
+        long marriageDurationDays,
         String message
 ) {
     public static FamilySnapshot from(ServerPlayer player, String message) {
@@ -36,7 +30,6 @@ public record FamilySnapshot(
         String spouseTraits = "";
         String spouseEffect = "";
         long day = player.serverLevel().getDayTime() / 24000L;
-        boolean canDivorce = marriage != null && day - marriage.marriedDay() >= 7L;
         if (marriage != null && marriage.spousePlayerId() != null) {
             SettlementData.CharacterRecord spouse = characters.getCharacter(marriage.spousePlayerId());
             spouseName = spouse != null && spouse.isCreated() ? spouse.getDisplayName() : marriage.spousePlayerId().toString();
@@ -57,30 +50,8 @@ public record FamilySnapshot(
             }
         }
 
-        UUID pending = campaign.pendingMarriageProposer(player.getUUID());
-        String pendingName = "";
-        if (pending != null) {
-            SettlementData.CharacterRecord proposer = characters.getCharacter(pending);
-            pendingName = proposer != null && proposer.isCreated() ? proposer.getDisplayName() : pending.toString();
-        }
-
-        List<PlayerCandidate> playerCandidates = marriage == null
-                ? player.getServer().getPlayerList().getPlayers().stream()
-                .filter(onlinePlayer -> !onlinePlayer.getUUID().equals(player.getUUID()))
-                .filter(onlinePlayer -> campaign.getMarriage(onlinePlayer.getUUID()) == null)
-                .map(onlinePlayer -> {
-                    SettlementData.CharacterRecord candidateCharacter = characters.getCharacter(onlinePlayer.getUUID());
-                    return candidateCharacter != null && candidateCharacter.isCreated()
-                            ? new PlayerCandidate(onlinePlayer.getUUID(), candidateCharacter.getDisplayName()) : null;
-                })
-                .filter(java.util.Objects::nonNull)
-                .sorted(java.util.Comparator.comparing(PlayerCandidate::name, String.CASE_INSENSITIVE_ORDER))
-                .limit(64)
-                .toList()
-                : List.of();
-
         return new FamilySnapshot(characterName, marriage != null, spouseName, spouseFaith, spouseTraits,
-                spouseEffect, canDivorce, pending, pendingName, playerCandidates, day,
+                spouseEffect, marriage == null ? 0L : Math.max(0L, day - marriage.marriedDay()),
                 message == null ? "" : message);
     }
 
@@ -98,12 +69,7 @@ public record FamilySnapshot(
         buffer.writeUtf(spouseFaith, 48);
         buffer.writeUtf(spouseTraits, 128);
         buffer.writeUtf(spouseEffect, 160);
-        buffer.writeBoolean(canDivorce);
-        buffer.writeBoolean(pendingProposer != null);
-        if (pendingProposer != null) buffer.writeUUID(pendingProposer);
-        buffer.writeUtf(pendingProposerName, 80);
-        PacketValidation.writeCollection(buffer, playerCandidates, 64, (buf, value) -> value.encode(buf));
-        buffer.writeLong(currentDay);
+        buffer.writeLong(marriageDurationDays);
         buffer.writeUtf(message, 256);
     }
 
@@ -114,18 +80,7 @@ public record FamilySnapshot(
         String spouseFaith = buffer.readUtf(48);
         String spouseTraits = buffer.readUtf(128);
         String spouseEffect = buffer.readUtf(160);
-        boolean canDivorce = buffer.readBoolean();
-        UUID pending = buffer.readBoolean() ? buffer.readUUID() : null;
-        String pendingName = buffer.readUtf(80);
-        int playerCount = PacketValidation.readCount(buffer, 64, "player marriage candidate");
-        List<PlayerCandidate> candidates = new ArrayList<>(playerCount);
-        for (int i = 0; i < playerCount; i++) candidates.add(PlayerCandidate.decode(buffer));
         return new FamilySnapshot(name, married, spouseName, spouseFaith, spouseTraits, spouseEffect,
-                canDivorce, pending, pendingName, candidates, buffer.readLong(), buffer.readUtf(256));
-    }
-
-    public record PlayerCandidate(UUID id, String name) {
-        private void encode(FriendlyByteBuf buffer) { buffer.writeUUID(id); buffer.writeUtf(name, 80); }
-        private static PlayerCandidate decode(FriendlyByteBuf buffer) { return new PlayerCandidate(buffer.readUUID(), buffer.readUtf(80)); }
+                buffer.readLong(), buffer.readUtf(256));
     }
 }

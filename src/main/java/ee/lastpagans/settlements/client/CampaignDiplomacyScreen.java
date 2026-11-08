@@ -29,6 +29,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
     private int warAllyIndex;
     private DropdownWidget factionDropdown, typeDropdown, sourceDropdown, targetDropdown, goalDropdown, warAllyDropdown;
     private EditBox customCasusBelli;
+    private Button declareButton;
 
     public CampaignDiplomacyScreen(DiplomacySnapshot snapshot) {
         super(Component.literal("Campaign Diplomacy"));
@@ -64,7 +65,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         List<String> factions = snapshot.relations().stream().map(DiplomacySnapshot.RelationEntry::factionName).toList();
         factionDropdown = addRenderableWidget(new DropdownWidget(left + 20, top + 88, 235, 20,
                 factions.isEmpty() ? List.of("No other factions") : factions, relationIndex,
-                value -> relationIndex = Math.max(0, factions.indexOf(value))));
+                value -> { relationIndex = Math.max(0, factions.indexOf(value)); buildWidgets(); }));
         Button nap = addRenderableWidget(Button.builder(Component.literal("Non-aggression pact"), b -> send("PROPOSE_NAP", null, null, ""))
                 .bounds(left + 20, top + 254, 160, 20).build());
         Button defensive = addRenderableWidget(Button.builder(Component.literal("Defensive alliance"), b -> send("PROPOSE_DEFENSIVE", null, null, ""))
@@ -73,8 +74,15 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
                 .bounds(left + 352, top + 254, 160, 20).build());
         Button breakTreaty = addRenderableWidget(Button.builder(Component.literal("Break current treaty"), b -> send("BREAK_TREATY", null, null, ""))
                 .bounds(left + 20, top + 280, 190, 20).build());
+        DiplomacySnapshot.RelationEntry relation = snapshot.relations().isEmpty() ? null : snapshot.relations().get(clampIndex(relationIndex, snapshot.relations().size()));
+        boolean hasVassalage = relation != null && relation.tributeRate() > 0;
+        Button vassalage = addRenderableWidget(Button.builder(Component.literal(hasVassalage ? "Vassalage / Tribute" : "Offer to Become Vassal"), b -> {
+                    if (hasVassalage) minecraft.setScreen(new VassalageScreen(this, snapshot, relation));
+                    else send("PROPOSE_VASSALAGE", null, null, "");
+                }).bounds(left + 216, top + 280, 160, 20).build());
         boolean active = snapshot.canManage() && !snapshot.relations().isEmpty();
         nap.active = defensive.active = military.active = breakTreaty.active = active;
+        vassalage.active = active;
     }
 
     private void declarationWidgets() {
@@ -128,12 +136,13 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             customCasusBelli = new EditBox(font, left + 20, top + 188, 520, 20, Component.literal("Custom casus belli"));
             customCasusBelli.setMaxLength(100);
             customCasusBelli.setHint(Component.literal("Describe the reason for war (max 100 characters)"));
+            customCasusBelli.setResponder(value -> { if (declareButton != null) declareButton.active = snapshot.canDeclareWar() && declarationValid(); });
             addRenderableWidget(customCasusBelli);
         }
 
-        Button declare = addRenderableWidget(Button.builder(Component.literal("Declare " + type.displayName()), b -> declareConflict())
+        declareButton = addRenderableWidget(Button.builder(Component.literal("Declare " + type.displayName()), b -> declareConflict())
                 .bounds(left + 330, top + 290, 210, 24).build());
-        declare.active = snapshot.canDeclareWar() && declarationValid();
+        declareButton.active = snapshot.canDeclareWar() && declarationValid();
     }
 
     private void proposalWidgets() {
@@ -318,6 +327,9 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         stat(graphics, "Political relations", r.relationship(), 292, 125);
         stat(graphics, "Religious compatibility", signed(r.faithModifier()), 292, 144);
         stat(graphics, "Reliability", signed(r.reliability()), 292, 163);
+        stat(graphics, "NAP threshold", r.napMinimum(), 292, 182);
+        stat(graphics, "Alliance thresholds", r.defensiveMinimum() + " / " + r.militaryMinimum(), 292, 201);
+        stat(graphics, "Vassalage threshold", r.vassalMinimum(), 292, 220);
         graphics.drawWordWrap(font, Component.literal("Formal war controls battlefield hostility."), left + 20, top + 132, 235, 0xFFAAAAAA);
     }
 

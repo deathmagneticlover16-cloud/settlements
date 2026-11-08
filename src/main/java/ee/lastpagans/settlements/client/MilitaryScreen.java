@@ -22,6 +22,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
     private int left, top;
     private DropdownWidget unitDropdown;
     private int selectedUnit;
+    private int foreignSaleQuantity = 1;
     private int page = PAGE_FORCES;
     private long snapshotReceivedAt = System.currentTimeMillis();
 
@@ -88,6 +89,21 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
             addRenderableWidget(Button.builder(Component.literal("Recruit " + amount), button -> recruit(amount))
                     .bounds(left + 254 + i * 66, top + 178, 62, 20).build());
         }
+        if (snapshot.foreignManpower() > 0) {
+            foreignSaleQuantity = Math.max(1, Math.min(foreignSaleQuantity, snapshot.foreignManpower()));
+            addRenderableWidget(Button.builder(Component.literal("−"), button -> {
+                foreignSaleQuantity = Math.max(1, foreignSaleQuantity - 1);
+            }).bounds(left + 286, top + 202, 22, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("+"), button -> {
+                foreignSaleQuantity = Math.min(snapshot.foreignManpower(), foreignSaleQuantity + 1);
+            }).bounds(left + 354, top + 202, 22, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Max"), button -> foreignSaleQuantity = snapshot.foreignManpower())
+                    .bounds(left + 382, top + 202, 42, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Sell Foreign MP"), button -> sellForeign(false))
+                    .bounds(left + 286, top + 228, 138, 20).build());
+            addRenderableWidget(Button.builder(Component.literal("Sell All"), button -> sellForeign(true))
+                    .bounds(left + 430, top + 228, 74, 20).build());
+        }
     }
 
     private void buildLevyWidgets() {
@@ -128,6 +144,12 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         SettlementNetwork.CHANNEL.sendToServer(new SettlementActionPacket(snapshot.settlementId(), action));
     }
 
+    private void sellForeign(boolean all) {
+        SettlementNetwork.CHANNEL.sendToServer(new SettlementActionPacket(snapshot.settlementId(),
+                all ? SettlementManager.SettlementAction.SELL_ALL_FOREIGN_MP : SettlementManager.SettlementAction.SELL_FOREIGN_MP,
+                "", all ? 0 : foreignSaleQuantity));
+    }
+
     private void switchSettlement(boolean next) {
         SettlementNetwork.CHANNEL.sendToServer(new SettlementActionPacket(snapshot.settlementId(),
                 next ? SettlementManager.SettlementAction.SELECT_NEXT : SettlementManager.SettlementAction.SELECT_PREVIOUS,
@@ -161,6 +183,11 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         stat(graphics, "Recruit morale", snapshot.averageMorale() == 0 ? "No loaded troops" : snapshot.averageMorale() + "%", 286, 122);
         stat(graphics, "Mercenaries", snapshot.mercenaries(), 286, 140);
         stat(graphics, "Levymen", snapshot.levymen(), 286, 158);
+        if (snapshot.foreignManpower() > 0) {
+            graphics.drawString(font, "SELL FOREIGN MANPOWER", left + 286, top + 190, 0xFFE7D8B0, false);
+            graphics.drawCenteredString(font, Integer.toString(foreignSaleQuantity), left + 342, top + 208, 0xFFFFFFFF);
+            graphics.drawString(font, "Proceeds use the server-configured unit value.", left + 286, top + 254, 0xFFB8B0A0, false);
+        }
 
         graphics.drawString(font, "UNIT TEMPLATE", left + 24, top + 168, 0xFFE7D8B0, false);
         List<SettlementSnapshot.UnitTemplateEntry> templates = professionalTemplates();

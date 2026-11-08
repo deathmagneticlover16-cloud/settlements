@@ -50,8 +50,11 @@ public final class HousingAreaOverlay {
             consumePauseScreen = true;
         } else if (event.getKey() == GLFW.GLFW_KEY_DELETE && snapshot.canManage()) {
             HousingAreasSnapshot.Entry target = targeted();
-            if (target != null) SettlementNetwork.CHANNEL.sendToServer(new HousingAreaActionPacket(snapshot.settlementId(),
-                    HousingAreaActionPacket.Action.DELETE, target.index()));
+            if (target != null) Minecraft.getInstance().setScreen(new ConfirmActionScreen(null,
+                    net.minecraft.network.chat.Component.literal("Delete housing area?"),
+                    net.minecraft.network.chat.Component.literal("Area " + (target.index() + 1) + " will stop contributing beds. This cannot be undone."),
+                    () -> SettlementNetwork.CHANNEL.sendToServer(new HousingAreaActionPacket(snapshot.settlementId(),
+                            HousingAreaActionPacket.Action.DELETE, target.index()))));
         }
     }
 

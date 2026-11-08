@@ -35,7 +35,8 @@ public final class ClientCampaignEvents {
 
     public static void onScreenOpening(ScreenEvent.Opening event) {
         if (event.getNewScreen() instanceof net.minecraft.client.gui.screens.PauseScreen
-                && (AreaSelectionEditor.consumePauseScreen() || HousingAreaOverlay.consumePauseScreen())) {
+                && (AreaSelectionEditor.consumePauseScreen() || HousingAreaOverlay.consumePauseScreen()
+                || TownSquareRelocationEditor.consumePauseScreen())) {
             event.setCanceled(true);
             return;
         }
@@ -73,6 +74,7 @@ public final class ClientCampaignEvents {
 
     public static void onClientLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         AreaSelectionEditor.cancel();
+        TownSquareRelocationEditor.cancel();
         HousingAreaOverlay.cancel();
         TransientAlertOverlay.clear();
         SettlementsWildfirePreviewSession.cancel();

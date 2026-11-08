@@ -29,6 +29,12 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_TARGET_DAYS;
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP;
     public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_COIN;
+    public static final ForgeConfigSpec.IntValue FOREIGN_MANPOWER_SELL_VALUE;
+    public static final ForgeConfigSpec.IntValue RELATION_NAP_MINIMUM;
+    public static final ForgeConfigSpec.IntValue RELATION_WAR_AID_MINIMUM;
+    public static final ForgeConfigSpec.IntValue RELATION_DEFENSIVE_ALLIANCE_MINIMUM;
+    public static final ForgeConfigSpec.IntValue RELATION_MILITARY_ALLIANCE_MINIMUM;
+    public static final ForgeConfigSpec.IntValue RELATION_VASSALAGE_MINIMUM;
     public static final ForgeConfigSpec.IntValue RESIDENT_BOUNDARY_CHECK_TICKS;
     public static final ForgeConfigSpec.BooleanValue SPAWN_FIRST_SETTLERS;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_COUNT;
@@ -49,6 +55,8 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue HEALTHY_PLAGUE_CHANCE_PERCENT;
     public static final ForgeConfigSpec.IntValue PLAGUE_DURATION_HOURS;
     public static final ForgeConfigSpec.IntValue CAPTURE_ZONE_MIN_SIZE;
+    public static final ForgeConfigSpec.IntValue TOWN_SQUARE_CAPTURE_RADIUS;
+    public static final ForgeConfigSpec.IntValue TOWN_SQUARE_CAPTURE_HEIGHT;
     public static final ForgeConfigSpec.IntValue CAPTURE_ZONE_MIN_SPACING;
     public static final ForgeConfigSpec.IntValue CAPTURE_SECONDARY_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_MAIN_SECONDS;
@@ -126,6 +134,16 @@ public final class SettlementConfig {
         builder.push("taxation");
         TAX_POPULATION_PER_COIN = builder.comment("Civilian population represented by one point of base daily State Treasury revenue before the tax rate is applied.")
                 .defineInRange("populationPerCoin", 10, 1, 1000);
+        FOREIGN_MANPOWER_SELL_VALUE = builder.comment("State Treasury currency minted when one Foreign Manpower is sold.")
+                .defineInRange("foreignManpowerSellValue", 10, 1, 1000000);
+        builder.pop();
+
+        builder.push("diplomacy");
+        RELATION_NAP_MINIMUM = builder.defineInRange("nonAggressionMinimum", -25, -100, 100);
+        RELATION_WAR_AID_MINIMUM = builder.defineInRange("warAidMinimum", 10, -100, 100);
+        RELATION_DEFENSIVE_ALLIANCE_MINIMUM = builder.defineInRange("defensiveAllianceMinimum", 15, -100, 100);
+        RELATION_MILITARY_ALLIANCE_MINIMUM = builder.defineInRange("militaryAllianceMinimum", 35, -100, 100);
+        RELATION_VASSALAGE_MINIMUM = builder.defineInRange("voluntaryVassalageMinimum", 25, -100, 100);
         builder.pop();
 
         builder.push("residents");
@@ -168,6 +186,10 @@ public final class SettlementConfig {
         builder.push("capture_zones");
         CAPTURE_ZONE_MIN_SIZE = builder.comment("Minimum width and depth of a settlement Capture Zone.")
                 .defineInRange("minimumSize", 12, 6, 128);
+        TOWN_SQUARE_CAPTURE_RADIUS = builder.comment("Horizontal radius of the automatic Main objective anchored on every Town Square.")
+                .defineInRange("townSquareMainRadius", 8, 3, 64);
+        TOWN_SQUARE_CAPTURE_HEIGHT = builder.comment("Vertical height of the automatic Town Square Main objective.")
+                .defineInRange("townSquareMainHeight", 6, 3, 64);
         CAPTURE_ZONE_MIN_SPACING = builder.comment("Minimum horizontal distance between Capture Zone centres in the same settlement.")
                 .defineInRange("minimumSpacing", 24, 0, 512);
         CAPTURE_SECONDARY_SECONDS = builder.comment("Base uncontested seconds required to capture a secondary objective.")

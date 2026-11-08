@@ -205,6 +205,9 @@ public final class SettlementManager {
             case RAISE_LEVY -> requireManager(player, settlement, () -> CampaignSystemsManager.raiseLevy(player, settlement));
             case RETURN_LEVY -> requireManager(player, settlement, () -> CampaignSystemsManager.returnLevy(player, settlement));
             case RETURN_TO_BARRACKS -> requireManager(player, settlement, () -> returnToBarracks(player, settlement));
+            case SELL_FOREIGN_MP -> requireManager(player, settlement, () -> sellForeignManpower(player, settlement, amount));
+            case SELL_ALL_FOREIGN_MP -> requireManager(player, settlement, () -> sellForeignManpower(player, settlement,
+                    CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId())));
             case RUN_CHECKER -> requireManager(player, settlement, () -> {
                 int recovered = settlement.runManpowerChecker();
                 return recovered > 0 ? "Recovered " + recovered + " available MP." : "No manpower recovered.";
@@ -277,7 +280,7 @@ public final class SettlementManager {
 
     private static String applyAreaSelection(ServerPlayer player, SettlementData.SettlementRecord settlement, AreaSelection.Type type,
                                              AreaSelection.Shape shape, BlockPos first, BlockPos second, int areaIndex) {
-        if (type != AreaSelection.Type.CAPTURE_MAIN && type != AreaSelection.Type.CAPTURE_SECONDARY) shape = AreaSelection.Shape.BOX;
+        if (type != AreaSelection.Type.CAPTURE_SECONDARY) shape = AreaSelection.Shape.BOX;
         if (type.horizontalOnly()) second = new BlockPos(second.getX(), first.getY(), second.getZ());
         BlockPos min = AreaSelection.min(first, second), max = AreaSelection.max(first, second);
         int width = max.getX() - min.getX() + 1, height = max.getY() - min.getY() + 1, depth = max.getZ() - min.getZ() + 1;
@@ -311,7 +314,6 @@ public final class SettlementManager {
                 settlement.setBarracksArea(dimension, min, max, shape);
                 yield shape.label() + " Barracks registered with a " + settlement.getBarracksRadius() + " block radius.";
             }
-            case CAPTURE_MAIN -> CaptureZoneManager.setArea(player, settlement, CaptureZoneData.ZoneType.MAIN, min, max, shape);
             case CAPTURE_SECONDARY -> CaptureZoneManager.setArea(player, settlement, CaptureZoneData.ZoneType.SECONDARY, min, max, shape);
         };
     }
@@ -356,7 +358,7 @@ public final class SettlementManager {
         int treasuryCost = amount * treasuryPerUnit;
         CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
         int foreignAvailable = campaignSystems.foreignManpower(settlement.getId());
-        if (settlement.getAvailableManpower() + foreignAvailable < amount)
+        if ((long) settlement.getAvailableManpower() + foreignAvailable < amount)
             return "Not enough recruitable manpower. Available: " + settlement.getAvailableManpower() + " native + " + foreignAvailable + " foreign.";
         if (StateTreasury.balance(player.serverLevel(), settlement) < treasuryCost) return "Not enough State Treasury funds. Required: " + treasuryCost + ".";
 
@@ -380,6 +382,29 @@ public final class SettlementManager {
         spawned.forEach(settlement::addProfessional);
         settlement.addChronicle("Recruited " + amount + " " + unitType.displayName() + (amount == 1 ? "" : "s") + ".");
         return "Spawned " + amount + " unhired " + unitType.displayName() + (amount == 1 ? "" : "s") + ". Recruits' normal hiring cost still applies.";
+    }
+
+    private static String sellForeignManpower(ServerPlayer player, SettlementData.SettlementRecord settlement, int requested) {
+        if (requested <= 0) return "Choose at least one foreign manpower to sell.";
+        CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
+        int available = systems.foreignManpower(settlement.getId());
+        if (available <= 0) return "There is no foreign manpower to sell.";
+        int quantity = Math.min(requested, available);
+        int unitValue = SettlementConfig.FOREIGN_MANPOWER_SELL_VALUE.get();
+        int balance = StateTreasury.balance(player.serverLevel(), settlement);
+        long proceeds = (long) quantity * unitValue;
+        int room = Integer.MAX_VALUE - balance;
+        if (room <= 0) return "The State Treasury is already at its maximum balance.";
+        if (proceeds > room) {
+            quantity = Math.min(quantity, room / unitValue);
+            proceeds = (long) quantity * unitValue;
+        }
+        if (quantity <= 0) return "The State Treasury has no room for this sale.";
+        if (!systems.spendForeignManpower(settlement.getId(), quantity)) return "Foreign manpower changed; refresh and try again.";
+        StateTreasury.change(player.serverLevel(), settlement, (int) proceeds);
+        if (systems.foreignManpower(settlement.getId()) == 0) systems.removeModifier(settlement.getId(), "foreign_soldiers");
+        settlement.addChronicle("Sold " + quantity + " foreign manpower for " + proceeds + " treasury.");
+        return "Sold " + quantity + " foreign manpower for " + proceeds + " treasury.";
     }
 
     private static int professionalCost(CampaignData.UnitType type) {
@@ -1281,8 +1306,7 @@ public final class SettlementManager {
     }
 
     private static String setTownSquareHere(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
-        return "Town Square moved to your current position.";
+        return CaptureZoneManager.relocateTownSquare(player, settlement);
     }
 
     private static String setUpkeepChest(ServerPlayer player, SettlementData.SettlementRecord settlement) {
@@ -1506,7 +1530,7 @@ public final class SettlementManager {
     }
 
     public enum SettlementAction {
-        RECRUIT_UNIT,
+        RECRUIT_UNIT, SELL_FOREIGN_MP, SELL_ALL_FOREIGN_MP,
         RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_CURRENCY,
         WITHDRAW_CURRENCY_ONE, WITHDRAW_CURRENCY_TEN, SET_TAX_POLICY, TOGGLE_IMMIGRATION,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,

@@ -69,35 +69,27 @@ public final class CaptureZoneManager {
         List<CaptureZoneData.CaptureZoneRecord> zones = CaptureZoneData.get(level).zonesFor(settlement.getId());
         long main = zones.stream().filter(z -> z.type()==CaptureZoneData.ZoneType.MAIN).count();
         long secondary = zones.size()-main;
-        return "Capture Zones: " + main + "/" + needed.main() + " Main · " + secondary + "/" + needed.secondary() + " Secondary";
+        return "Town Square objective: " + (main == 1 ? "anchored" : "missing") + " · Secondary: " + secondary + "/" + needed.secondary();
     }
 
     public static String setArea(ServerPlayer player, SettlementData.SettlementRecord settlement, CaptureZoneData.ZoneType type,
                                  BlockPos first, BlockPos second, AreaSelection.Shape shape) {
         if (player == null || settlement == null || first == null || second == null) return "Invalid Capture Zone selection.";
+        if (type == CaptureZoneData.ZoneType.MAIN) return "The Main objective is anchored automatically to the Town Square.";
         if (editingBlocked(player.serverLevel(), settlement)) return "Capture Zones cannot be changed during war or occupation.";
         String dimension = player.serverLevel().dimension().location().toString();
         CaptureZoneData.CaptureZoneRecord candidate = new CaptureZoneData.CaptureZoneRecord(UUID.randomUUID(), settlement.getId(), type,
                 dimension, first, second, shape);
         CaptureZoneData data = CaptureZoneData.get(player.serverLevel());
-        CaptureZoneData.CaptureZoneRecord oldMain = data.zonesFor(settlement.getId()).stream()
-                .filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).findFirst().orElse(null);
-        String invalid = validate(player.serverLevel(), settlement, candidate,
-                type == CaptureZoneData.ZoneType.MAIN && oldMain != null ? oldMain.id() : null);
+        String invalid = validate(player.serverLevel(), settlement, candidate, null);
         if (invalid != null) return invalid;
-        if (type == CaptureZoneData.ZoneType.MAIN) {
-            for (CaptureZoneData.CaptureZoneRecord zone : data.zonesFor(settlement.getId())) {
-                if (zone.type() == CaptureZoneData.ZoneType.MAIN) data.remove(zone.id());
-            }
-        } else {
-            int max = Math.max(2, requirement(settlement).secondary() + 1);
-            long existing = data.zonesFor(settlement.getId()).stream().filter(z -> z.type() == CaptureZoneData.ZoneType.SECONDARY).count();
-            if (existing >= max) return "Remove a surplus Secondary before adding another. One spare objective is allowed for relocation.";
-        }
+        int max = Math.max(2, requirement(settlement).secondary() + 1);
+        long existing = data.zonesFor(settlement.getId()).stream().filter(z -> z.type() == CaptureZoneData.ZoneType.SECONDARY).count();
+        if (existing >= max) return "Remove a surplus Secondary before adding another. One spare objective is allowed for relocation.";
         data.put(candidate);
-        settlement.addChronicle((type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone designated.");
+        settlement.addChronicle("Secondary Capture Zone designated.");
         broadcast(player.getServer());
-        return (type == CaptureZoneData.ZoneType.MAIN ? "Main" : "Secondary") + " Capture Zone created as a "
+        return "Secondary Capture Zone created as a "
                 + candidate.shape().label().toLowerCase(java.util.Locale.ROOT) + " (" + candidate.width() + "×" + candidate.depth() + ").";
     }
 
@@ -106,35 +98,70 @@ public final class CaptureZoneManager {
         if (editingBlocked(player.serverLevel(), settlement)) return "Capture Zones cannot be changed during war or occupation.";
         String dim = player.serverLevel().dimension().location().toString();
         CaptureZoneData data = CaptureZoneData.get(player.serverLevel());
-        CaptureZoneData.CaptureZoneRecord nearest = data.zonesFor(settlement.getId()).stream().filter(z -> dim.equals(z.dimension()))
+        CaptureZoneData.CaptureZoneRecord nearest = data.zonesFor(settlement.getId()).stream()
+                .filter(z -> z.type() == CaptureZoneData.ZoneType.SECONDARY && dim.equals(z.dimension()))
                 .min(java.util.Comparator.comparingDouble(z -> z.center().distSqr(player.blockPosition()))).orElse(null);
         if (nearest == null || nearest.center().distSqr(player.blockPosition()) > 64D*64D) return "No Capture Zone from this settlement is within 64 blocks.";
         ZoneRequirement needed = requirement(settlement);
         long sameType = data.zonesFor(settlement.getId()).stream().filter(z -> z.type() == nearest.type()).count();
-        int minimum = nearest.type() == CaptureZoneData.ZoneType.MAIN ? needed.main() : needed.secondary();
-        if (sameType <= minimum) return "That objective is required by this settlement's tier. Replace the Main in place, or add a replacement Secondary before removing this one.";
+        int minimum = needed.secondary();
+        if (sameType <= minimum) return "That Secondary objective is required by this settlement's tier. Add a replacement before removing it.";
         data.remove(nearest.id());
         settlement.addChronicle("A " + nearest.type().name().toLowerCase() + " Capture Zone was removed.");
         broadcast(player.getServer());
         return "Removed nearest " + nearest.type().name().toLowerCase() + " Capture Zone. " + summary(player.serverLevel(), settlement);
     }
 
-    public static void ensureVillageMainZone(ServerLevel level, SettlementData.SettlementRecord settlement) {
-        if (level == null || settlement == null || !settlement.hasTownSquare()) return;
-        CaptureZoneData data = CaptureZoneData.get(level);
-        if (data.zonesFor(settlement.getId()).stream().anyMatch(z -> z.type()==CaptureZoneData.ZoneType.MAIN)) return;
-        int min = Math.max(6, SettlementConfig.CAPTURE_ZONE_MIN_SIZE.get());
-        int half = Math.max(3, min / 2);
+    public static boolean syncTownSquareMainZone(ServerLevel level, SettlementData.SettlementRecord settlement) {
+        if (level == null || settlement == null || !settlement.hasTownSquare()) return false;
+        ServerLevel targetLevel = resolveLevel(level.getServer(), settlement.getTownSquareDimension());
+        if (targetLevel == null) return false;
+        CaptureZoneData data = CaptureZoneData.get(targetLevel);
+        CaptureZoneData.CaptureZoneRecord oldMain = data.zonesFor(settlement.getId()).stream()
+                .filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).findFirst().orElse(null);
+        int half = Math.max(3, SettlementConfig.TOWN_SQUARE_CAPTURE_RADIUS.get());
+        int height = Math.max(3, SettlementConfig.TOWN_SQUARE_CAPTURE_HEIGHT.get());
         BlockPos center = settlement.getTownSquare();
-        CaptureZoneData.CaptureZoneRecord candidate = new CaptureZoneData.CaptureZoneRecord(UUID.randomUUID(), settlement.getId(), CaptureZoneData.ZoneType.MAIN,
-                settlement.getTownSquareDimension(), center.offset(-half, 0, -half), center.offset(half, 4, half));
-        if (validate(level, settlement, candidate, null) == null) {
+        CaptureZoneData.CaptureZoneRecord candidate = new CaptureZoneData.CaptureZoneRecord(
+                oldMain == null ? UUID.randomUUID() : oldMain.id(), settlement.getId(), CaptureZoneData.ZoneType.MAIN,
+                settlement.getTownSquareDimension(), center.offset(-half, 0, -half), center.offset(half, height - 1, half));
+        if (validate(targetLevel, settlement, candidate, oldMain == null ? null : oldMain.id()) == null) {
+            for (CaptureZoneData.CaptureZoneRecord zone : data.zonesFor(settlement.getId()))
+                if (zone.type() == CaptureZoneData.ZoneType.MAIN) data.remove(zone.id());
             data.put(candidate);
-            settlement.addChronicle("The Town Square became the settlement's first Main Capture Zone.");
-            broadcast(level.getServer());
-        } else {
-            settlement.addChronicle("A Main Capture Zone is required. Designate one from Manage → Capture Zones.");
+            broadcast(targetLevel.getServer());
+            return true;
         }
+        return false;
+    }
+
+    public static String relocateTownSquare(ServerPlayer player, SettlementData.SettlementRecord settlement) {
+        if (player == null || settlement == null) return "Invalid settlement.";
+        if (editingBlocked(player.serverLevel(), settlement)) return "The Town Square cannot move during war or occupation.";
+        String dimension = player.serverLevel().dimension().location().toString();
+        BlockPos center = player.blockPosition();
+        int half = Math.max(3, SettlementConfig.TOWN_SQUARE_CAPTURE_RADIUS.get());
+        int height = Math.max(3, SettlementConfig.TOWN_SQUARE_CAPTURE_HEIGHT.get());
+        CaptureZoneData data = CaptureZoneData.get(player.serverLevel());
+        CaptureZoneData.CaptureZoneRecord oldMain = data.zonesFor(settlement.getId()).stream()
+                .filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).findFirst().orElse(null);
+        CaptureZoneData.CaptureZoneRecord candidate = new CaptureZoneData.CaptureZoneRecord(
+                oldMain == null ? UUID.randomUUID() : oldMain.id(), settlement.getId(), CaptureZoneData.ZoneType.MAIN,
+                dimension, center.offset(-half, 0, -half), center.offset(half, height - 1, half));
+        String invalid = validate(player.serverLevel(), settlement, candidate, oldMain == null ? null : oldMain.id());
+        if (invalid != null) return invalid;
+        settlement.setTownSquare(dimension, center);
+        for (CaptureZoneData.CaptureZoneRecord zone : data.zonesFor(settlement.getId()))
+            if (zone.type() == CaptureZoneData.ZoneType.MAIN) data.remove(zone.id());
+        data.put(candidate);
+        settlement.addChronicle("Town Square relocated; its Main objective moved atomically with it.");
+        broadcast(player.getServer());
+        return "Town Square and Main objective relocated to " + center.toShortString() + ".";
+    }
+
+    /** Kept as an internal alias for older call sites; it no longer creates a separately editable zone. */
+    public static void ensureVillageMainZone(ServerLevel level, SettlementData.SettlementRecord settlement) {
+        syncTownSquareMainZone(level, settlement);
     }
 
     public static boolean usesClaim(ServerLevel level, SettlementData.SettlementRecord settlement, UUID claimId) {
@@ -186,6 +213,10 @@ public final class CaptureZoneManager {
         CaptureZoneData data = CaptureZoneData.get(root);
         SettlementData settlements = SettlementData.get(root);
         CampaignData campaign = CampaignData.get(root);
+        for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
+            long mains = data.zonesFor(settlement.getId()).stream().filter(zone -> zone.type() == CaptureZoneData.ZoneType.MAIN).count();
+            if (settlement.hasTownSquare() && mains != 1) syncTownSquareMainZone(root, settlement);
+        }
         List<CaptureZoneData.CaptureZoneRecord> zones = data.allZones();
         Map<String, int[]> zoneCounts = new HashMap<>();
         for (CaptureZoneData.CaptureZoneRecord zone : zones) {

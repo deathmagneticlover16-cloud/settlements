@@ -8,7 +8,7 @@ import java.util.function.Supplier;
 
 public record SettlementActionPacket(String settlementId, SettlementManager.SettlementAction action, String argument, int amount) {
     public SettlementActionPacket(String settlementId, SettlementManager.SettlementAction action) { this(settlementId, action, "", 0); }
-    public static void encode(SettlementActionPacket packet, FriendlyByteBuf buffer) { buffer.writeUtf(packet.settlementId,64);buffer.writeEnum(packet.action);buffer.writeUtf(packet.argument==null?"":packet.argument,64);buffer.writeVarInt(Math.max(0,Math.min(25,packet.amount))); }
-    public static SettlementActionPacket decode(FriendlyByteBuf buffer) { return new SettlementActionPacket(buffer.readUtf(64),buffer.readEnum(SettlementManager.SettlementAction.class),buffer.readUtf(64),PacketValidation.readInt(buffer,0,25,"settlement action amount")); }
+    public static void encode(SettlementActionPacket packet, FriendlyByteBuf buffer) { buffer.writeUtf(packet.settlementId,64);buffer.writeEnum(packet.action);buffer.writeUtf(packet.argument==null?"":packet.argument,64);buffer.writeVarInt(Math.max(0,Math.min(1_000_000,packet.amount))); }
+    public static SettlementActionPacket decode(FriendlyByteBuf buffer) { return new SettlementActionPacket(buffer.readUtf(64),buffer.readEnum(SettlementManager.SettlementAction.class),buffer.readUtf(64),PacketValidation.readInt(buffer,0,1_000_000,"settlement action amount")); }
     public static void handle(SettlementActionPacket packet, Supplier<NetworkEvent.Context> supplier) {NetworkEvent.Context context=supplier.get();ServerPlayer sender=context.getSender();if(sender!=null)context.enqueueWork(()->{if(ClientActionLimiter.allow(sender,"settlement",1))SettlementManager.handleAction(sender,packet.settlementId,packet.action,packet.argument,packet.amount);});context.setPacketHandled(true);}
 }

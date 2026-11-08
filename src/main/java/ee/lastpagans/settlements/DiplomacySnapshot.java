@@ -30,6 +30,7 @@ public record DiplomacySnapshot(
         String ownName = CampaignManager.factionName(own);
         CampaignData campaign = CampaignData.get(player.serverLevel());
         CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
+        SettlementData settlementStore = SettlementData.get(player.serverLevel());
         RecruitsFaction ownFaction = own.isBlank() || FactionEvents.recruitsFactionManager == null ? null
                 : FactionEvents.recruitsFactionManager.getFactionByStringID(own);
         boolean leader = ownFaction != null && player.getUUID().equals(ownFaction.getTeamLeaderUUID());
@@ -50,19 +51,27 @@ public record DiplomacySnapshot(
                 String ownFaith = ownCharacter == null ? "" : ownCharacter.getFaith();
                 String otherFaith = otherCharacter == null ? "" : otherCharacter.getFaith();
                 int faithModifier = CampaignDefinitions.religionRelationModifier(ownFaith, otherFaith);
-                int traitModifier = CampaignDefinitions.relationTraitModifier(ownCharacter == null ? List.of() : ownCharacter.getTraits(), ownFaith, otherFaith)
-                        + CampaignDefinitions.relationTraitModifier(otherCharacter == null ? List.of() : otherCharacter.getTraits(), otherFaith, ownFaith);
-                int political = Math.max(-100, Math.min(100, (relation == null ? 0 : relation.relationship()) + traitModifier));
+                int political = CampaignManager.effectiveRelationship(player.serverLevel(), own, faction.getStringID());
+                CampaignData.VassalageRecord vassalage = campaign.vassalageBetween(own, faction.getStringID());
+                String vassalId = vassalage == null ? "" : vassalage.vassal();
+                int projectedGross = vassalage == null ? 0 : settlementStore.getSettlements().stream()
+                        .filter(settlement -> vassalId.equals(settlement.getFactionTeam()))
+                        .mapToInt(settlement -> CampaignSystemsManager.projectedTaxIncome(settlement, campaignSystems)).sum();
+                int projectedTribute = vassalage == null ? 0 : (int)((long)projectedGross * vassalage.tributeRate() / 100L);
                 relations.add(new RelationEntry(
                         faction.getStringID(), faction.getTeamDisplayName(), faction.getBanner() == null ? new CompoundTag() : faction.getBanner().copy(),
                         political, relation == null ? CampaignData.TreatyState.NEUTRAL.name() : relation.state().name(),
-                        faithModifier, campaign.getFactionReliability(faction.getStringID())
+                        faithModifier, campaign.getFactionReliability(faction.getStringID()),
+                        SettlementConfig.RELATION_NAP_MINIMUM.get(), SettlementConfig.RELATION_DEFENSIVE_ALLIANCE_MINIMUM.get(),
+                        SettlementConfig.RELATION_MILITARY_ALLIANCE_MINIMUM.get(), SettlementConfig.RELATION_VASSALAGE_MINIMUM.get(),
+                        vassalage == null ? "" : vassalage.overlord(), vassalId, vassalage == null ? 0 : vassalage.tributeRate(),
+                        projectedGross, projectedTribute
                 ));
             }
         }
         relations.sort(Comparator.comparing(RelationEntry::factionName, String.CASE_INSENSITIVE_ORDER));
 
-        SettlementData settlementsData = SettlementData.get(player.serverLevel());
+        SettlementData settlementsData = settlementStore;
         List<SettlementTarget> settlements = settlementsData.getSettlements().stream()
                 .filter(value -> !campaignSystems.settlementProtected(value.getId())
                         && !campaignSystems.factionProtected(value.getFactionTeam()))
@@ -183,14 +192,20 @@ public record DiplomacySnapshot(
     private interface Decoder<T> { T decode(FriendlyByteBuf buffer); }
 
     public record RelationEntry(String factionId, String factionName, CompoundTag banner, int relationship,
-                                String state, int faithModifier, int reliability) {
+                                String state, int faithModifier, int reliability,
+                                int napMinimum, int defensiveMinimum, int militaryMinimum, int vassalMinimum,
+                                String overlordId, String vassalId, int tributeRate, int projectedGrossTax, int projectedTribute) {
         private static void encode(RelationEntry value, FriendlyByteBuf buffer) {
             buffer.writeUtf(value.factionId, 64); buffer.writeUtf(value.factionName, 64); buffer.writeNbt(value.banner);
             buffer.writeInt(value.relationship); buffer.writeUtf(value.state, 32); buffer.writeInt(value.faithModifier); buffer.writeInt(value.reliability);
+            buffer.writeInt(value.napMinimum); buffer.writeInt(value.defensiveMinimum); buffer.writeInt(value.militaryMinimum); buffer.writeInt(value.vassalMinimum);
+            buffer.writeUtf(value.overlordId, 64); buffer.writeUtf(value.vassalId, 64); buffer.writeVarInt(value.tributeRate);
+            buffer.writeVarInt(value.projectedGrossTax); buffer.writeVarInt(value.projectedTribute);
         }
         private static RelationEntry decode(FriendlyByteBuf buffer) {
             return new RelationEntry(buffer.readUtf(64), buffer.readUtf(64), safe(buffer.readNbt()), buffer.readInt(),
-                    buffer.readUtf(32), buffer.readInt(), buffer.readInt());
+                    buffer.readUtf(32), buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readInt(),
+                    buffer.readUtf(64), buffer.readUtf(64), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt());
         }
     }
 

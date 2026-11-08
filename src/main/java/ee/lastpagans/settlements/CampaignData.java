@@ -35,12 +35,13 @@ public final class CampaignData extends SavedData {
     private final Map<FactionPair, DiplomacyRecord> diplomacy = new HashMap<>();
     private final Collection<DiplomacyRecord> diplomacyView = Collections.unmodifiableCollection(diplomacy.values());
     private final Map<UUID, DiplomacyProposal> proposals = new LinkedHashMap<>();
+    /** Keyed by vassal faction id; a faction can have only one direct overlord. */
+    private final Map<String, VassalageRecord> vassalages = new LinkedHashMap<>();
     private final Map<UUID, WarRecord> wars = new LinkedHashMap<>();
     private final Collection<WarRecord> warsView = Collections.unmodifiableCollection(wars.values());
     private final Map<String, Integer> factionReliability = new HashMap<>();
 
     private final Map<UUID, MarriageRecord> marriages = new HashMap<>();
-    private final Map<UUID, UUID> pendingPlayerMarriageProposals = new HashMap<>();
 
     private final Map<String, FactionProfile> factionProfiles = new HashMap<>();
     private final List<WorldNewsEntry> worldNews = new ArrayList<>();
@@ -84,6 +85,12 @@ public final class CampaignData extends SavedData {
             DiplomacyProposal proposal = DiplomacyProposal.fromNBT((CompoundTag) raw);
             data.proposals.put(proposal.id, proposal);
         }
+        for (Tag raw : tag.getList("Vassalages", Tag.TAG_COMPOUND)) {
+            VassalageRecord record = VassalageRecord.fromNBT((CompoundTag) raw);
+            if (!record.vassal.isBlank() && !record.overlord.isBlank() && !record.vassal.equals(record.overlord)) {
+                data.vassalages.put(record.vassal, record);
+            }
+        }
         for (Tag raw : tag.getList("Wars", Tag.TAG_COMPOUND)) {
             WarRecord war = WarRecord.fromNBT((CompoundTag) raw);
             data.wars.put(war.id, war);
@@ -97,12 +104,6 @@ public final class CampaignData extends SavedData {
             MarriageRecord marriage = MarriageRecord.fromNBT((CompoundTag) raw);
             if (marriage.playerId != null && marriage.spousePlayerId != null)
                 data.marriages.put(marriage.playerId, marriage);
-        }
-        for (Tag raw : tag.getList("MarriageProposals", Tag.TAG_COMPOUND)) {
-            CompoundTag entry = (CompoundTag) raw;
-            if (entry.hasUUID("Target") && entry.hasUUID("Proposer")) {
-                data.pendingPlayerMarriageProposals.put(entry.getUUID("Target"), entry.getUUID("Proposer"));
-            }
         }
         for (Tag raw : tag.getList("FactionProfiles", Tag.TAG_COMPOUND)) {
             FactionProfile profile = FactionProfile.fromNBT((CompoundTag) raw);
@@ -144,6 +145,10 @@ public final class CampaignData extends SavedData {
         proposals.values().forEach(proposal -> proposalList.add(proposal.toNBT()));
         tag.put("Proposals", proposalList);
 
+        ListTag vassalageList = new ListTag();
+        vassalages.values().forEach(record -> vassalageList.add(record.toNBT()));
+        tag.put("Vassalages", vassalageList);
+
         ListTag warList = new ListTag();
         wars.values().forEach(war -> warList.add(war.toNBT()));
         tag.put("Wars", warList);
@@ -160,15 +165,6 @@ public final class CampaignData extends SavedData {
         ListTag marriageList = new ListTag();
         marriages.values().forEach(marriage -> marriageList.add(marriage.toNBT()));
         tag.put("Marriages", marriageList);
-
-        ListTag marriageProposals = new ListTag();
-        pendingPlayerMarriageProposals.forEach((target, proposer) -> {
-            CompoundTag entry = new CompoundTag();
-            entry.putUUID("Target", target);
-            entry.putUUID("Proposer", proposer);
-            marriageProposals.add(entry);
-        });
-        tag.put("MarriageProposals", marriageProposals);
 
         ListTag profiles = new ListTag();
         factionProfiles.values().forEach(profile -> profiles.add(profile.toNBT()));
@@ -314,6 +310,68 @@ public final class CampaignData extends SavedData {
         setDirty();
     }
 
+    public VassalageRecord vassalageFor(String vassalFaction) {
+        return vassalFaction == null ? null : vassalages.get(vassalFaction);
+    }
+
+    public List<VassalageRecord> vassalsOf(String overlordFaction) {
+        if (overlordFaction == null || overlordFaction.isBlank()) return List.of();
+        return vassalages.values().stream().filter(record -> overlordFaction.equals(record.overlord)).toList();
+    }
+
+    public VassalageRecord vassalageBetween(String first, String second) {
+        if (first == null || second == null || first.isBlank() || second.isBlank()) return null;
+        VassalageRecord direct = vassalageFor(first);
+        if (direct != null && second.equals(direct.overlord)) return direct;
+        direct = vassalageFor(second);
+        return direct != null && first.equals(direct.overlord) ? direct : null;
+    }
+
+    public boolean wouldCreateVassalCycle(String overlord, String vassal) {
+        if (overlord == null || vassal == null || overlord.isBlank() || vassal.isBlank() || overlord.equals(vassal)) return true;
+        String cursor = overlord;
+        for (int guard = 0; guard <= vassalages.size(); guard++) {
+            if (vassal.equals(cursor)) return true;
+            VassalageRecord parent = vassalages.get(cursor);
+            if (parent == null) return false;
+            cursor = parent.overlord;
+        }
+        return true;
+    }
+
+    public VassalageRecord establishVassalage(String overlord, String vassal, long day) {
+        if (vassalages.containsKey(vassal) || wouldCreateVassalCycle(overlord, vassal)) return null;
+        VassalageRecord record = new VassalageRecord(overlord, vassal, 10, day);
+        vassalages.put(vassal, record);
+        setDirty();
+        return record;
+    }
+
+    public boolean setTributeRate(String overlord, String vassal, int rate) {
+        VassalageRecord record = vassalages.get(vassal);
+        if (record == null || !record.overlord.equals(overlord) || !VassalageRecord.validRate(rate) || record.tributeRate == rate) return false;
+        record.tributeRate = rate;
+        setDirty();
+        return true;
+    }
+
+    public boolean releaseVassal(String overlord, String vassal) {
+        VassalageRecord record = vassalages.get(vassal);
+        if (record == null || !record.overlord.equals(overlord)) return false;
+        vassalages.remove(vassal);
+        setDirty();
+        return true;
+    }
+
+    public int removeInvalidVassalages(java.util.function.Predicate<String> factionExists) {
+        if (factionExists == null) return 0;
+        int before = vassalages.size();
+        vassalages.values().removeIf(record -> !factionExists.test(record.overlord) || !factionExists.test(record.vassal));
+        int removed = before - vassalages.size();
+        if (removed > 0) setDirty();
+        return removed;
+    }
+
     public WarRecord createWar(
             WarType type,
             String attackerFaction,
@@ -421,31 +479,13 @@ public final class CampaignData extends SavedData {
         return marriages.get(playerId);
     }
 
-    public boolean proposePlayerMarriage(UUID proposer, UUID target) {
-        if (proposer == null || target == null || proposer.equals(target)) return false;
-        if (marriages.containsKey(proposer) || marriages.containsKey(target)) return false;
-        pendingPlayerMarriageProposals.put(target, proposer);
+    public boolean officiateMarriage(UUID firstPlayer, UUID secondPlayer, long day) {
+        if (firstPlayer == null || secondPlayer == null || firstPlayer.equals(secondPlayer)
+                || marriages.containsKey(firstPlayer) || marriages.containsKey(secondPlayer)) return false;
+        marriages.put(firstPlayer, MarriageRecord.forPlayer(firstPlayer, secondPlayer, day));
+        marriages.put(secondPlayer, MarriageRecord.forPlayer(secondPlayer, firstPlayer, day));
         setDirty();
         return true;
-    }
-
-    public UUID pendingMarriageProposer(UUID target) {
-        return pendingPlayerMarriageProposals.get(target);
-    }
-
-    public boolean acceptPlayerMarriage(UUID target, long day) {
-        UUID proposer = pendingPlayerMarriageProposals.remove(target);
-        if (proposer == null || marriages.containsKey(target) || marriages.containsKey(proposer)) return false;
-        MarriageRecord first = MarriageRecord.forPlayer(proposer, target, day);
-        MarriageRecord second = MarriageRecord.forPlayer(target, proposer, day);
-        marriages.put(proposer, first);
-        marriages.put(target, second);
-        setDirty();
-        return true;
-    }
-
-    public void rejectPlayerMarriage(UUID target) {
-        if (pendingPlayerMarriageProposals.remove(target) != null) setDirty();
     }
 
     public void divorce(UUID playerId) {
@@ -458,9 +498,6 @@ public final class CampaignData extends SavedData {
 
     public void clearFamilyData(UUID playerId) {
         divorce(playerId);
-        pendingPlayerMarriageProposals.remove(playerId);
-        pendingPlayerMarriageProposals.entrySet().removeIf(entry -> playerId.equals(entry.getValue()));
-        setDirty();
     }
 
     public void resetPlayerData(UUID playerId) {
@@ -639,6 +676,7 @@ public final class CampaignData extends SavedData {
         NON_AGGRESSION,
         DEFENSIVE_ALLIANCE,
         MILITARY_ALLIANCE,
+        VASSALAGE,
         PEACE,
         CALL_TO_WAR
     }
@@ -924,6 +962,40 @@ public final class CampaignData extends SavedData {
             lastChangedDay = day;
             return true;
         }
+    }
+
+    public static final class VassalageRecord {
+        private final String overlord;
+        private final String vassal;
+        private int tributeRate;
+        private final long establishedDay;
+
+        private VassalageRecord(String overlord, String vassal, int tributeRate, long establishedDay) {
+            this.overlord = overlord;
+            this.vassal = vassal;
+            this.tributeRate = validRate(tributeRate) ? tributeRate : 10;
+            this.establishedDay = establishedDay;
+        }
+
+        private static VassalageRecord fromNBT(CompoundTag tag) {
+            return new VassalageRecord(tag.getString("Overlord"), tag.getString("Vassal"),
+                    tag.getInt("TributeRate"), tag.getLong("EstablishedDay"));
+        }
+
+        private CompoundTag toNBT() {
+            CompoundTag tag = new CompoundTag();
+            tag.putString("Overlord", overlord);
+            tag.putString("Vassal", vassal);
+            tag.putInt("TributeRate", tributeRate);
+            tag.putLong("EstablishedDay", establishedDay);
+            return tag;
+        }
+
+        public static boolean validRate(int rate) { return rate == 5 || rate == 10 || rate == 25 || rate == 50; }
+        public String overlord() { return overlord; }
+        public String vassal() { return vassal; }
+        public int tributeRate() { return tributeRate; }
+        public long establishedDay() { return establishedDay; }
     }
 
     public static final class DiplomacyProposal {

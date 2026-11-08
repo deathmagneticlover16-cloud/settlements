@@ -1,7 +1,7 @@
 package ee.lastpagans.settlements.client;
 
 import ee.lastpagans.settlements.CharacterSnapshot;
-import ee.lastpagans.settlements.network.FamilyActionPacket;
+import ee.lastpagans.settlements.network.DevotionDonationPacket;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SetMainSeatPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
@@ -26,6 +26,7 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
     private final boolean returnToMain;
     private int left;
     private int top;
+    private int pendingSeatIndex;
 
     public CharacterSheetScreen(CharacterSnapshot snapshot, boolean returnToMain) {
         super(Component.literal("Character Sheet"));
@@ -39,8 +40,10 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         left = campaignLeft(W);
         top = campaignTop(H);
 
-        addRenderableWidget(Button.builder(Component.literal("Donate to Faith"), button ->
-                SettlementNetwork.CHANNEL.sendToServer(new FamilyActionPacket("DONATE_FAITH", "", null)))
+        addRenderableWidget(Button.builder(Component.literal("Donate to Faith"), button -> minecraft.setScreen(new ConfirmActionScreen(this,
+                Component.literal("Donate to " + snapshot.faith() + "?"),
+                Component.literal("Consumes one held Settlements currency item and grants the server-configured Devotion reward."),
+                () -> SettlementNetwork.CHANNEL.sendToServer(new DevotionDonationPacket()))))
                 .bounds(left + 18, top + 376, 135, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Identity"), button ->
                 minecraft.setScreen(new CharacterIdentityEditScreen(snapshot, returnToMain)))
@@ -50,14 +53,16 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
             int currentSeat = 0;
             for (int i = 0; i < snapshot.holdings().size(); i++)
                 if (snapshot.holdings().get(i).settlementName().equals(snapshot.primarySeat())) currentSeat = i;
-            addRenderableWidget(new DropdownWidget(left + 270, top + 376, 110, 20, seats, currentSeat, selected -> {
-                int index = seats.indexOf(selected);
-                if (index >= 0) SettlementNetwork.CHANNEL.sendToServer(
-                        new SetMainSeatPacket(snapshot.holdings().get(index).settlementId(), returnToMain));
-            }));
+            pendingSeatIndex = currentSeat;
+            addRenderableWidget(new DropdownWidget(left + 270, top + 352, 188, 20, seats, currentSeat,
+                    selected -> pendingSeatIndex = Math.max(0, seats.indexOf(selected))));
+            addRenderableWidget(Button.builder(Component.literal("Apply Main Seat"), ignored -> {
+                if (pendingSeatIndex >= 0 && pendingSeatIndex < snapshot.holdings().size())
+                    SettlementNetwork.CHANNEL.sendToServer(new SetMainSeatPacket(snapshot.holdings().get(pendingSeatIndex).settlementId(), returnToMain));
+            }).bounds(left + 270, top + 376, 110, 20).build());
         }
-        addRenderableWidget(Button.builder(Component.literal("Family"), button ->
-                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.FAMILY)))
+        addRenderableWidget(Button.builder(Component.translatable("gui.settlements.marriage"), button ->
+                SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MARRIAGE)))
                 .bounds(left + 386, top + 376, 72, 20).build());
         String text = returnToMain ? "Return to Main" : "Close";
         addRenderableWidget(Button.builder(Component.literal(text), button -> {

@@ -9,6 +9,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -96,18 +97,29 @@ public final class SettlementData extends SavedData {
         return tag;
     }
 
-    public SettlementRecord createSettlement(String rawId, String rawName, UUID founder) {
-        String id = normalizeId(rawId);
-        if (id.isBlank() || settlements.containsKey(id)) {
-            return null;
-        }
-        SettlementRecord settlement = new SettlementRecord(this, id, cleanText(rawName, id, 64));
+    /** Creates a settlement from one player-facing name. Internal ids are allocated atomically here. */
+    public SettlementRecord createSettlement(String rawName, UUID founder) {
+        String name = cleanText(rawName, "", 64);
+        String baseId = normalizeId(name);
+        if (name.isBlank() || baseId.isBlank() || founder == null) return null;
+        String id = baseId;
+        for (int suffix = 2; settlements.containsKey(id); suffix++) id = baseId + "_" + suffix;
+        SettlementRecord settlement = new SettlementRecord(this, id, name);
         settlement.ownerId = founder;
+        settlement.founderId = founder;
+        CharacterRecord founderCharacter = characters.get(founder);
+        settlement.faith = founderCharacter == null || !founderCharacter.isCreated()
+                ? "Other" : founderCharacter.getFaith();
         settlement.members.put(founder, SettlementRole.OWNER);
-        settlement.addChronicle("Settlement founded.");
+        settlement.addChronicle("Settlement founded in the " + settlement.faith + " faith.");
         settlements.put(id, settlement);
         setDirty();
         return settlement;
+    }
+
+    /** Canonical command/API entry point; the id is never accepted from a player. */
+    public SettlementRecord createSettlement(String ignoredLegacyId, String rawName, UUID founder) {
+        return createSettlement(rawName, founder);
     }
 
     public SettlementRecord getSettlement(String rawId) {
@@ -300,7 +312,10 @@ public final class SettlementData extends SavedData {
         if (raw == null) {
             return "";
         }
-        String normalized = raw.trim().toLowerCase(Locale.ROOT)
+        String ascii = Normalizer.normalize(raw, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "")
+                .replace('õ', 'o').replace('Õ', 'O');
+        String normalized = ascii.trim().toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9_-]", "_")
                 .replaceAll("_+", "_");
         while (normalized.startsWith("_")) normalized = normalized.substring(1);
@@ -353,6 +368,12 @@ public final class SettlementData extends SavedData {
         private final String id;
         private String name;
         private UUID ownerId;
+        private UUID founderId;
+        private String faith = "Other";
+        private String conversionFromFaith = "";
+        private String conversionTargetFaith = "";
+        private int conversionProgress;
+        private int conversionResistance;
         private final Map<UUID, SettlementRole> members = new HashMap<>();
         private SettlementRank rank = SettlementRank.VILLAGE;
         /** Political capital designation is intentionally separate from physical settlement tier. */
@@ -416,6 +437,12 @@ public final class SettlementData extends SavedData {
 
         private void load(CompoundTag tag) {
             if (tag.hasUUID("Owner")) ownerId = tag.getUUID("Owner");
+            founderId = tag.hasUUID("Founder") ? tag.getUUID("Founder") : ownerId;
+            faith = validFaith(cleanText(tag.getString("Faith"), "Other", 32));
+            conversionFromFaith = validOptionalFaith(tag.getString("ConversionFromFaith"));
+            conversionTargetFaith = validOptionalFaith(tag.getString("ConversionTargetFaith"));
+            conversionProgress = clamp(tag.getInt("ConversionProgress"), 0, 100);
+            conversionResistance = clamp(tag.getInt("ConversionResistance"), 0, 100);
             try { rank = SettlementRank.valueOf(tag.getString("Rank")); } catch (IllegalArgumentException ignored) { rank = SettlementRank.VILLAGE; }
             capital = tag.getBoolean("Capital");
             stability = clamp(tag.getInt("Stability"), 0, 100);
@@ -499,6 +526,14 @@ public final class SettlementData extends SavedData {
             tag.putString("Id", id);
             tag.putString("Name", name);
             if (ownerId != null) tag.putUUID("Owner", ownerId);
+            if (founderId != null) tag.putUUID("Founder", founderId);
+            tag.putString("Faith", faith);
+            if (!conversionTargetFaith.isBlank()) {
+                tag.putString("ConversionFromFaith", conversionFromFaith);
+                tag.putString("ConversionTargetFaith", conversionTargetFaith);
+                tag.putInt("ConversionProgress", conversionProgress);
+                tag.putInt("ConversionResistance", conversionResistance);
+            }
             tag.putString("Rank", rank.name());
             tag.putBoolean("Capital", capital);
             tag.putInt("Stability", stability);
@@ -577,6 +612,13 @@ public final class SettlementData extends SavedData {
         public String getId() { return id; }
         public String getName() { return name; }
         public UUID getOwnerId() { return ownerId; }
+        public UUID getFounderId() { return founderId; }
+        public String getFaith() { return faith; }
+        public String getConversionFromFaith() { return conversionFromFaith; }
+        public String getConversionTargetFaith() { return conversionTargetFaith; }
+        public int getConversionProgress() { return conversionProgress; }
+        public int getConversionResistance() { return conversionResistance; }
+        public boolean isConvertingFaith() { return !conversionTargetFaith.isBlank(); }
         public SettlementRank getRank() { return rank; }
         public boolean isCapital() { return capital; }
         public int getStability() { return stability; }
@@ -673,9 +715,14 @@ public final class SettlementData extends SavedData {
         }
 
         public int getSupportedManpower() {
-            double stabilityFactor = stability / 100.0D;
-            return Math.max(0, (int) Math.floor(getCivilianPopulation() * SettlementManager.MANPOWER_PER_POPULATION * stabilityFactor));
+            return Math.max(0, (int) Math.floor(getCivilianPopulation() * SettlementManager.MANPOWER_PER_POPULATION * levyEfficiency()));
         }
+
+        /** Stability has real bounded effects: 60% at zero, 80% at fifty, 100% at full order. */
+        public double stabilityEfficiency() { return 0.60D + 0.40D * (stability / 100.0D); }
+        public double taxEfficiency() { return stabilityEfficiency(); }
+        public double resourceEfficiency() { return 0.60D + 0.40D * (stability / 100.0D); }
+        public double levyEfficiency() { return 0.55D + 0.45D * (stability / 100.0D); }
 
         public int getVacantManpower() {
             return Math.max(0, maximumManpower - availableManpower - getUsedManpower() - getLevyReservedManpower());
@@ -763,6 +810,50 @@ public final class SettlementData extends SavedData {
         public void setNotice(String value) { notice = cleanText(value, "", 160); dirty(); }
         public void setFactionTeam(String value) { factionTeam = value == null ? "" : value; dirty(); }
         public void setBackingFactionTeam(String value) { backingFactionTeam = value == null ? "" : value; dirty(); }
+
+        public void setFaith(String value) {
+            String next = validFaith(cleanText(value, "Other", 32));
+            if (next.equals(faith)) return;
+            faith = next;
+            conversionFromFaith = "";
+            conversionTargetFaith = "";
+            conversionProgress = 0;
+            conversionResistance = 0;
+            addChronicle("The settlement faith became " + faith + ".");
+            dirty();
+        }
+
+        public void beginFaithConversion(String targetFaith, int resistance) {
+            String target = validFaith(cleanText(targetFaith, "Other", 32));
+            if (target.equals(faith)) {
+                conversionFromFaith = ""; conversionTargetFaith = ""; conversionProgress = 0; conversionResistance = 0; dirty();
+                return;
+            }
+            boolean changedTarget = !target.equals(conversionTargetFaith);
+            if (changedTarget) {
+                conversionFromFaith = faith;
+                conversionTargetFaith = target;
+                conversionProgress = 0;
+            }
+            conversionResistance = clamp(resistance, 0, 100);
+            if (changedTarget) addChronicle("A gradual conversion from " + faith + " to " + target + " began.");
+            dirty();
+        }
+
+        public void advanceFaithConversion() {
+            if (conversionTargetFaith.isBlank()) return;
+            int step = Math.max(1, 5 - conversionResistance / 25);
+            conversionProgress = clamp(conversionProgress + step, 0, 100);
+            if (conversionProgress >= 100) {
+                faith = conversionTargetFaith;
+                conversionFromFaith = "";
+                conversionTargetFaith = "";
+                conversionProgress = 0;
+                conversionResistance = 0;
+                addChronicle("The gradual religious conversion concluded. The local faith is now " + faith + ".");
+            }
+            dirty();
+        }
 
         public void setTownSquare(String dimension, BlockPos position) {
             townSquareDimension = dimension == null ? "" : dimension;
@@ -1068,6 +1159,7 @@ public final class SettlementData extends SavedData {
             }
 
             if (getVillagerCount() > housingCapacity) changeStability(-3);
+            advanceFaithConversion();
 
             CharacterRecord ruler = ownerId == null || owner == null ? null : owner.getCharacter(ownerId);
             if (ruler != null && ruler.isCreated()) {
@@ -1154,6 +1246,15 @@ public final class SettlementData extends SavedData {
             double attraction = clamp01(immigrationAttractionPercent() / 100.0D);
             double minutes = slowest - (slowest - fastest) * attraction;
             return Math.max(20L, Math.round(minutes * 60.0D * 20.0D));
+        }
+
+        private static String validFaith(String value) {
+            if (value == null || value.isBlank()) return "Other";
+            return CampaignDefinitions.isValidReligion(value) ? value : "Other";
+        }
+
+        private static String validOptionalFaith(String value) {
+            return value == null || value.isBlank() ? "" : validFaith(value);
         }
 
         private static double clamp01(double value) { return Math.max(0.0D, Math.min(1.0D, value)); }

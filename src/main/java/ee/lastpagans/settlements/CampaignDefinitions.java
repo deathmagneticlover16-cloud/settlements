@@ -33,8 +33,21 @@ public final class CampaignDefinitions {
     );
 
     private static final Map<String, TraitDefinition> TRAITS = new LinkedHashMap<>();
+    private static final Map<String, Integer> RELIGIOUS_DISTANCE = new LinkedHashMap<>();
 
     static {
+        distance("Catholic Christianity", "Orthodox Christianity", 15);
+        distance("Catholic Christianity", "Islam", 65);
+        distance("Orthodox Christianity", "Islam", 60);
+        distance("Catholic Christianity", "Judaism", 55);
+        distance("Orthodox Christianity", "Judaism", 50);
+        distance("Islam", "Judaism", 35);
+        List<String> pagans = List.of("Baltic Paganism", "Finnic Paganism", "Norse Paganism", "Slavic Paganism", "Roman Paganism");
+        for (int i = 0; i < pagans.size(); i++) for (int j = i + 1; j < pagans.size(); j++) distance(pagans.get(i), pagans.get(j), 28);
+        for (String christian : List.of("Catholic Christianity", "Orthodox Christianity"))
+            for (String pagan : pagans) distance(christian, pagan, 90);
+        for (String pagan : pagans) { distance("Islam", pagan, 85); distance("Judaism", pagan, 78); }
+        for (String faith : RELIGIONS) if (!faith.equals("Other")) distance(faith, "Other", 55);
         register(new TraitDefinition("responsible", "Responsible", "minecraft:writable_book", TraitTone.POSITIVE,
                 "A careful administrator who keeps the household and settlement in order.",
                 List.of(new TraitEffect("Settlement stability", "+1 per day", 1, EffectKind.STABILITY))));
@@ -174,15 +187,28 @@ public final class CampaignDefinitions {
     }
 
     public static int religionRelationModifier(String first, String second) {
-        if (first == null || second == null || first.isBlank() || second.isBlank()) return 0;
-        if (first.equalsIgnoreCase(second)) return 10;
-        boolean firstChristian = isChristian(first);
-        boolean secondChristian = isChristian(second);
-        if (firstChristian && secondChristian) return 3;
-        boolean firstPagan = isPagan(first);
-        boolean secondPagan = isPagan(second);
-        if (firstPagan && secondPagan) return 2;
-        return -8;
+        return 10 - Math.round(religiousDistance(first, second) / 5.0F);
+    }
+
+    /** Symmetric gameplay abstraction: 0 means identical tradition, 100 means maximal distance. */
+    public static int religiousDistance(String first, String second) {
+        String a = canonicalReligion(first), b = canonicalReligion(second);
+        if (a.equalsIgnoreCase(b)) return 0;
+        return RELIGIOUS_DISTANCE.getOrDefault(pairKey(a, b), 70);
+    }
+
+    private static void distance(String first, String second, int value) {
+        RELIGIOUS_DISTANCE.put(pairKey(first, second), Math.max(0, Math.min(100, value)));
+    }
+
+    private static String pairKey(String first, String second) {
+        String a = canonicalReligion(first), b = canonicalReligion(second);
+        return a.compareToIgnoreCase(b) <= 0 ? a + "|" + b : b + "|" + a;
+    }
+
+    private static String canonicalReligion(String value) {
+        if (value != null) for (String option : RELIGIONS) if (option.equalsIgnoreCase(value.trim())) return option;
+        return "Other";
     }
 
     public static boolean isValidReligion(String value) {

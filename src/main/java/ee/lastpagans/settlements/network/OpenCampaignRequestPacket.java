@@ -11,7 +11,7 @@ import net.minecraftforge.network.NetworkEvent;
 import java.util.function.Supplier;
 
 public record OpenCampaignRequestPacket(ScreenTarget target) {
-    public enum ScreenTarget { MAIN, CHARACTER, SETTLEMENT, FACTION, MILITARY, DIPLOMACY, FAMILY, WORLD_NEWS, RESEARCH, MERCENARIES }
+    public enum ScreenTarget { MAIN, CHARACTER, SETTLEMENT, FACTION, MILITARY, DIPLOMACY, MARRIAGE, WORLD_NEWS, RESEARCH, MERCENARIES }
 
     public static void encode(OpenCampaignRequestPacket packet, FriendlyByteBuf buffer) { buffer.writeEnum(packet.target); }
     public static OpenCampaignRequestPacket decode(FriendlyByteBuf buffer) { return new OpenCampaignRequestPacket(buffer.readEnum(ScreenTarget.class)); }
@@ -27,7 +27,7 @@ public record OpenCampaignRequestPacket(ScreenTarget target) {
                 case FACTION -> CampaignManager.openFaction(player, "");
                 case MILITARY -> CampaignManager.openMilitary(player, "");
                 case DIPLOMACY -> CampaignManager.openDiplomacy(player, "");
-                case FAMILY -> CampaignManager.openFamily(player, "");
+                case MARRIAGE -> CampaignManager.openFamily(player, "");
                 case WORLD_NEWS -> CampaignManager.openWorldNews(player);
                 case RESEARCH -> ResearchManager.open(player, "");
                 case MERCENARIES -> MercenaryRosterManager.open(player, "");

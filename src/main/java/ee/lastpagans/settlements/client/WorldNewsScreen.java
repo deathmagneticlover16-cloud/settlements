@@ -51,6 +51,8 @@ public final class WorldNewsScreen extends ScaledCampaignScreen {
     @Override
     public boolean mouseScrolled(double x, double y, double delta) {
         if (filterDrop != null && filterDrop.isExpanded()) return super.mouseScrolled(x, y, delta);
+        double ux = campaignMouseX(x), uy = campaignMouseY(y);
+        if (ux < left + 12 || ux > left + W - 12 || uy < top + 76 || uy > top + 274) return false;
         List<WorldNewsSnapshot.Entry> values = filtered();
         scroll = Math.max(0, Math.min(Math.max(0, values.size() - 5), scroll + (delta < 0 ? 1 : -1)));
         return true;
@@ -66,9 +68,8 @@ public final class WorldNewsScreen extends ScaledCampaignScreen {
         drawCampaignPanel(graphics, left + 12, top + 76, left + W - 12, top + 274);
         graphics.drawCenteredString(font, "WORLD NEWS — DAY " + snapshot.currentDay(), left + W / 2, top + 14, CAMPAIGN_TITLE);
         graphics.drawString(font, "Filter", left + 18, top + 40, 0xFFCCCCCC, false);
-        graphics.drawString(font, snapshot.entries().size() + " visible records", left + 205, top + 55, 0xFF888888, false);
-
         List<WorldNewsSnapshot.Entry> values = filtered();
+        graphics.drawString(font, values.size() + " shown · " + snapshot.entries().size() + " total", left + 205, top + 55, 0xFF888888, false);
         if (values.isEmpty()) {
             graphics.drawCenteredString(font, "No world news matches this filter.", left + W / 2, top + 152, 0xFFAAAAAA);
         } else {
@@ -90,11 +91,11 @@ public final class WorldNewsScreen extends ScaledCampaignScreen {
         };
         graphics.fill(x, y, x + 480, y + 33, 0xDD181818);
         graphics.fill(x, y, x + 3, y + 33, border);
-        graphics.drawString(font, icon(entry.category()) + " " + entry.headline(), x + 9, y + 4, 0xFFFFFFFF, false);
+        graphics.drawString(font, ellipsize(icon(entry.category()) + " " + entry.headline(), 292), x + 9, y + 4, 0xFFFFFFFF, false);
         graphics.drawString(font, ellipsize(entry.body(), 462), x + 9, y + 16, 0xFFBBBBBB, false);
         String location = !entry.settlementName().isBlank() ? entry.settlementName()
                 : !entry.factionName().isBlank() ? entry.factionName() : "World";
-        graphics.drawString(font, "Day " + entry.day() + " · " + location + " · " + pretty(entry.visibility()),
+        graphics.drawString(font, ellipsize("Day " + entry.day() + " · " + location + " · " + pretty(entry.visibility()), 166),
                 x + 310, y + 4, 0xFF8E8577, false);
     }
 

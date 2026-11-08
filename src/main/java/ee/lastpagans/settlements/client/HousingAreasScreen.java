@@ -59,8 +59,11 @@ public final class HousingAreasScreen extends ScaledCampaignScreen {
     private void deleteSelected() {
         HousingAreasSnapshot.Entry entry = selectedEntry();
         if (entry == null) return;
-        SettlementNetwork.CHANNEL.sendToServer(new HousingAreaActionPacket(snapshot.settlementId(),
-                HousingAreaActionPacket.Action.DELETE, entry.index()));
+        minecraft.setScreen(new ConfirmActionScreen(this, Component.literal("Delete housing area?"),
+                Component.literal("Area " + (entry.index() + 1) + " (" + entry.width() + "×" + entry.height() + "×" + entry.depth()
+                        + ") will stop contributing beds to " + snapshot.settlementName() + "."),
+                () -> SettlementNetwork.CHANNEL.sendToServer(new HousingAreaActionPacket(snapshot.settlementId(),
+                        HousingAreaActionPacket.Action.DELETE, entry.index()))));
     }
 
     private HousingAreasSnapshot.Entry selectedEntry() {
@@ -114,6 +117,8 @@ public final class HousingAreasScreen extends ScaledCampaignScreen {
     }
 
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+        double ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
+        if (ux < left + 20 || ux > left + 480 || uy < top + 58 || uy > top + 274) return false;
         if (delta < 0) scroll = Math.min(maxScroll(), scroll + 1); else if (delta > 0) scroll = Math.max(0, scroll - 1);
         return true;
     }

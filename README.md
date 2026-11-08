@@ -11,10 +11,10 @@ Settlements is a campaign-scale Minecraft Forge mod for settlement management, c
 - Wildfire Gender Mod 3.1+
 - History Stages 5.4.0+ (optional research integration)
 
-Every political state uses one State Treasury. Development depends on population, Stability, housing, and capture objectives. Settlements attract immigrants automatically when housing, Stability, Food, and their manager-controlled immigration setting allow it. Marriage is player-to-player, war aid is an immediate transfer, and peace payments are immediate rather than recurring schedules.
+Every political state uses one State Treasury. Development depends on population, Stability, housing, and capture objectives. The Town Square is the settlement's single Main objective. Settlements retain their founding faith through conquest and convert gradually where the rules permit it. Marriage is read-only for players and is officiated or dissolved by administrators after roleplay ceremonies.
 
-The interface is organized into Campaign, Character, Settlement, Military, Faction, Diplomacy, Family, Research, and World News workspaces, plus a shared in-world area editor.
+The campaign shell links Realm Overview, Character (including Marriage), Settlements, Military, Realm/Faction, Diplomacy, Research, and Chronicle. Diplomacy uses one bilateral relationship score. Player factions can form real vassalage contracts with 5/10/25/50% tribute taken once from actual post-stability tax receipts.
 
 Use `gradlew.bat build` on Windows or `./gradlew build` elsewhere when a build is needed. The output is `build/libs/settlements-4.0.0.jar`.
 
-Version 4.0.0 uses network protocol 44 and targets fresh worlds. Removed-system data is discarded rather than migrated.
+Version 4.0.0 uses network protocol 45 and targets fresh worlds. Removed-system data is discarded rather than migrated.

@@ -26,7 +26,6 @@ public record CampaignSnapshot(
         String selectedSettlementId,
         String selectedSettlementName,
         int pendingDiplomacy,
-        int pendingMarriage,
         int activeWars
 ) {
     public static CampaignSnapshot from(ServerPlayer player) {
@@ -86,7 +85,6 @@ public record CampaignSnapshot(
                 selected == null ? "" : selected.getId(),
                 selected == null ? "None selected" : selected.getName(),
                 factionId.isBlank() ? 0 : campaign.proposalsFor(factionId).size(),
-                campaign.pendingMarriageProposer(player.getUUID()) == null ? 0 : 1,
                 factionId.isBlank() ? 0 : campaign.activeWarsFor(factionId).size()
         );
     }
@@ -108,7 +106,6 @@ public record CampaignSnapshot(
         buffer.writeUtf(selectedSettlementId, 64);
         buffer.writeUtf(selectedSettlementName, 64);
         buffer.writeVarInt(pendingDiplomacy);
-        buffer.writeVarInt(pendingMarriage);
         buffer.writeVarInt(activeWars);
     }
 
@@ -129,7 +126,6 @@ public record CampaignSnapshot(
                 buffer.readVarInt(),
                 buffer.readUtf(64),
                 buffer.readUtf(64),
-                buffer.readVarInt(),
                 buffer.readVarInt(),
                 buffer.readVarInt()
         );

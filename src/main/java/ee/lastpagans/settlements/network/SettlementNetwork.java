@@ -7,7 +7,7 @@ import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
 public final class SettlementNetwork {
-    private static final String PROTOCOL = "44";
+    private static final String PROTOCOL = "45";
 
     public static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Settlements.MOD_ID, "main"),
@@ -40,7 +40,7 @@ public final class SettlementNetwork {
         CHANNEL.messageBuilder(DiplomacySnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(DiplomacySnapshotPacket::encode).decoder(DiplomacySnapshotPacket::decode).consumerNetworkThread(DiplomacySnapshotPacket::handle).add();
         CHANNEL.messageBuilder(DiplomacyActionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(DiplomacyActionPacket::encode).decoder(DiplomacyActionPacket::decode).consumerNetworkThread(DiplomacyActionPacket::handle).add();
         CHANNEL.messageBuilder(FamilySnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(FamilySnapshotPacket::encode).decoder(FamilySnapshotPacket::decode).consumerNetworkThread(FamilySnapshotPacket::handle).add();
-        CHANNEL.messageBuilder(FamilyActionPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(FamilyActionPacket::encode).decoder(FamilyActionPacket::decode).consumerNetworkThread(FamilyActionPacket::handle).add();
+        CHANNEL.messageBuilder(DevotionDonationPacket.class, id++, NetworkDirection.PLAY_TO_SERVER).encoder(DevotionDonationPacket::encode).decoder(DevotionDonationPacket::decode).consumerNetworkThread(DevotionDonationPacket::handle).add();
         CHANNEL.messageBuilder(WorldNewsSnapshotPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(WorldNewsSnapshotPacket::encode).decoder(WorldNewsSnapshotPacket::decode).consumerNetworkThread(WorldNewsSnapshotPacket::handle).add();
         CHANNEL.messageBuilder(MapMarkersPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(MapMarkersPacket::encode).decoder(MapMarkersPacket::decode).consumerNetworkThread(MapMarkersPacket::handle).add();
         CHANNEL.messageBuilder(CampaignToastPacket.class, id++, NetworkDirection.PLAY_TO_CLIENT).encoder(CampaignToastPacket::encode).decoder(CampaignToastPacket::decode).consumerNetworkThread(CampaignToastPacket::handle).add();

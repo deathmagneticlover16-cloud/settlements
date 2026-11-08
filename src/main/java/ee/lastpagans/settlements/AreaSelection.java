@@ -11,7 +11,6 @@ public final class AreaSelection {
         MUSTER("Muster Ground", true),
         PRAYER("Prayer Site", false),
         BARRACKS("Barracks", true),
-        CAPTURE_MAIN("Main Capture Zone", true),
         CAPTURE_SECONDARY("Secondary Capture Zone", true);
 
         private final String label;

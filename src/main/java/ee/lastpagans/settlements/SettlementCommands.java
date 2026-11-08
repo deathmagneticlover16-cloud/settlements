@@ -46,13 +46,8 @@ public final class SettlementCommands {
                                 .executes(context -> open(context.getSource(), StringArgumentType.getString(context, "id")))))
                 .then(Commands.literal("list").executes(context -> list(context.getSource())))
                 .then(Commands.literal("create")
-                        .then(Commands.argument("id", StringArgumentType.word())
-                                .then(Commands.argument("name", StringArgumentType.greedyString())
-                                        .executes(context -> create(
-                                                context.getSource(),
-                                                StringArgumentType.getString(context, "id"),
-                                                StringArgumentType.getString(context, "name")
-                                        )))))
+                        .then(Commands.argument("name", StringArgumentType.greedyString())
+                                .executes(context -> create(context.getSource(), StringArgumentType.getString(context, "name")))))
                 .then(Commands.literal("delete").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("id", StringArgumentType.word())
                                 .executes(context -> delete(context.getSource(), StringArgumentType.getString(context, "id")))))
@@ -235,6 +230,15 @@ public final class SettlementCommands {
                                         .then(Commands.literal("add").then(Commands.argument("faction", StringArgumentType.word())
                                                 .then(Commands.argument("value", IntegerArgumentType.integer(-100000000, 100000000))
                                                         .executes(context -> adminFactionTreasury(context.getSource(), StringArgumentType.getString(context, "faction"), IntegerArgumentType.getInteger(context, "value"), true)))))))
+                        .then(Commands.literal("marriage")
+                                .then(Commands.literal("officiate")
+                                        .then(Commands.argument("first", EntityArgument.player())
+                                                .then(Commands.argument("second", EntityArgument.player())
+                                                        .executes(context -> adminOfficiateMarriage(context.getSource(),
+                                                                EntityArgument.getPlayer(context, "first"), EntityArgument.getPlayer(context, "second"))))))
+                                .then(Commands.literal("dissolve")
+                                        .then(Commands.argument("player", EntityArgument.player())
+                                                .executes(context -> adminDissolveMarriage(context.getSource(), EntityArgument.getPlayer(context, "player"))))))
                         .then(Commands.literal("reset")
                                 .then(Commands.literal("character").then(Commands.argument("player", EntityArgument.player())
                                         .executes(context -> warnResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))
@@ -392,9 +396,6 @@ public final class SettlementCommands {
                                         context.getSource(),
                                         StringArgumentType.getString(context, "settlement")
                                 ))))
-                .then(Commands.literal("marry")
-                        .then(Commands.argument("player", EntityArgument.player())
-                                .executes(context -> proposeMarriage(context.getSource(), EntityArgument.getPlayer(context, "player")))))
                 .then(Commands.literal("reset").requires(source -> source.hasPermission(2))
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(context -> warnResetCharacter(context.getSource(), EntityArgument.getPlayer(context, "player")))
@@ -413,7 +414,6 @@ public final class SettlementCommands {
                 .then(Commands.literal("mercenaries").executes(context -> openMercenaries(context.getSource())))
                 .then(Commands.literal("research").executes(context -> openResearch(context.getSource())))
                 .then(Commands.literal("diplomacy").executes(context -> openDiplomacy(context.getSource())))
-                .then(Commands.literal("family").executes(context -> openFamily(context.getSource())))
                 .then(Commands.literal("news").executes(context -> openWorldNews(context.getSource()))));
 
         dispatcher.register(Commands.literal("settlementtestcurrency").requires(source -> source.hasPermission(2))
@@ -447,23 +447,28 @@ public final class SettlementCommands {
         return 1;
     }
 
-    private static int create(CommandSourceStack source, String id, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private static int create(CommandSourceStack source, String name) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
         SettlementData data = SettlementData.get(player.serverLevel());
         if (CampaignManager.factionId(player).isBlank() && data.getSettlements().stream().filter(value -> player.getUUID().equals(value.getOwnerId()) && value.getFactionTeam().isBlank()).count() >= 2) {
             source.sendFailure(Component.literal("Independent rulers may own at most two settlements. Create a faction before founding another."));
             return 0;
         }
-        SettlementData.SettlementRecord settlement = data.createSettlement(id, name, player.getUUID());
+        SettlementData.SettlementRecord settlement = data.createSettlement(name, player.getUUID());
         if (settlement == null) {
-            source.sendFailure(Component.literal("That settlement ID is invalid or already used."));
+            source.sendFailure(Component.literal("Enter a valid settlement name."));
             return 0;
         }
         settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
         String politicalFaction = CampaignManager.factionId(player);
         if (!politicalFaction.isBlank()) settlement.setFactionTeam(politicalFaction);
         else settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
-        linkClaimAtPlayer(player, settlement, false);
+        if (!linkClaimAtPlayer(player, settlement, false)
+                || !CaptureZoneManager.syncTownSquareMainZone(player.serverLevel(), settlement)) {
+            data.deleteSettlement(settlement.getId());
+            source.sendFailure(Component.literal("Stand well inside an unlinked claim large enough to contain the Town Square objective."));
+            return 0;
+        }
         SettlementManager.scheduleFirstSettlers(player, settlement);
         data.selectSettlement(player.getUUID(), settlement.getId());
         source.sendSuccess(() -> Component.literal("Founded " + settlement.getName() + " as a Village."), true);
@@ -493,9 +498,9 @@ public final class SettlementCommands {
         ServerPlayer player = player(source);
         SettlementData.SettlementRecord settlement = requireManage(player, id);
         if (settlement == null) return 0;
-        settlement.setTownSquare(player.serverLevel().dimension().location().toString(), player.blockPosition());
-        source.sendSuccess(() -> Component.literal("Town square set to your current position."), true);
-        return 1;
+        String result = CaptureZoneManager.relocateTownSquare(player, settlement);
+        source.sendSuccess(() -> Component.literal(result), true);
+        return result.startsWith("Town Square and") ? 1 : 0;
     }
 
     private static int setMusterGround(CommandSourceStack source, String id) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
@@ -855,25 +860,6 @@ public final class SettlementCommands {
         return 1;
     }
 
-    private static int proposeMarriage(CommandSourceStack source, ServerPlayer target) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer proposer = player(source);
-        SettlementData characters = SettlementData.get(proposer.serverLevel());
-        SettlementData.CharacterRecord proposerCharacter = characters.getCharacter(proposer.getUUID());
-        SettlementData.CharacterRecord targetCharacter = characters.getCharacter(target.getUUID());
-        if (proposerCharacter == null || !proposerCharacter.isCreated()) {
-            source.sendFailure(Component.literal("Create your character before proposing marriage."));
-            return 0;
-        }
-        if (targetCharacter == null || !targetCharacter.isCreated()) {
-            source.sendFailure(Component.literal("That player has not created a character."));
-            return 0;
-        }
-        boolean created = CampaignData.get(proposer.serverLevel()).proposePlayerMarriage(proposer.getUUID(), target.getUUID());
-        if (!created) { source.sendFailure(Component.literal("Marriage proposal could not be created.")); return 0; }
-        target.sendSystemMessage(Component.literal(proposerCharacter.getDisplayName() + " has proposed marriage. Open the Family screen to answer."));
-        source.sendSuccess(() -> Component.literal("Marriage proposal sent."), false); return 1;
-    }
-
     private static int warnResetCharacter(CommandSourceStack source, ServerPlayer target) {
         source.sendFailure(Component.literal("WARNING: This will reset " + target.getGameProfile().getName()
                 + "'s character identity, traits, faith, marriage, devotion, divorce history and character-specific levy cooldown. "
@@ -882,6 +868,7 @@ public final class SettlementCommands {
     }
 
     private static int resetCharacter(CommandSourceStack source, ServerPlayer target) {
+        if (CampaignData.get(target.serverLevel()).getMarriage(target.getUUID()) != null) adminDissolveMarriage(source, target);
         SettlementData data = SettlementData.get(target.serverLevel());
         data.resetCharacter(target.getUUID());
         CampaignData.get(target.serverLevel()).clearFamilyData(target.getUUID());
@@ -916,10 +903,6 @@ public final class SettlementCommands {
 
     private static int openDiplomacy(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         CampaignManager.openDiplomacy(player(source), ""); return 1;
-    }
-
-    private static int openFamily(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        CampaignManager.openFamily(player(source), ""); return 1;
     }
 
     private static int openWorldNews(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
@@ -1101,6 +1084,7 @@ public final class SettlementCommands {
     }
 
     private static int adminResetPlayer(CommandSourceStack source, ServerPlayer target) {
+        if (CampaignData.get(target.serverLevel()).getMarriage(target.getUUID()) != null) adminDissolveMarriage(source, target);
         SettlementData settlements = SettlementData.get(target.serverLevel());
         UUID playerId = target.getUUID();
         int retiredLevies = CampaignSystemsManager.forceRetirePlayerLevies(target.serverLevel(), playerId);
@@ -1125,8 +1109,59 @@ public final class SettlementCommands {
         source.sendSuccess(() -> Component.literal("Traits reset for " + target.getGameProfile().getName() + ". They will be prompted to choose traits again."), true); return 1;
     }
     private static int adminResetMarriage(CommandSourceStack source, ServerPlayer target) {
-        CampaignData.get(target.serverLevel()).resetMarriage(target.getUUID());
-        source.sendSuccess(() -> Component.literal("Marriage reset for " + target.getGameProfile().getName() + "."), true); return 1;
+        return adminDissolveMarriage(source, target);
+    }
+
+    private static int adminOfficiateMarriage(CommandSourceStack source, ServerPlayer first, ServerPlayer second) {
+        SettlementData settlements = SettlementData.get(source.getLevel());
+        SettlementData.CharacterRecord firstCharacter = settlements.getCharacter(first.getUUID());
+        SettlementData.CharacterRecord secondCharacter = settlements.getCharacter(second.getUUID());
+        if (first.getUUID().equals(second.getUUID())) { source.sendFailure(Component.literal("Select two different characters.")); return 0; }
+        if (firstCharacter == null || !firstCharacter.isCreated() || secondCharacter == null || !secondCharacter.isCreated()) {
+            source.sendFailure(Component.literal("Both players must have created characters before the ceremony can be officiated.")); return 0;
+        }
+        CampaignData campaign = CampaignData.get(source.getLevel());
+        long day = source.getLevel().getDayTime() / 24000L;
+        if (!campaign.officiateMarriage(first.getUUID(), second.getUUID(), day)) {
+            source.sendFailure(Component.literal("One of those characters is already married.")); return 0;
+        }
+        String firstFaction = factionFor(first.getUUID(), settlements), secondFaction = factionFor(second.getUUID(), settlements);
+        if (!firstFaction.isBlank() && !secondFaction.isBlank() && !firstFaction.equals(secondFaction))
+            CampaignSystemsData.get(source.getLevel()).addMarriageAlliance(firstFaction, secondFaction);
+        String event = firstCharacter.getDisplayName() + " and " + secondCharacter.getDisplayName() + " were married by official ceremony.";
+        settlements.getOwnedSettlements(first.getUUID()).forEach(settlement -> settlement.addChronicle(event));
+        settlements.getOwnedSettlements(second.getUUID()).forEach(settlement -> settlement.addChronicle(event));
+        campaign.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL, "Marriage officiated", event,
+                day, firstFaction, "", CampaignData.NewsVisibility.PUBLIC);
+        first.sendSystemMessage(Component.literal(event)); second.sendSystemMessage(Component.literal(event));
+        source.sendSuccess(() -> Component.literal(event), true);
+        return 1;
+    }
+
+    private static int adminDissolveMarriage(CommandSourceStack source, ServerPlayer player) {
+        CampaignData campaign = CampaignData.get(source.getLevel());
+        CampaignData.MarriageRecord marriage = campaign.getMarriage(player.getUUID());
+        if (marriage == null || marriage.spousePlayerId() == null) { source.sendFailure(Component.literal("That character is not married.")); return 0; }
+        UUID spouse = marriage.spousePlayerId();
+        SettlementData settlements = SettlementData.get(source.getLevel());
+        String firstFaction = factionFor(player.getUUID(), settlements), secondFaction = factionFor(spouse, settlements);
+        campaign.divorce(player.getUUID());
+        if (!firstFaction.isBlank() && !secondFaction.isBlank() && !firstFaction.equals(secondFaction))
+            CampaignSystemsData.get(source.getLevel()).removeMarriageAlliance(firstFaction, secondFaction);
+        String event = "The marriage of " + player.getGameProfile().getName() + " was dissolved by an administrator.";
+        settlements.getOwnedSettlements(player.getUUID()).forEach(settlement -> settlement.addChronicle(event));
+        settlements.getOwnedSettlements(spouse).forEach(settlement -> settlement.addChronicle(event));
+        campaign.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL,
+                "Marriage dissolved", event, source.getLevel().getDayTime() / 24000L, firstFaction, "", CampaignData.NewsVisibility.PUBLIC);
+        ServerPlayer onlineSpouse = source.getServer().getPlayerList().getPlayer(spouse);
+        if (onlineSpouse != null) onlineSpouse.sendSystemMessage(Component.literal(event));
+        source.sendSuccess(() -> Component.literal(event), true);
+        return 1;
+    }
+
+    private static String factionFor(UUID playerId, SettlementData settlements) {
+        return settlements.getOwnedSettlements(playerId).stream().map(SettlementData.SettlementRecord::getFactionTeam)
+                .filter(value -> !value.isBlank()).findFirst().orElse("");
     }
     private static int adminResetReligion(CommandSourceStack source, ServerPlayer target) {
         CampaignSystemsData.get(target.serverLevel()).resetReligion(target.getUUID()); source.sendSuccess(() -> Component.literal("Devotion/religion progression reset for " + target.getGameProfile().getName() + ". Character faith itself was preserved."), true); return 1;

@@ -37,7 +37,7 @@ public final class AreaSelectionEditor {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null || minecraft.level == null) return;
         session = new Session(settlementId, type, AreaSelection.Shape.BOX,
-                minecraft.level.dimension().location().toString(), null, areaIndex);
+                minecraft.level.dimension().location().toString(), null, null, areaIndex);
         minecraft.setScreen(null);
         message("Area editor opened: left click to set the first corner.");
     }
@@ -71,20 +71,36 @@ public final class AreaSelectionEditor {
             message(session.type().horizontalOnly()
                     ? "First corner set. The opposite corner is locked to this height."
                     : "First corner set. Aim at the opposite corner and left click again.");
-        } else {
+        } else if (session.second() == null) {
             BlockPos second = constrained(target);
-            SettlementNetwork.CHANNEL.sendToServer(new AreaSelectionPacket(session.settlementId(), session.type(), session.shape(), session.first(), second, session.areaIndex()));
-            message(session.type().label() + " selection submitted.");
-            session = null;
+            session = session.withSecond(second);
+            message("Geometry complete. Press Enter to confirm, R to redo, or Esc to cancel.");
+        } else {
+            session = session.withSecond(constrained(target));
+            message("Opposite corner moved. Press Enter to confirm.");
         }
         event.setCanceled(true);
     }
 
     public static void onKey(InputEvent.Key event) {
-        if (session == null || event.getAction() != InputConstants.PRESS || event.getKey() != GLFW.GLFW_KEY_ESCAPE) return;
-        session = null;
-        consumePauseScreen = true;
-        message("Area editor closed.");
+        if (session == null || event.getAction() != InputConstants.PRESS) return;
+        if (event.getKey() == GLFW.GLFW_KEY_ESCAPE) {
+            session = null;
+            consumePauseScreen = true;
+            message("Area editor closed.");
+        } else if (event.getKey() == GLFW.GLFW_KEY_R) {
+            session = session.withCorners(null, null);
+            message("Selection cleared. Left click to set the first corner.");
+        } else if (event.getKey() == GLFW.GLFW_KEY_BACKSPACE && session.second() != null) {
+            session = session.withSecond(null);
+            message("Opposite corner cleared. Left click to set it again.");
+        } else if ((event.getKey() == GLFW.GLFW_KEY_ENTER || event.getKey() == GLFW.GLFW_KEY_KP_ENTER)
+                && session.first() != null && session.second() != null) {
+            SettlementNetwork.CHANNEL.sendToServer(new AreaSelectionPacket(session.settlementId(), session.type(), session.shape(),
+                    session.first(), session.second(), session.areaIndex()));
+            message(session.type().label() + " selection confirmed.");
+            session = null;
+        }
     }
 
     public static boolean consumePauseScreen() {
@@ -105,7 +121,7 @@ public final class AreaSelectionEditor {
         Minecraft minecraft = Minecraft.getInstance();
         BlockPos cursor = target(minecraft);
         if (cursor == null) return;
-        cursor = constrained(cursor);
+        cursor = session.second() == null ? constrained(cursor) : session.second();
         BlockPos first = session.first() == null ? cursor : session.first();
         BlockPos min = AreaSelection.min(first, cursor), max = AreaSelection.max(first, cursor);
         float[] color = color(session.type());
@@ -132,8 +148,10 @@ public final class AreaSelectionEditor {
         int width = event.getWindow().getGuiScaledWidth();
         String title = session.type().label() + " · " + session.shape().label()
                 + (session.type().horizontalOnly() ? " · Horizontal" : " · Volume");
-        String step = session.first() == null ? "Left click: first corner" : "Left click: confirm opposite corner";
-        String controls = shapeToggleAllowed(session.type()) ? "Right click: switch shape   Esc: exit" : "Box selection   Esc: exit";
+        String step = session.first() == null ? "Left click: first corner"
+                : session.second() == null ? "Left click: finish geometry" : dimensions(session.first(), session.second()) + "   Enter: confirm";
+        String controls = (shapeToggleAllowed(session.type()) ? "Right click: switch shape   " : "Box selection   ")
+                + "R: redo   Backspace: undo corner   Esc: cancel";
         int panelWidth = Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(step), minecraft.font.width(controls))) + 18;
         int x = (width - panelWidth) / 2;
         graphics.fill(x, 8, x + panelWidth, 52, 0xB010141B);
@@ -162,14 +180,19 @@ public final class AreaSelectionEditor {
     private static float[] color(AreaSelection.Type type) {
         return switch (type) {
             case MUSTER, BARRACKS -> new float[]{0.95F, 0.63F, 0.22F};
-            case CAPTURE_MAIN, CAPTURE_SECONDARY -> new float[]{0.95F, 0.25F, 0.25F};
+            case CAPTURE_SECONDARY -> new float[]{0.95F, 0.25F, 0.25F};
             case PRAYER -> new float[]{0.72F, 0.46F, 1.0F};
             case HOUSING -> new float[]{0.25F, 0.85F, 0.55F};
         };
     }
 
     private static boolean shapeToggleAllowed(AreaSelection.Type type) {
-        return type == AreaSelection.Type.CAPTURE_MAIN || type == AreaSelection.Type.CAPTURE_SECONDARY;
+        return type == AreaSelection.Type.CAPTURE_SECONDARY;
+    }
+
+    private static String dimensions(BlockPos first, BlockPos second) {
+        BlockPos min = AreaSelection.min(first, second), max = AreaSelection.max(first, second);
+        return (max.getX() - min.getX() + 1) + "×" + (max.getY() - min.getY() + 1) + "×" + (max.getZ() - min.getZ() + 1);
     }
 
     private static void renderCylinder(PoseStack pose, VertexConsumer consumer, BlockPos min, BlockPos max, float[] color) {
@@ -199,8 +222,11 @@ public final class AreaSelectionEditor {
     }
 
     private record Session(String settlementId, AreaSelection.Type type, AreaSelection.Shape shape, String dimension,
-                           BlockPos first, int areaIndex) {
-        Session withShape(AreaSelection.Shape value) { return new Session(settlementId, type, value, dimension, first, areaIndex); }
-        Session withFirst(BlockPos value) { return new Session(settlementId, type, shape, dimension, value.immutable(), areaIndex); }
+                           BlockPos first, BlockPos second, int areaIndex) {
+        Session withShape(AreaSelection.Shape value) { return new Session(settlementId, type, value, dimension, first, second, areaIndex); }
+        Session withFirst(BlockPos value) { return new Session(settlementId, type, shape, dimension, value == null ? null : value.immutable(), second, areaIndex); }
+        Session withSecond(BlockPos value) { return new Session(settlementId, type, shape, dimension, first, value == null ? null : value.immutable(), areaIndex); }
+        Session withCorners(BlockPos firstValue, BlockPos secondValue) { return new Session(settlementId, type, shape, dimension,
+                firstValue == null ? null : firstValue.immutable(), secondValue == null ? null : secondValue.immutable(), areaIndex); }
     }
 }

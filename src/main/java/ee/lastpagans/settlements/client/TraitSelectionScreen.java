@@ -75,7 +75,8 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen implements 
         if (index < 0 || index >= choices.size()) return;
         if (!session.choose(choices.get(index))) return;
         if (session.completeTraits()) {
-            submit();
+            rebuildChoices();
+            rebuildButtons();
             return;
         }
         rebuildChoices();

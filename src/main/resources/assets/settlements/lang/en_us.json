@@ -4,5 +4,18 @@
   "key.categories.settlements": "Settlements",
   "key.settlements.campaign": "Open Campaign Menu",
   "key.settlements.character": "Open Character Sheet",
-  "key.settlements.settlement": "Open Selected Settlement"
+  "key.settlements.settlement": "Open Selected Settlement",
+  "screen.settlements.realm_overview": "Realm Overview",
+  "gui.settlements.settlement_name": "Settlement name",
+  "gui.settlements.founding_hint": "The server creates a stable internal ID and anchors the main objective to the Town Square.",
+  "gui.settlements.character_marriage": "Marriage — %s",
+  "gui.settlements.marriage": "Marriage",
+  "gui.settlements.spouse": "Spouse: %s",
+  "gui.settlements.faith": "Faith: %s",
+  "gui.settlements.traits": "Traits",
+  "gui.settlements.active_effects": "Active effects",
+  "gui.settlements.marriage_duration": "Marriage duration: %s day(s)",
+  "gui.settlements.unmarried": "Unmarried",
+  "gui.settlements.marriage_admin_hint": "Arrange a ceremony through the server community. Only an administrator can officiate or dissolve a marriage in game.",
+  "gui.settlements.back_character": "Back to Character"
 }
