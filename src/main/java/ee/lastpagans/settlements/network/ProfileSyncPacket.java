@@ -13,15 +13,20 @@ import java.util.function.Supplier;
 
 public record ProfileSyncPacket(Map<UUID, String> profiles) {
     public static void encode(ProfileSyncPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeVarInt(packet.profiles.size());
-        packet.profiles.forEach((uuid, name) -> {
+        int count = Math.min(4096, packet.profiles.size());
+        buffer.writeVarInt(count);
+        int written = 0;
+        for (Map.Entry<UUID, String> entry : packet.profiles.entrySet()) {
+            if (written++ >= count) break;
+            UUID uuid = entry.getKey();
+            String name = entry.getValue();
             buffer.writeUUID(uuid);
             buffer.writeUtf(name, 80);
-        });
+        }
     }
 
     public static ProfileSyncPacket decode(FriendlyByteBuf buffer) {
-        int size = Math.min(1024, buffer.readVarInt());
+        int size = PacketValidation.readCount(buffer, 4096, "profile");
         Map<UUID, String> profiles = new HashMap<>();
         for (int i = 0; i < size; i++) profiles.put(buffer.readUUID(), buffer.readUtf(80));
         return new ProfileSyncPacket(profiles);

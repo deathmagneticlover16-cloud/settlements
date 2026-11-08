@@ -21,7 +21,9 @@ public record SetMainSeatPacket(String settlementId, boolean returnToMain) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer player = context.getSender();
         if (player != null) {
-            context.enqueueWork(() -> SettlementManager.setMainSeatFromGui(player, packet.settlementId, packet.returnToMain));
+            context.enqueueWork(() -> {
+                if (ClientActionLimiter.allow(player, "main-seat", 5)) SettlementManager.setMainSeatFromGui(player, packet.settlementId, packet.returnToMain);
+            });
         }
         context.setPacketHandled(true);
     }

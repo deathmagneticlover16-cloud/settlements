@@ -12,7 +12,9 @@ public record MercenaryRosterActionPacket(String companyId, String action) {
     public static MercenaryRosterActionPacket decode(FriendlyByteBuf buffer) { return new MercenaryRosterActionPacket(buffer.readUtf(64), buffer.readUtf(32)); }
     public static void handle(MercenaryRosterActionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get(); ServerPlayer player = context.getSender();
-        if (player != null) context.enqueueWork(() -> MercenaryRosterManager.handleAction(player, packet.companyId(), packet.action()));
+        if (player != null) context.enqueueWork(() -> {
+            if (ClientActionLimiter.allow(player, "mercenary-action", 2)) MercenaryRosterManager.handleAction(player, packet.companyId(), packet.action());
+        });
         context.setPacketHandled(true);
     }
 }

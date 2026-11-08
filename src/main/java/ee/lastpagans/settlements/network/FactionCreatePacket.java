@@ -27,7 +27,9 @@ public record FactionCreatePacket(String name, String teamDye, String unitDye, S
     public static void handle(FactionCreatePacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer player = context.getSender();
-        if (player != null) context.enqueueWork(() -> CampaignManager.createFactionFromGui(player, packet));
+        if (player != null) context.enqueueWork(() -> {
+            if (ClientActionLimiter.allow(player, "faction-create", 20)) CampaignManager.createFactionFromGui(player, packet);
+        });
         context.setPacketHandled(true);
     }
 }

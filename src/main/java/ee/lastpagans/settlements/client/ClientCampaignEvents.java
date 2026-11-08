@@ -15,6 +15,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
 
 import java.util.List;
 
@@ -25,7 +26,6 @@ public final class ClientCampaignEvents {
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         SettlementsWildfirePreviewSession.onClientTick();
-        ClientCharacterBodyState.onClientTick();
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null) return;
         while (ClientKeyMappings.MAIN.consumeClick()) request(OpenCampaignRequestPacket.ScreenTarget.MAIN);
@@ -77,6 +77,15 @@ public final class ClientCampaignEvents {
         TransientAlertOverlay.clear();
         SettlementsWildfirePreviewSession.cancel();
         ClientCharacterBodyState.clear(null);
+        ClientProfileCache.clear();
+        SettlementClientHandler.clearCaches();
+        ee.lastpagans.settlements.client.api.ClientCaptureZoneApi.clear();
+    }
+
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (event.getEntity() instanceof net.minecraft.world.entity.player.Player player) {
+            ClientCharacterBodyState.forget(player.getUUID());
+        }
     }
 
     public static void onScreenRender(ScreenEvent.Render.Post event) {

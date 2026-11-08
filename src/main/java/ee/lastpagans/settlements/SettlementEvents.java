@@ -6,6 +6,7 @@ import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsClaim;
 import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
+import ee.lastpagans.settlements.network.ClientActionLimiter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -32,12 +33,9 @@ import java.util.UUID;
 public final class SettlementEvents {
     private static final Map<UUID, Integer> PENDING_CHARACTER_SCREENS = new HashMap<>();
     private static final Map<UUID, Integer> PENDING_BODY_REASSERTIONS = new HashMap<>();
-    private static int checkerTicks;
-    private static int residentBoundaryTicks;
-    private static int firstSettlerTicks;
-    private static int researchTicks;
-    private static int captureZoneTicks;
-    private static int wildfireTicks;
+    private static long nextSecondTick = -1L;
+    private static long nextResidentBoundaryTick = -1L;
+    private static long nextMaintenanceTick = -1L;
 
     private SettlementEvents() {
     }
@@ -205,8 +203,12 @@ public final class SettlementEvents {
     }
 
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        PENDING_CHARACTER_SCREENS.remove(event.getEntity().getUUID());
-        PENDING_BODY_REASSERTIONS.remove(event.getEntity().getUUID());
+        UUID playerId = event.getEntity().getUUID();
+        PENDING_CHARACTER_SCREENS.remove(playerId);
+        PENDING_BODY_REASSERTIONS.remove(playerId);
+        ClientActionLimiter.forget(playerId);
+        CampaignSystemsManager.clearPlayerState(playerId);
+        SettlementManager.clearPlayerState(playerId);
     }
 
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
@@ -275,44 +277,32 @@ public final class SettlementEvents {
             } else entry.setValue(remaining);
         }
 
-        if (++wildfireTicks >= 20) {
-            wildfireTicks = 0;
-            server.getPlayerList().getPlayers().forEach(SettlementsWildfireAuthority::reassert);
+        long gameTime = server.overworld().getGameTime();
+        if (nextSecondTick < 0L) {
+            nextSecondTick = gameTime + 20L;
+            nextResidentBoundaryTick = gameTime + Math.max(20, SettlementConfig.RESIDENT_BOUNDARY_CHECK_TICKS.get());
+            nextMaintenanceTick = gameTime + 600L;
         }
 
-        firstSettlerTicks++;
-        if (firstSettlerTicks >= 20) {
-            firstSettlerTicks = 0;
+        if (gameTime >= nextSecondTick) {
+            nextSecondTick = gameTime + 20L;
             SettlementManager.processFirstSettlerArrivals(server);
-        }
-
-        researchTicks++;
-        if (researchTicks >= 20) {
-            researchTicks = 0;
             ResearchManager.processResearch(server);
-        }
-
-        captureZoneTicks++;
-        if (captureZoneTicks >= 20) {
-            captureZoneTicks = 0;
             CaptureZoneManager.process(server);
         }
 
-        residentBoundaryTicks++;
-        if (residentBoundaryTicks >= SettlementConfig.RESIDENT_BOUNDARY_CHECK_TICKS.get()) {
-            residentBoundaryTicks = 0;
+        if (gameTime >= nextResidentBoundaryTick) {
+            nextResidentBoundaryTick = gameTime + Math.max(20, SettlementConfig.RESIDENT_BOUNDARY_CHECK_TICKS.get());
             enforceResidentClaimBoundaries(server);
         }
 
-        checkerTicks++;
-        if (checkerTicks < 600) return;
-        checkerTicks = 0;
+        if (gameTime < nextMaintenanceTick) return;
+        nextMaintenanceTick = gameTime + 600L;
 
         SettlementData data = SettlementData.get(server.overworld());
         CampaignData campaign = CampaignData.get(server.overworld());
         SettlementManager.processUpkeepChests(server);
         long day = server.overworld().getDayTime() / 24000L;
-        long gameTime = server.overworld().getGameTime();
         data.getSettlements().forEach(settlement -> {
             settlement.processDaily(server.overworld(), day, campaign);
             settlement.processSettlerContracts(gameTime, day, campaign);
@@ -391,12 +381,14 @@ public final class SettlementEvents {
     }
 
     public static void onServerStopped(ServerStoppedEvent event) {
-        checkerTicks = 0;
-        residentBoundaryTicks = 0;
-        firstSettlerTicks = 0;
-        researchTicks = 0;
-        wildfireTicks = 0;
+        nextSecondTick = -1L;
+        nextResidentBoundaryTick = -1L;
+        nextMaintenanceTick = -1L;
         PENDING_CHARACTER_SCREENS.clear();
         PENDING_BODY_REASSERTIONS.clear();
+        ClientActionLimiter.clear();
+        CampaignSystemsManager.clearRuntimeState();
+        SettlementManager.clearRuntimeState();
+        CampaignManager.clearRuntimeState();
     }
 }

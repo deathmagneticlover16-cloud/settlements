@@ -30,8 +30,10 @@ public record UpdateCharacterIdentityPacket(String firstName, String middleName,
         NetworkEvent.Context context = supplier.get();
         ServerPlayer sender = context.getSender();
         if (sender != null) {
-            context.enqueueWork(() -> SettlementManager.updateCharacterIdentity(
-                    sender, packet.firstName, packet.middleName, packet.lastName, packet.house, packet.returnToMain));
+            context.enqueueWork(() -> {
+                if (ClientActionLimiter.allow(sender, "character-identity", 10)) SettlementManager.updateCharacterIdentity(
+                        sender, packet.firstName, packet.middleName, packet.lastName, packet.house, packet.returnToMain);
+            });
         }
         context.setPacketHandled(true);
     }

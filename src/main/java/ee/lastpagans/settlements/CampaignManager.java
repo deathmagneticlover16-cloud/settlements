@@ -37,6 +37,9 @@ import java.util.UUID;
 
 /** Server-authoritative campaign, faction, diplomacy, family and world-news actions. */
 public final class CampaignManager {
+    private static MinecraftServer markerServer;
+    private static MapMarkerSnapshot markerCache;
+
     private CampaignManager() {}
 
     /** Applies faction Reliability while respecting ruler traits such as Reserved. */
@@ -100,11 +103,30 @@ public final class CampaignManager {
 
     public static void sendMapMarkers(ServerPlayer player) {
         SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                new MapMarkersPacket(MapMarkerSnapshot.from(player.serverLevel())));
+                new MapMarkersPacket(currentMapMarkers(player.getServer())));
     }
 
     public static void broadcastMapMarkers(MinecraftServer server) {
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) sendMapMarkers(player);
+        if (server == null) return;
+        MapMarkerSnapshot next = MapMarkerSnapshot.from(server.overworld());
+        if (markerServer == server && next.equals(markerCache)) return;
+        markerServer = server;
+        markerCache = next;
+        SettlementNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), new MapMarkersPacket(next));
+    }
+
+    private static MapMarkerSnapshot currentMapMarkers(MinecraftServer server) {
+        if (server == null) return new MapMarkerSnapshot(List.of());
+        if (markerServer != server || markerCache == null) {
+            markerServer = server;
+            markerCache = MapMarkerSnapshot.from(server.overworld());
+        }
+        return markerCache;
+    }
+
+    public static void clearRuntimeState() {
+        markerServer = null;
+        markerCache = null;
     }
 
     public static void handleFactionAction(ServerPlayer player, String actionRaw, UUID targetPlayer, int tier, String value) {
@@ -197,6 +219,7 @@ public final class CampaignManager {
                             if (settlement != target) settlement.setCapital(false);
                         }
                         target.setCapital(true);
+                        broadcastMapMarkers(player.getServer());
                         result = target.getName() + " is now the faction capital.";
                     }
                 }
@@ -511,9 +534,6 @@ public final class CampaignManager {
             // or immediately mark both parent factions as enemies.
             return "Settlement Wars must be declared through the settlement-v-settlement declaration screen.";
         }
-        if (type == CampaignData.WarType.INDEPENDENCE_WAR) {
-            return "Independence wars are reserved for the later settlement-sovereignty system and cannot yet be declared from this screen.";
-        }
         String settlementId = split.length > 1 ? SettlementData.normalizeId(split[1]) : "";
         CampaignData.WarGoal goal = parseWarGoal(split.length > 2 ? split[2] : "", type);
         String customCasusBelli = split.length > 3 ? SettlementData.cleanText(split[3], "", 100) : "";
@@ -521,13 +541,10 @@ public final class CampaignManager {
 
         SettlementData.SettlementRecord targetSettlement = settlementId.isBlank() ? null
                 : SettlementData.get(player.serverLevel()).getSettlement(settlementId);
-        boolean needsSettlement = type == CampaignData.WarType.RAID || type == CampaignData.WarType.SKIRMISH
-                || type == CampaignData.WarType.INDEPENDENCE_WAR;
+        boolean needsSettlement = type == CampaignData.WarType.RAID || type == CampaignData.WarType.SKIRMISH;
         if (needsSettlement && targetSettlement == null) return "This conflict tier requires a valid target settlement.";
         if (targetSettlement != null) {
-            if (type == CampaignData.WarType.INDEPENDENCE_WAR) {
-                if (!own.equals(targetSettlement.getFactionTeam())) return "An independence war must name one of your faction's settlements.";
-            } else if (!target.equals(targetSettlement.getFactionTeam())) {
+            if (!target.equals(targetSettlement.getFactionTeam())) {
                 return "The chosen settlement does not belong to the target faction.";
             }
         }
@@ -785,12 +802,6 @@ public final class CampaignManager {
         return "";
     }
 
-    private static boolean factionParticipatesOnSide(CampaignData.WarRecord war, String factionId, boolean attackerSide) {
-        if (war == null || factionId == null || factionId.isBlank()) return false;
-        String parent = participatingFaction(war, attackerSide);
-        return factionId.equals(parent) || (attackerSide ? war.supportingAttackers() : war.supportingDefenders()).contains(factionId);
-    }
-
     /** Principal belligerent faction only. Supporting allies may fight and send aid, but they cannot bind
      * either side to peace terms. */
     private static boolean factionIsPrincipalOnSide(CampaignData.WarRecord war, String factionId, boolean attackerSide) {
@@ -918,6 +929,7 @@ public final class CampaignManager {
         String error = validatePeaceTerms(player.serverLevel(), offer, war);
         if (error != null) return "Peace treaty could not be applied: " + error;
         applyPeaceTerms(player.serverLevel(), offer, war, day);
+        broadcastMapMarkers(player.getServer());
         data.endWar(war.id(), day, compulsory ? "Capitulation peace terms enforced." : "Negotiated peace terms accepted.");
         extra.clearWarInterventionState(war.id());
         synchronizeWarPeace(player.serverLevel(), data, war, day);
@@ -1278,7 +1290,8 @@ public final class CampaignManager {
         }
         if (!validOtherFaction(own, target)) return "Select an allied faction.";
         if (war.involves(target)) return factionName(target) + " is already participating in this war.";
-        CampaignData.TreatyState alliance = data.relation(own, target).state();
+        CampaignData.DiplomacyRecord relation = data.relationIfPresent(own, target);
+        CampaignData.TreatyState alliance = relation == null ? CampaignData.TreatyState.NEUTRAL : relation.state();
         if (!alliance.isAlliance()) return "Only an ally can be called to war.";
         boolean ownOnAttackerSide = war.attackerFaction().equals(own) || war.supportingAttackers().contains(own);
         if (alliance == CampaignData.TreatyState.DEFENSIVE_ALLIANCE && ownOnAttackerSide) {
@@ -1712,6 +1725,7 @@ public final class CampaignManager {
                 "Faction founded", displayName + " was founded by " + SettlementManager.characterOrAccountName(player) + ".",
                 day, newFactionId, foundingSeat.getId(), CampaignData.NewsVisibility.PUBLIC);
         SettlementManager.broadcastProfiles(player.getServer());
+        broadcastMapMarkers(player.getServer());
         CampaignToastSender.factionFounded(player, displayName);
         return "Created " + government.displayName() + " " + displayName + " with " + foundingSeat.getName() + " as its capital.";
     }

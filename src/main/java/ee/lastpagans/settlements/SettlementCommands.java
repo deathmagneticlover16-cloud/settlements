@@ -1379,10 +1379,15 @@ public final class SettlementCommands {
         ServerPlayer p = player(source); SettlementData.SettlementRecord s = requireManage(p, id); if (s == null) return 0; CampaignSystemsManager.setRegionPos1(p); source.sendSuccess(() -> Component.literal(type + " pos1 set for " + s.getName() + ". Stand at the opposite corner and use pos2."), false); return 1;
     }
     private static int regionPos2(CommandSourceStack source, String id, String type) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer p = player(source); SettlementData.SettlementRecord s = requireManage(p, id); if (s == null) return 0; CampaignSystemsData.RegionRecord region = CampaignSystemsManager.completeRegion(p); if (region == null || !region.valid()) { source.sendFailure(Component.literal("Set pos1 first in this dimension.")); return 0; }
+        ServerPlayer p = player(source); SettlementData.SettlementRecord s = requireManage(p, id); if (s == null) return 0; CampaignSystemsData.RegionRecord region = CampaignSystemsManager.completeRegion(p); if (region == null) { source.sendFailure(Component.literal("Set pos1 first in this dimension.")); return 0; } if (!region.valid()) { source.sendFailure(Component.literal("Regions may span at most " + CampaignSystemsData.MAX_REGION_AXIS + " blocks on each axis.")); return 0; }
         CampaignSystemsData extra = CampaignSystemsData.get(p.serverLevel());
         switch (type) {
-            case "housing" -> { extra.addHousingArea(s.getId(), region); int beds = CampaignSystemsManager.recalculateHousing(p.serverLevel(), s); source.sendSuccess(() -> Component.literal("Dwelling registered. Housing is now " + beds + " bed(s)."), true); }
+            case "housing" -> {
+                if (region.volume() > CampaignSystemsData.MAX_HOUSING_VOLUME) { source.sendFailure(Component.literal("Housing areas may contain at most " + CampaignSystemsData.MAX_HOUSING_VOLUME + " blocks.")); return 0; }
+                if (!extra.addHousingArea(s.getId(), region)) { source.sendFailure(Component.literal("A settlement may have at most " + CampaignSystemsData.MAX_HOUSING_AREAS + " housing areas.")); return 0; }
+                int beds = CampaignSystemsManager.recalculateHousing(p.serverLevel(), s);
+                source.sendSuccess(() -> Component.literal("Dwelling registered. Housing is now " + beds + " bed(s)."), true);
+            }
             case "muster" -> { extra.setMusterArea(s.getId(), region); s.setMusterGround(region.dimension(), region.min()); source.sendSuccess(() -> Component.literal("Muster Ground registered: " + region.horizontalArea() + " horizontal block(s), theoretical capacity " + region.horizontalArea() + " soldiers."), true); }
             case "prayer" -> { extra.setPrayerSite(s.getId(), region); source.sendSuccess(() -> Component.literal("Prayer Site registered for " + s.getName() + "."), true); }
             default -> { return 0; }

@@ -16,7 +16,10 @@ public record ResearchActionPacket(String action, String stageId) {
     public static void handle(ResearchActionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer player = context.getSender();
-        if (player != null) context.enqueueWork(() -> ResearchManager.handleAction(player, packet.action, packet.stageId));
+        if (player != null) context.enqueueWork(() -> {
+            String route = "REFRESH".equalsIgnoreCase(packet.action) ? "research-refresh" : "research-action";
+            if (ClientActionLimiter.allow(player, route, 2)) ResearchManager.handleAction(player, packet.action, packet.stageId);
+        });
         context.setPacketHandled(true);
     }
 }

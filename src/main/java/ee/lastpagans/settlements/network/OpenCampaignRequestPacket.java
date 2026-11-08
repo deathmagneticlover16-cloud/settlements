@@ -19,6 +19,7 @@ public record OpenCampaignRequestPacket(ScreenTarget target) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer player = context.getSender();
         if (player != null) context.enqueueWork(() -> {
+            if (!ClientActionLimiter.allow(player, "open-screen", 2)) return;
             switch (packet.target) {
                 case MAIN -> CampaignManager.openMain(player);
                 case CHARACTER -> SettlementManager.openCharacterSheet(player, true);

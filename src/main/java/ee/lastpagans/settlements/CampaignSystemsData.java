@@ -9,6 +9,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -23,6 +24,9 @@ import java.util.UUID;
  */
 public final class CampaignSystemsData extends SavedData {
     private static final String DATA_NAME = "settlements_campaign_systems";
+    public static final int MAX_REGION_AXIS = 128;
+    public static final int MAX_HOUSING_AREAS = 32;
+    public static final long MAX_HOUSING_VOLUME = 32_768L;
 
     private final Map<String, Integer> stateTreasuries = new HashMap<>();
     private final Map<String, Integer> marriageAlliances = new HashMap<>();
@@ -47,11 +51,15 @@ public final class CampaignSystemsData extends SavedData {
     private final Map<String, RegionRecord> musterAreas = new HashMap<>();
     private final Map<String, RegionRecord> prayerSites = new HashMap<>();
     private final List<HolySiteRecord> holySites = new ArrayList<>();
+    private final List<HolySiteRecord> holySitesView = Collections.unmodifiableList(holySites);
     private final Map<String, List<ModifierRecord>> settlementModifiers = new HashMap<>();
     private final Map<UUID, LevyMobilization> levyMobilizations = new LinkedHashMap<>();
+    private final Collection<LevyMobilization> levyMobilizationsView = Collections.unmodifiableCollection(levyMobilizations.values());
     private final Map<UUID, LevyDeployment> levyDeployments = new LinkedHashMap<>();
+    private final Collection<LevyDeployment> levyDeploymentsView = Collections.unmodifiableCollection(levyDeployments.values());
     private final Map<UUID, Long> levyCooldownUntil = new HashMap<>();
     private final Map<UUID, PeaceOfferRecord> peaceOffers = new LinkedHashMap<>();
+    private final Collection<PeaceOfferRecord> peaceOffersView = Collections.unmodifiableCollection(peaceOffers.values());
     private final Map<UUID, List<AidRecord>> aidByWar = new HashMap<>();
     private final Map<UUID, Integer> warScore = new HashMap<>();
     private final Map<UUID, List<String>> ignoredWarInterventions = new HashMap<>();
@@ -59,6 +67,7 @@ public final class CampaignSystemsData extends SavedData {
     private final Map<String, Long> forcedNapUntilDay = new HashMap<>();
     private final List<ReparationRecord> reparations = new ArrayList<>();
     private final Map<UUID, MercenaryContractRecord> mercenaryContracts = new LinkedHashMap<>();
+    private final Collection<MercenaryContractRecord> mercenaryContractsView = Collections.unmodifiableCollection(mercenaryContracts.values());
     private final List<FactionInvitationRecord> factionInvitations = new ArrayList<>();
     /** Levy entities that were unloaded when their levy was returned. They are discarded on their next load. */
     private final Set<UUID> retiredLevyUnits = new HashSet<>();
@@ -94,7 +103,9 @@ public final class CampaignSystemsData extends SavedData {
             List<RegionRecord> regions = new ArrayList<>();
             for (Tag regionRaw : entry.getList("Regions", Tag.TAG_COMPOUND)) {
                 RegionRecord region = RegionRecord.fromNBT((CompoundTag) regionRaw);
-                if (region.valid()) regions.add(new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
+                if (region.valid() && region.volume() <= MAX_HOUSING_VOLUME && regions.size() < MAX_HOUSING_AREAS) {
+                    regions.add(new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
+                }
             }
             if (!regions.isEmpty()) data.housingAreas.put(settlement, regions);
         }
@@ -333,12 +344,21 @@ public final class CampaignSystemsData extends SavedData {
     public boolean factionProtected(String faction) { return protectedFactions.getOrDefault(faction == null ? "" : faction, false); }
     public void setFactionProtected(String faction, boolean value) { if (faction == null || faction.isBlank()) return; protectedFactions.put(faction, value); setDirty(); }
 
-    public List<RegionRecord> housingAreas(String settlement) { return List.copyOf(housingAreas.getOrDefault(SettlementData.normalizeId(settlement), List.of())); }
-    public void addHousingArea(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank() || !region.valid()) return; housingAreas.computeIfAbsent(id, key -> new ArrayList<>()).add(new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX)); setDirty(); }
+    public List<RegionRecord> housingAreas(String settlement) { return Collections.unmodifiableList(housingAreas.getOrDefault(SettlementData.normalizeId(settlement), List.of())); }
+    public boolean addHousingArea(String settlement, RegionRecord region) {
+        String id = SettlementData.normalizeId(settlement);
+        if (id.isBlank() || region == null || !region.valid() || region.volume() > MAX_HOUSING_VOLUME) return false;
+        List<RegionRecord> values = housingAreas.computeIfAbsent(id, key -> new ArrayList<>());
+        if (values.size() >= MAX_HOUSING_AREAS) return false;
+        values.add(new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
+        setDirty();
+        return true;
+    }
     public boolean replaceHousingArea(String settlement, int index, RegionRecord region) {
         String id = SettlementData.normalizeId(settlement);
         List<RegionRecord> values = housingAreas.get(id);
-        if (values == null || index < 0 || index >= values.size() || region == null || !region.valid()) return false;
+        if (values == null || index < 0 || index >= values.size() || region == null || !region.valid()
+                || region.volume() > MAX_HOUSING_VOLUME) return false;
         values.set(index, new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
         setDirty();
         return true;
@@ -357,11 +377,11 @@ public final class CampaignSystemsData extends SavedData {
     public void setMusterArea(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; if (region == null || !region.valid()) musterAreas.remove(id); else musterAreas.put(id, new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX)); setDirty(); }
     public RegionRecord prayerSite(String settlement) { return prayerSites.get(SettlementData.normalizeId(settlement)); }
     public void setPrayerSite(String settlement, RegionRecord region) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; if (region == null || !region.valid()) prayerSites.remove(id); else prayerSites.put(id, new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX)); setDirty(); }
-    public List<HolySiteRecord> holySites() { return List.copyOf(holySites); }
+    public List<HolySiteRecord> holySites() { return holySitesView; }
     public void addHolySite(HolySiteRecord site) { if (site != null && site.region.valid() && !site.faith.isBlank()) { holySites.add(site); setDirty(); } }
     public boolean removeHolySite(String id) { boolean removed = holySites.removeIf(site -> site.id.equalsIgnoreCase(id)); if (removed) setDirty(); return removed; }
 
-    public List<ModifierRecord> modifiers(String settlement) { return List.copyOf(settlementModifiers.getOrDefault(SettlementData.normalizeId(settlement), List.of())); }
+    public List<ModifierRecord> modifiers(String settlement) { return Collections.unmodifiableList(settlementModifiers.getOrDefault(SettlementData.normalizeId(settlement), List.of())); }
     public void addModifier(String settlement, ModifierRecord modifier) { String id = SettlementData.normalizeId(settlement); if (id.isBlank() || modifier == null || modifier.id.isBlank()) return; List<ModifierRecord> list = settlementModifiers.computeIfAbsent(id, key -> new ArrayList<>()); list.removeIf(value -> value.id.equalsIgnoreCase(modifier.id)); list.add(modifier); setDirty(); }
     public boolean removeModifier(String settlement, String modifierId) { List<ModifierRecord> list = settlementModifiers.get(SettlementData.normalizeId(settlement)); if (list == null) return false; boolean removed = list.removeIf(value -> value.id.equalsIgnoreCase(modifierId)); if (removed) setDirty(); return removed; }
     public void clearModifiers(String settlement) { if (settlementModifiers.remove(SettlementData.normalizeId(settlement)) != null) setDirty(); }
@@ -402,11 +422,11 @@ public final class CampaignSystemsData extends SavedData {
     }
     public int expireModifiers(String settlement) { String id = SettlementData.normalizeId(settlement); List<ModifierRecord> list = settlementModifiers.get(id); if (list == null) return 0; long now = nowMillis(id); int before = list.size(); list.removeIf(value -> value.expiresAtMillis > 0L && value.expiresAtMillis <= now); int removed = before - list.size(); if (removed > 0) setDirty(); return removed; }
 
-    public Collection<LevyMobilization> levyMobilizations() { return List.copyOf(levyMobilizations.values()); }
+    public Collection<LevyMobilization> levyMobilizations() { return levyMobilizationsView; }
     public LevyMobilization levyMobilization(UUID id) { return levyMobilizations.get(id); }
     public void putLevyMobilization(LevyMobilization value) { levyMobilizations.put(value.id, value); setDirty(); }
     public void removeLevyMobilization(UUID id) { if (levyMobilizations.remove(id) != null) setDirty(); }
-    public Collection<LevyDeployment> levyDeployments() { return List.copyOf(levyDeployments.values()); }
+    public Collection<LevyDeployment> levyDeployments() { return levyDeploymentsView; }
     public LevyDeployment levyDeployment(UUID batch) { return levyDeployments.get(batch); }
     public void putLevyDeployment(LevyDeployment value) { levyDeployments.put(value.batchId, value); setDirty(); }
     public void removeLevyDeployment(UUID batch) { if (levyDeployments.remove(batch) != null) setDirty(); }
@@ -415,7 +435,7 @@ public final class CampaignSystemsData extends SavedData {
     public void clearLevyCooldown(UUID player) { if (levyCooldownUntil.remove(player) != null) setDirty(); }
 
     public PeaceOfferRecord peaceOffer(UUID proposal) { return peaceOffers.get(proposal); }
-    public Collection<PeaceOfferRecord> peaceOffers() { return List.copyOf(peaceOffers.values()); }
+    public Collection<PeaceOfferRecord> peaceOffers() { return peaceOffersView; }
     public void putPeaceOffer(PeaceOfferRecord value) { if (value != null && value.proposalId != null) { peaceOffers.put(value.proposalId, value); setDirty(); } }
     public void removePeaceOffer(UUID proposal) { if (peaceOffers.remove(proposal) != null) setDirty(); }
     public List<AidRecord> warAid(UUID war) { return List.copyOf(aidByWar.getOrDefault(war, List.of())); }
@@ -447,6 +467,7 @@ public final class CampaignSystemsData extends SavedData {
     public void clearWarInterventionState(UUID war) { if (war != null && ignoredWarInterventions.remove(war) != null) setDirty(); }
 
     public CandidateHistory candidateHistory(UUID player) { return candidateHistory.computeIfAbsent(player, CandidateHistory::new); }
+    public CandidateHistory candidateHistoryIfPresent(UUID player) { return player == null ? null : candidateHistory.get(player); }
     public void setCandidateGender(UUID player, String gender) { CandidateHistory h = candidateHistory(player); h.setPreferredGender(gender); setDirty(); }
     public void rejectCandidate(UUID player, String id) { CandidateHistory h = candidateHistory(player); h.reject(id); setDirty(); }
     public void markCandidateSeen(UUID player, String id) { CandidateHistory h = candidateHistory(player); h.seen(id); setDirty(); }
@@ -462,7 +483,7 @@ public final class CampaignSystemsData extends SavedData {
     public void replaceReparations(List<ReparationRecord> values) { reparations.clear(); if (values != null) reparations.addAll(values); setDirty(); }
     public void removeReparation(UUID id) { if (id != null && reparations.removeIf(value -> id.equals(value.id()))) setDirty(); }
 
-    public Collection<MercenaryContractRecord> mercenaryContracts() { return List.copyOf(mercenaryContracts.values()); }
+    public Collection<MercenaryContractRecord> mercenaryContracts() { return mercenaryContractsView; }
     public MercenaryContractRecord mercenaryContract(UUID unitId) { return unitId == null ? null : mercenaryContracts.get(unitId); }
     public void putMercenaryContract(MercenaryContractRecord value) { if (value != null && value.unitId() != null) { mercenaryContracts.put(value.unitId(), value); setDirty(); } }
     public void removeMercenaryContract(UUID unitId) { if (unitId != null && mercenaryContracts.remove(unitId) != null) setDirty(); }
@@ -555,7 +576,15 @@ public final class CampaignSystemsData extends SavedData {
                 max = new BlockPos(Math.max(a.getX(), b.getX()), Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ()));
             }
         }
-        public boolean valid() { return !dimension.isBlank() && min != null && max != null; }
+        public boolean valid() {
+            if (dimension.isBlank() || net.minecraft.resources.ResourceLocation.tryParse(dimension) == null
+                    || min == null || max == null) return false;
+            long width = (long) max.getX() - min.getX() + 1L;
+            long height = (long) max.getY() - min.getY() + 1L;
+            long depth = (long) max.getZ() - min.getZ() + 1L;
+            return width > 0L && height > 0L && depth > 0L
+                    && width <= MAX_REGION_AXIS && height <= MAX_REGION_AXIS && depth <= MAX_REGION_AXIS;
+        }
         public long horizontalArea() { return valid() ? AreaSelection.horizontalArea(shape, min, max) : 0L; }
         public long volume() { if (!valid()) return 0; return horizontalArea() * (max.getY() - min.getY() + 1L); }
         public boolean contains(String dim, BlockPos pos) { return valid() && dimension.equals(dim) && AreaSelection.contains(shape, min, max, pos, true); }

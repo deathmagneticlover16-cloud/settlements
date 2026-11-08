@@ -9,6 +9,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -27,12 +28,15 @@ public final class CampaignData extends SavedData {
 
     private final Map<String, SettlementVisualRecord> settlementVisuals = new HashMap<>();
     private final Map<String, RosterRecord> rosters = new LinkedHashMap<>();
+    private final Collection<RosterRecord> rostersView = Collections.unmodifiableCollection(rosters.values());
     private final Map<String, String> factionRoster = new HashMap<>();
     private String defaultRoster = "default";
 
     private final Map<FactionPair, DiplomacyRecord> diplomacy = new HashMap<>();
+    private final Collection<DiplomacyRecord> diplomacyView = Collections.unmodifiableCollection(diplomacy.values());
     private final Map<UUID, DiplomacyProposal> proposals = new LinkedHashMap<>();
     private final Map<UUID, WarRecord> wars = new LinkedHashMap<>();
+    private final Collection<WarRecord> warsView = Collections.unmodifiableCollection(wars.values());
     private final Map<String, Integer> factionReliability = new HashMap<>();
 
     private final Map<UUID, MarriageRecord> marriages = new HashMap<>();
@@ -214,6 +218,10 @@ public final class CampaignData extends SavedData {
         return settlementVisuals.computeIfAbsent(id, SettlementVisualRecord::new);
     }
 
+    public SettlementVisualRecord visual(String settlementId) {
+        return settlementVisuals.get(SettlementData.normalizeId(settlementId));
+    }
+
     public void clearSettlementVisual(String settlementId) {
         String id = SettlementData.normalizeId(settlementId);
         if (!id.isBlank() && settlementVisuals.remove(id) != null) setDirty();
@@ -244,7 +252,7 @@ public final class CampaignData extends SavedData {
     }
 
     public Collection<RosterRecord> getRosters() {
-        return List.copyOf(rosters.values());
+        return rostersView;
     }
 
     public void setDefaultRoster(String rosterId) {
@@ -277,8 +285,8 @@ public final class CampaignData extends SavedData {
     }
 
     public ItemStack resolveUnitTemplate(SettlementData.SettlementRecord settlement, UnitType type) {
-        SettlementVisualRecord visual = visualFor(settlement.getId());
-        ItemStack settlementTemplate = visual.getUnitTemplate(type);
+        SettlementVisualRecord visual = visual(settlement.getId());
+        ItemStack settlementTemplate = visual == null ? ItemStack.EMPTY : visual.getUnitTemplate(type);
         if (!settlementTemplate.isEmpty()) return settlementTemplate;
 
         String assigned = factionRoster.getOrDefault(settlement.getFactionTeam(), defaultRoster);
@@ -296,8 +304,12 @@ public final class CampaignData extends SavedData {
         return diplomacy.computeIfAbsent(key, pair -> new DiplomacyRecord(pair.first, pair.second));
     }
 
+    public DiplomacyRecord relationIfPresent(String firstFaction, String secondFaction) {
+        return diplomacy.get(FactionPair.of(firstFaction, secondFaction));
+    }
+
     public Collection<DiplomacyRecord> getDiplomacy() {
-        return List.copyOf(diplomacy.values());
+        return diplomacyView;
     }
 
     public DiplomacyProposal createProposal(
@@ -404,7 +416,7 @@ public final class CampaignData extends SavedData {
         setDirty();
     }
 
-    public Collection<WarRecord> getWars() { return List.copyOf(wars.values()); }
+    public Collection<WarRecord> getWars() { return warsView; }
 
     public List<WarRecord> activeWarsFor(String factionId) {
         return wars.values().stream()
@@ -626,15 +638,21 @@ public final class CampaignData extends SavedData {
         return factionProfiles.computeIfAbsent(id, FactionProfile::new);
     }
 
+    public FactionProfile factionProfileIfPresent(String factionId) {
+        return factionProfiles.get(factionId == null ? "" : factionId);
+    }
+
     public int factionRankTier(String factionId, UUID playerId, boolean factionLeader) {
         if (factionLeader) return 4;
-        return factionProfile(factionId).memberRanks.getOrDefault(playerId, 0);
+        FactionProfile profile = factionProfileIfPresent(factionId);
+        return profile == null ? 0 : profile.memberRanks.getOrDefault(playerId, 0);
     }
 
     public String factionRankTitle(String factionId, UUID playerId, boolean factionLeader) {
-        FactionProfile profile = factionProfile(factionId);
         int tier = factionRankTier(factionId, playerId, factionLeader);
-        return profile.rankTitles.getOrDefault(tier, CampaignDefinitions.defaultRankTitle(tier));
+        FactionProfile profile = factionProfileIfPresent(factionId);
+        return profile == null ? CampaignDefinitions.defaultRankTitle(tier)
+                : profile.rankTitles.getOrDefault(tier, CampaignDefinitions.defaultRankTitle(tier));
     }
 
     public void setFactionMemberRank(String factionId, UUID playerId, int tier) {
@@ -906,8 +924,7 @@ public final class CampaignData extends SavedData {
         RAID("Raid"),
         SKIRMISH("Skirmish"),
         SETTLEMENT_WAR("Settlement War"),
-        FACTION_WAR("Faction War"),
-        INDEPENDENCE_WAR("Independence War");
+        FACTION_WAR("Faction War");
 
         private final String displayName;
 
@@ -944,9 +961,7 @@ public final class CampaignData extends SavedData {
         FORCE_VASSALAGE("Force Vassalage", WarType.FACTION_WAR),
         PUNITIVE_WAR("Punitive War", WarType.FACTION_WAR),
         HOLY_WAR("Holy War", WarType.FACTION_WAR),
-        CUSTOM("Custom Casus Belli", null),
-        GAIN_INDEPENDENCE("Gain Independence", WarType.INDEPENDENCE_WAR),
-        SUPPRESS_REBELLION("Suppress Rebellion", WarType.INDEPENDENCE_WAR);
+        CUSTOM("Custom Casus Belli", null);
 
         private final String displayName;
         private final WarType type;

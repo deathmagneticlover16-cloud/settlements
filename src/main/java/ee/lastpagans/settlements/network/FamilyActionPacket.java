@@ -18,7 +18,9 @@ public record FamilyActionPacket(String action, String value, UUID targetPlayer)
     }
     public static void handle(FamilyActionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get(); ServerPlayer player = context.getSender();
-        if (player != null) context.enqueueWork(() -> CampaignManager.handleFamilyAction(player, packet.action, packet.value, packet.targetPlayer));
+        if (player != null) context.enqueueWork(() -> {
+            if (ClientActionLimiter.allow(player, "family-action", 2)) CampaignManager.handleFamilyAction(player, packet.action, packet.value, packet.targetPlayer);
+        });
         context.setPacketHandled(true);
     }
 }

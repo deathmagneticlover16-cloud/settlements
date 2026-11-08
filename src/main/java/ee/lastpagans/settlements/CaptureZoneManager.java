@@ -21,9 +21,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.network.PacketDistributor;
 
-import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -185,13 +186,30 @@ public final class CaptureZoneManager {
         CaptureZoneData data = CaptureZoneData.get(root);
         SettlementData settlements = SettlementData.get(root);
         CampaignData campaign = CampaignData.get(root);
+        List<CaptureZoneData.CaptureZoneRecord> zones = data.allZones();
+        Map<String, int[]> zoneCounts = new HashMap<>();
+        for (CaptureZoneData.CaptureZoneRecord zone : zones) {
+            int[] counts = zoneCounts.computeIfAbsent(zone.settlementId(), ignored -> new int[3]);
+            if (zone.type() == CaptureZoneData.ZoneType.MAIN) counts[0]++;
+            else {
+                counts[1]++;
+                if (!zone.captured()) counts[2]++;
+            }
+        }
+        Map<String, CampaignData.WarRecord> activeAttackBySettlement = new HashMap<>();
+        for (CampaignData.WarRecord war : campaign.getWars()) {
+            if (war.status() == CampaignData.WarStatus.ACTIVE && !war.defenderSettlement().isBlank()) {
+                activeAttackBySettlement.putIfAbsent(war.defenderSettlement(), war);
+            }
+        }
+        Map<UUID, TeamSets> teamsByWar = new HashMap<>();
         boolean anyChanged=false;
-        for (CaptureZoneData.CaptureZoneRecord zone : new ArrayList<>(data.allZones())) {
+        for (CaptureZoneData.CaptureZoneRecord zone : zones) {
             SettlementData.SettlementRecord settlement = settlements.getSettlement(zone.settlementId());
             if (settlement == null) { data.remove(zone.id()); anyChanged=true; continue; }
             ServerLevel level = resolveLevel(server, zone.dimension());
             if (level == null) continue;
-            CampaignData.WarRecord war = activeAttackOn(campaign, settlement.getId());
+            CampaignData.WarRecord war = activeAttackBySettlement.get(settlement.getId());
             if (war == null) {
                 liberate(level, settlement);
                 if (zone.progress() > 0) anyChanged |= zone.setProgress(Math.max(0D, zone.progress()-0.02D));
@@ -204,7 +222,7 @@ public final class CaptureZoneManager {
                 }
                 continue;
             }
-            TeamSets teams = teamsForWar(settlements, war);
+            TeamSets teams = teamsByWar.computeIfAbsent(war.id(), ignored -> teamsForWar(settlements, war));
             if (!zone.attackerTeam().isBlank() && !zone.attackerTeam().equals(teams.primaryAttacker)) {
                 if (zone.type() == CaptureZoneData.ZoneType.MAIN) liberate(level, settlement);
                 anyChanged |= zone.setProgress(0D);
@@ -212,9 +230,10 @@ public final class CaptureZoneManager {
                 anyChanged |= zone.setAttackerTeam("");
                 anyChanged |= zone.setState(CaptureZoneData.ZoneState.SECURE);
             }
+            ZoneRequirement requirement = requirement(settlement);
+            int[] counts = zoneCounts.get(settlement.getId());
             boolean secondariesRemain = zone.type() == CaptureZoneData.ZoneType.MAIN && !zone.captured()
-                    && (!requirementsMet(root, settlement) || data.zonesFor(settlement.getId()).stream()
-                    .anyMatch(other -> other.type() == CaptureZoneData.ZoneType.SECONDARY && !other.captured()));
+                    && (counts[0] < requirement.main() || counts[1] < requirement.secondary() || counts[2] > 0);
             CapturePresence presence = presence(level, zone, teams.attackers, teams.defenders);
             CaptureZoneData.ZoneState before = zone.state();
             if (presence.attackers>0 && presence.defenders>0) {
@@ -285,11 +304,6 @@ public final class CaptureZoneManager {
         MinecraftForge.EVENT_BUS.post(new SettlementOccupationEvent(level, settlement.getId(), old, SettlementOccupationEvent.Transition.LIBERATED));
     }
 
-    private static CampaignData.WarRecord activeAttackOn(CampaignData campaign, String settlementId) {
-        return campaign.getWars().stream().filter(w -> w.status()==CampaignData.WarStatus.ACTIVE)
-                .filter(w -> settlementId.equals(w.defenderSettlement())).findFirst().orElse(null);
-    }
-
     private static TeamSets teamsForWar(SettlementData data, CampaignData.WarRecord war) {
         Set<String> attackers=new HashSet<>(), defenders=new HashSet<>();
         SettlementData.SettlementRecord attacker=data.getSettlement(war.attackerSettlement());
@@ -330,12 +344,12 @@ public final class CaptureZoneManager {
 
     public static void sync(ServerPlayer player) {
         if (player==null) return;
-        List<CaptureZoneView> views=CaptureZoneData.get(player.serverLevel()).allZones().stream().map(CaptureZoneView::from).toList();
+        List<CaptureZoneView> views=CaptureZoneData.get(player.serverLevel()).allZones().stream().limit(4096).map(CaptureZoneView::from).toList();
         SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new CaptureZoneSnapshotPacket(views));
     }
     public static void broadcast(MinecraftServer server) {
         if(server==null)return;
-        List<CaptureZoneView> views=CaptureZoneData.get(server.overworld()).allZones().stream().map(CaptureZoneView::from).toList();
+        List<CaptureZoneView> views=CaptureZoneData.get(server.overworld()).allZones().stream().limit(4096).map(CaptureZoneView::from).toList();
         SettlementNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), new CaptureZoneSnapshotPacket(views));
     }
 

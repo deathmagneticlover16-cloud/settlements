@@ -16,16 +16,18 @@ import java.util.function.Supplier;
 
 public record CaptureZoneSnapshotPacket(List<CaptureZoneView> zones) {
     public static void encode(CaptureZoneSnapshotPacket packet, FriendlyByteBuf buffer) {
-        buffer.writeVarInt(packet.zones.size());
-        for (CaptureZoneView zone : packet.zones) {
+        int count = Math.min(4096, packet.zones.size());
+        buffer.writeVarInt(count);
+        for (int i = 0; i < count; i++) {
+            CaptureZoneView zone = packet.zones.get(i);
             buffer.writeUUID(zone.id()); buffer.writeUtf(zone.settlementId(), 64); buffer.writeEnum(zone.type()); buffer.writeUtf(zone.dimension(), 128);
             buffer.writeBlockPos(zone.pos1()); buffer.writeBlockPos(zone.pos2()); buffer.writeDouble(zone.progress()); buffer.writeEnum(zone.state()); buffer.writeUtf(zone.attackerTeam(), 64);
             buffer.writeBoolean(zone.captured());
         }
     }
     public static CaptureZoneSnapshotPacket decode(FriendlyByteBuf buffer) {
-        int count = buffer.readVarInt();
-        if (count < 0 || count > 65536 || count > buffer.readableBytes() / 44) throw new IllegalArgumentException("Invalid capture zone count");
+        int count = PacketValidation.readCount(buffer, 4096, "capture zone");
+        if (count > buffer.readableBytes() / 44) throw new IllegalArgumentException("Truncated capture zone payload");
         List<CaptureZoneView> zones = new ArrayList<>(count);
         for (int i=0;i<count;i++) {
             UUID id=buffer.readUUID(); String settlement=buffer.readUtf(64); CaptureZoneData.ZoneType type=buffer.readEnum(CaptureZoneData.ZoneType.class); String dimension=buffer.readUtf(128);

@@ -46,26 +46,40 @@ public final class CampaignSystemsManager {
     }
 
     public static CampaignSystemsData.RegionRecord completeRegion(ServerPlayer player) {
-        BlockPos first = REGION_POS1.get(player.getUUID());
-        String dimension = REGION_DIM.get(player.getUUID());
+        BlockPos first = REGION_POS1.remove(player.getUUID());
+        String dimension = REGION_DIM.remove(player.getUUID());
         if (first == null || dimension == null || !dimension.equals(player.serverLevel().dimension().location().toString())) return null;
         return new CampaignSystemsData.RegionRecord(dimension, first, player.blockPosition());
+    }
+
+    public static void clearPlayerState(UUID playerId) {
+        if (playerId == null) return;
+        REGION_POS1.remove(playerId);
+        REGION_DIM.remove(playerId);
+    }
+
+    public static void clearRuntimeState() {
+        REGION_POS1.clear();
+        REGION_DIM.clear();
     }
 
     public static int recalculateHousing(ServerLevel level, SettlementData.SettlementRecord settlement) {
         CampaignSystemsData extra = CampaignSystemsData.get(level);
         int beds = 0;
         for (CampaignSystemsData.RegionRecord region : extra.housingAreas(settlement.getId())) {
+            if (!region.valid() || region.volume() > CampaignSystemsData.MAX_HOUSING_VOLUME) continue;
             ServerLevel regionLevel = level.getServer().getLevel(net.minecraft.resources.ResourceKey.create(
                     net.minecraft.core.registries.Registries.DIMENSION,
                     net.minecraft.resources.ResourceLocation.tryParse(region.dimension())));
-            if (regionLevel == null || region.volume() > 500_000L) continue;
+            if (regionLevel == null) continue;
+            BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
             for (int x = region.min().getX(); x <= region.max().getX(); x++) {
-                for (int y = region.min().getY(); y <= region.max().getY(); y++) {
-                    for (int z = region.min().getZ(); z <= region.max().getZ(); z++) {
-                        BlockPos pos = new BlockPos(x, y, z);
-                        if (!region.contains(region.dimension(), pos)) continue;
-                        BlockState state = regionLevel.getBlockState(pos);
+                for (int z = region.min().getZ(); z <= region.max().getZ(); z++) {
+                    cursor.set(x, region.min().getY(), z);
+                    if (!regionLevel.hasChunkAt(cursor)) continue;
+                    for (int y = region.min().getY(); y <= region.max().getY(); y++) {
+                        cursor.setY(y);
+                        BlockState state = regionLevel.getBlockState(cursor);
                         if (state.getBlock() instanceof BedBlock && state.hasProperty(BedBlock.PART)
                                 && state.getValue(BedBlock.PART) == BedPart.HEAD) beds++;
                     }

@@ -1,4 +1,4 @@
-# The Culling GUI catalog
+# Settlements GUI catalog
 
 The interface is organized as a small set of reusable workspaces. Tabs are modes inside a workspace rather than separate screens.
 
@@ -33,4 +33,4 @@ The interface is organized as a small set of reusable workspaces. Tabs are modes
 - Campaign toast
 - Recruits world-map settlement markers
 
-Character creation has two steps: Identity and Body, then Traits. The former standalone preview and Main Seat pages were removed in The Culling.
+Character creation has two steps: Identity and Body, then Traits. Main Seat selection is part of the Character workspace.

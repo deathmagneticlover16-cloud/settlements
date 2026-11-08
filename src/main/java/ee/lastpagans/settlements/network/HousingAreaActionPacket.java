@@ -20,7 +20,9 @@ public record HousingAreaActionPacket(String settlementId, Action action, int ar
     public static void handle(HousingAreaActionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer player = context.getSender();
-        if (player != null) context.enqueueWork(() -> SettlementManager.handleHousingAreaAction(player, packet));
+        if (player != null) context.enqueueWork(() -> {
+            if (ClientActionLimiter.allow(player, "housing-area", 2)) SettlementManager.handleHousingAreaAction(player, packet);
+        });
         context.setPacketHandled(true);
     }
 }

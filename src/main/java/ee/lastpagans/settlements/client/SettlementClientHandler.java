@@ -57,4 +57,5 @@ public final class SettlementClientHandler {
     }
     public static void cacheMapMarkers(MapMarkerSnapshot snapshot) { mapMarkers = snapshot; }
     public static MapMarkerSnapshot mapMarkers() { return mapMarkers; }
+    public static void clearCaches() { mapMarkers = new MapMarkerSnapshot(java.util.List.of()); }
 }

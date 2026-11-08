@@ -30,7 +30,9 @@ public record AreaSelectionPacket(String settlementId, AreaSelection.Type type, 
     public static void handle(AreaSelectionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer sender = context.getSender();
-        if (sender != null) context.enqueueWork(() -> SettlementManager.handleAreaSelection(sender, packet));
+        if (sender != null) context.enqueueWork(() -> {
+            if (ClientActionLimiter.allow(sender, "area-selection", 5)) SettlementManager.handleAreaSelection(sender, packet);
+        });
         context.setPacketHandled(true);
     }
 }

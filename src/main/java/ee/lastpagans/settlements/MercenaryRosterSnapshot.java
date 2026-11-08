@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import net.minecraft.network.FriendlyByteBuf;
 
 import java.util.ArrayList;
@@ -9,15 +10,15 @@ public record MercenaryRosterSnapshot(String settlementId, String settlementName
                                       int reliability, List<Entry> entries, String message) {
     public void encode(FriendlyByteBuf buffer) {
         buffer.writeUtf(settlementId, 64); buffer.writeUtf(settlementName, 96); buffer.writeUtf(factionName, 96);
-        buffer.writeInt(availableTreasury); buffer.writeInt(reliability); buffer.writeVarInt(entries.size());
-        for (Entry entry : entries) entry.encode(buffer);
+        buffer.writeInt(availableTreasury); buffer.writeInt(reliability);
+        PacketValidation.writeCollection(buffer, entries, 128, (buf, entry) -> entry.encode(buf));
         buffer.writeUtf(message == null ? "" : message, 512);
     }
 
     public static MercenaryRosterSnapshot decode(FriendlyByteBuf buffer) {
         String settlement = buffer.readUtf(64), settlementName = buffer.readUtf(96), faction = buffer.readUtf(96);
         int treasury = buffer.readInt(), reliability = buffer.readInt();
-        int count = Math.min(128, Math.max(0, buffer.readVarInt()));
+        int count = PacketValidation.readCount(buffer, 128, "mercenary company");
         List<Entry> entries = new ArrayList<>(count); for (int i = 0; i < count; i++) entries.add(Entry.decode(buffer));
         return new MercenaryRosterSnapshot(settlement, settlementName, faction, treasury, reliability, List.copyOf(entries), buffer.readUtf(512));
     }

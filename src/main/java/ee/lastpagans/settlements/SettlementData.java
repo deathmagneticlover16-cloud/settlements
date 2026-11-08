@@ -11,6 +11,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,8 +27,10 @@ public final class SettlementData extends SavedData {
     private static final String DATA_NAME = "settlements_core";
 
     private final Map<String, SettlementRecord> settlements = new LinkedHashMap<>();
+    private final Collection<SettlementRecord> settlementsView = Collections.unmodifiableCollection(settlements.values());
     private final Map<UUID, String> selectedSettlementByPlayer = new HashMap<>();
     private final Map<UUID, CharacterRecord> characters = new HashMap<>();
+    private final Collection<CharacterRecord> charactersView = Collections.unmodifiableCollection(characters.values());
     private final Set<UUID> redeemedSettlerContracts = new HashSet<>();
 
     public static SettlementData get(ServerLevel level) {
@@ -115,7 +118,7 @@ public final class SettlementData extends SavedData {
     }
 
     public Collection<SettlementRecord> getSettlements() {
-        return List.copyOf(settlements.values());
+        return settlementsView;
     }
 
     public List<SettlementRecord> getOwnedSettlements(UUID playerId) {
@@ -253,7 +256,7 @@ public final class SettlementData extends SavedData {
     }
 
     public Collection<CharacterRecord> getCharacters() {
-        return List.copyOf(characters.values());
+        return charactersView;
     }
 
     public void resetCharacter(UUID playerId) {

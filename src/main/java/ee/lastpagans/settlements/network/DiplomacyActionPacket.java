@@ -22,7 +22,9 @@ public record DiplomacyActionPacket(String action, String targetFaction, UUID pr
     }
     public static void handle(DiplomacyActionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get(); ServerPlayer player = context.getSender();
-        if (player != null) context.enqueueWork(() -> CampaignManager.handleDiplomacyAction(player, packet.action, packet.targetFaction, packet.proposalId, packet.warId, packet.extra));
+        if (player != null) context.enqueueWork(() -> {
+            if (ClientActionLimiter.allow(player, "diplomacy-action", 2)) CampaignManager.handleDiplomacyAction(player, packet.action, packet.targetFaction, packet.proposalId, packet.warId, packet.extra);
+        });
         context.setPacketHandled(true);
     }
 }

@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import net.minecraft.nbt.CompoundTag;
@@ -44,7 +45,7 @@ public record DiplomacySnapshot(
                 // Protected admin polities belong in admin/recovery tools, never in ordinary diplomacy.
                 // This also avoids showing operators buttons that the server will correctly reject.
                 if (campaignSystems.factionProtected(faction.getStringID())) continue;
-                CampaignData.DiplomacyRecord relation = own.isBlank() ? null : campaign.relation(own, faction.getStringID());
+                CampaignData.DiplomacyRecord relation = own.isBlank() ? null : campaign.relationIfPresent(own, faction.getStringID());
                 SettlementData.CharacterRecord ownCharacter = factionLeaderCharacter(player, ownFaction);
                 SettlementData.CharacterRecord otherCharacter = factionLeaderCharacter(player, faction);
                 String ownFaith = ownCharacter == null ? "" : ownCharacter.getFaith();
@@ -69,7 +70,7 @@ public record DiplomacySnapshot(
                 .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
                         CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(), value.isCapital(),
                         CampaignManager.canRepresentSettlement(player, value), value.getClaimLinks().stream()
-                        .map(claim -> new ClaimTarget(claim.id(), claim.name())).toList()))
+                        .limit(64).map(claim -> new ClaimTarget(claim.id(), claim.name())).toList()))
                 .sorted(Comparator.comparing(SettlementTarget::factionName, String.CASE_INSENSITIVE_ORDER)
                         .thenComparing(SettlementTarget::settlementName, String.CASE_INSENSITIVE_ORDER))
                 .toList();
@@ -148,11 +149,6 @@ public record DiplomacySnapshot(
         return SettlementData.get(viewer.serverLevel()).getCharacter(faction.getTeamLeaderUUID());
     }
 
-    private static String factionLeaderFaith(ServerPlayer viewer, RecruitsFaction faction) {
-        SettlementData.CharacterRecord character = factionLeaderCharacter(viewer, faction);
-        return character == null ? "" : character.getFaith();
-    }
-
     private static String prettyTerm(CampaignSystemsData.PeaceTerm term) {
         return switch (term.type()) {
             case "TREASURY" -> term.amount() + " treasury";
@@ -169,9 +165,9 @@ public record DiplomacySnapshot(
 
     public void encode(FriendlyByteBuf buffer) {
         buffer.writeUtf(ownFactionId, 64); buffer.writeUtf(ownFactionName, 64); buffer.writeUtf(viewerRank, 32); buffer.writeBoolean(canManage); buffer.writeBoolean(canDeclareWar);
-        writeList(buffer, relations, RelationEntry::encode); writeList(buffer, settlements, SettlementTarget::encode);
-        writeList(buffer, proposals, ProposalEntry::encode); writeList(buffer, wars, WarEntry::encode);
-        writeList(buffer, aid, AidEntry::encode);
+        writeList(buffer, relations, 256, RelationEntry::encode); writeList(buffer, settlements, 1024, SettlementTarget::encode);
+        writeList(buffer, proposals, 256, ProposalEntry::encode); writeList(buffer, wars, 256, WarEntry::encode);
+        writeList(buffer, aid, 512, AidEntry::encode);
         buffer.writeUtf(message, 256);
     }
 
@@ -182,18 +178,19 @@ public record DiplomacySnapshot(
                 readList(buffer, AidEntry::decode, 512), buffer.readUtf(256));
     }
 
-    private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, Encoder<T> encoder) {
-        buffer.writeVarInt(values.size()); values.forEach(value -> encoder.encode(value, buffer));
+    private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, int maximum, Encoder<T> encoder) {
+        int count = Math.min(maximum, values.size()); buffer.writeVarInt(count);
+        for (int i = 0; i < count; i++) encoder.encode(values.get(i), buffer);
     }
     private static <T> List<T> readList(FriendlyByteBuf buffer, Decoder<T> decoder, int maximum) {
-        int count = Math.min(maximum, buffer.readVarInt()); List<T> values = new ArrayList<>(count);
+        int count = PacketValidation.readCount(buffer, maximum, "diplomacy entry"); List<T> values = new ArrayList<>(count);
         for (int i = 0; i < count; i++) values.add(decoder.decode(buffer)); return values;
     }
     private static void writeStrings(FriendlyByteBuf buffer, List<String> values) {
-        buffer.writeVarInt(values.size()); values.forEach(value -> buffer.writeUtf(value, 64));
+        PacketValidation.writeCollection(buffer, values, 128, (buf, value) -> buf.writeUtf(value, 64));
     }
     private static List<String> readStrings(FriendlyByteBuf buffer) {
-        int count = Math.min(128, buffer.readVarInt()); List<String> values = new ArrayList<>(count);
+        int count = PacketValidation.readCount(buffer, 128, "diplomacy string"); List<String> values = new ArrayList<>(count);
         for (int i = 0; i < count; i++) values.add(buffer.readUtf(64)); return values;
     }
     private static CompoundTag safe(CompoundTag tag) { return tag == null ? new CompoundTag() : tag; }
@@ -217,12 +214,13 @@ public record DiplomacySnapshot(
         private static void encode(SettlementTarget value, FriendlyByteBuf buffer) {
             buffer.writeUtf(value.settlementId, 64); buffer.writeUtf(value.settlementName, 64); buffer.writeUtf(value.factionId, 64);
             buffer.writeUtf(value.factionName, 64); buffer.writeUtf(value.rank, 32); buffer.writeBoolean(value.capital); buffer.writeBoolean(value.manageable);
-            buffer.writeVarInt(value.claims.size());
-            for (ClaimTarget claim : value.claims) { buffer.writeUUID(claim.id()); buffer.writeUtf(claim.name(), 64); }
+            PacketValidation.writeCollection(buffer, value.claims, 64, (buf, claim) -> {
+                buf.writeUUID(claim.id()); buf.writeUtf(claim.name(), 64);
+            });
         }
         private static SettlementTarget decode(FriendlyByteBuf buffer) {
             String id = buffer.readUtf(64), name = buffer.readUtf(64), faction = buffer.readUtf(64), factionName = buffer.readUtf(64), rank = buffer.readUtf(32);
-            boolean capital = buffer.readBoolean(); boolean manageable = buffer.readBoolean(); int count = Math.min(256, buffer.readVarInt()); List<ClaimTarget> claims = new ArrayList<>(count);
+            boolean capital = buffer.readBoolean(); boolean manageable = buffer.readBoolean(); int count = PacketValidation.readCount(buffer, 64, "settlement claim"); List<ClaimTarget> claims = new ArrayList<>(count);
             for (int i = 0; i < count; i++) claims.add(new ClaimTarget(buffer.readUUID(), buffer.readUtf(64)));
             return new SettlementTarget(id, name, faction, factionName, rank, capital, manageable, List.copyOf(claims));
         }

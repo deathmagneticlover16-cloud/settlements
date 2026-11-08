@@ -319,7 +319,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         stat(graphics, "Political relations", r.relationship(), 292, 125);
         stat(graphics, "Religious compatibility", signed(r.faithModifier()), 292, 144);
         stat(graphics, "Reliability", signed(r.reliability()), 292, 163);
-        graphics.drawWordWrap(font, Component.literal("Political relations, religious compatibility and reliability are separate. Formal war controls Recruits battlefield hostility."), left + 20, top + 132, 235, 0xFFAAAAAA);
+        graphics.drawWordWrap(font, Component.literal("Formal war controls battlefield hostility."), left + 20, top + 132, 235, 0xFFAAAAAA);
     }
 
     private void renderDeclaration(GuiGraphics graphics) {

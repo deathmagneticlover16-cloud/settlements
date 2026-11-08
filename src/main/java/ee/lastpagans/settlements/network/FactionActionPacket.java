@@ -13,20 +13,22 @@ public record FactionActionPacket(String action, UUID targetPlayer, int tier, St
         buffer.writeUtf(packet.action, 48);
         buffer.writeBoolean(packet.targetPlayer != null);
         if (packet.targetPlayer != null) buffer.writeUUID(packet.targetPlayer);
-        buffer.writeVarInt(packet.tier);
+        buffer.writeVarInt(Math.max(0, Math.min(24, packet.tier)));
         buffer.writeUtf(packet.value == null ? "" : packet.value, 256);
     }
     public static FactionActionPacket decode(FriendlyByteBuf buffer) {
         String action = buffer.readUtf(48);
         UUID target = buffer.readBoolean() ? buffer.readUUID() : null;
-        int tier = buffer.readVarInt();
+        int tier = PacketValidation.readInt(buffer, 0, 24, "faction tier");
         String value = buffer.readUtf(256);
         return new FactionActionPacket(action, target, tier, value);
     }
     public static void handle(FactionActionPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer player = context.getSender();
-        if (player != null) context.enqueueWork(() -> CampaignManager.handleFactionAction(player, packet.action, packet.targetPlayer, packet.tier, packet.value));
+        if (player != null) context.enqueueWork(() -> {
+            if (ClientActionLimiter.allow(player, "faction-action", 2)) CampaignManager.handleFactionAction(player, packet.action, packet.targetPlayer, packet.tier, packet.value);
+        });
         context.setPacketHandled(true);
     }
 }

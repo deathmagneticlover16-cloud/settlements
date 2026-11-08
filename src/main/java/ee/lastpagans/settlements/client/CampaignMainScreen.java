@@ -9,9 +9,12 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 
 public final class CampaignMainScreen extends ScaledCampaignScreen {
     private static final int W = 480, H = 350;
+    private static final ResourceLocation TREASURY_ICON = new ResourceLocation("settlements", "textures/gui/icons/treasury.png");
+    private static final ResourceLocation STABILITY_ICON = new ResourceLocation("settlements", "textures/gui/icons/stability.png");
     private final CampaignSnapshot snapshot;
     private int left, top;
     private BannerRenderer banner;
@@ -69,9 +72,9 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
 
         stat(graphics, "Settlements", snapshot.settlementCount(), 22, 225);
         stat(graphics, "Population", snapshot.totalPopulation(), 170, 225);
-        stat(graphics, "Treasury", snapshot.totalTreasury(), 330, 225);
+        iconStat(graphics, TREASURY_ICON, "Treasury", snapshot.totalTreasury(), 330, 225);
         stat(graphics, "Manpower", snapshot.availableManpower() + "/" + snapshot.maximumManpower(), 22, 247);
-        stat(graphics, "Stability", snapshot.averageStability() + "%", 170, 247);
+        iconStat(graphics, STABILITY_ICON, "Stability", snapshot.averageStability() + "%", 170, 247);
         stat(graphics, "Food", snapshot.totalFood(), 330, 247);
         graphics.drawString(font, "Selected settlement: " + snapshot.selectedSettlementName(), left + 22, top + 267, 0xFFB8B0A0, false);
 
@@ -85,6 +88,11 @@ public final class CampaignMainScreen extends ScaledCampaignScreen {
 
     private void stat(GuiGraphics graphics, String name, Object value, int x, int y) {
         graphics.drawString(font, name + ": " + value, left + x, top + y, 0xFFFFFFFF, false);
+    }
+
+    private void iconStat(GuiGraphics graphics, ResourceLocation icon, String name, Object value, int x, int y) {
+        graphics.blit(icon, left + x, top + y - 3, 0, 0, 14, 14, 32, 32);
+        graphics.drawString(font, name + ": " + value, left + x + 18, top + y, 0xFFFFFFFF, false);
     }
 
     @Override public boolean isPauseScreen() { return false; }

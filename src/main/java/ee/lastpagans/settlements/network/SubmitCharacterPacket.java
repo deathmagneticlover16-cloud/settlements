@@ -39,7 +39,7 @@ public record SubmitCharacterPacket(
         CharacterBodyCodec.write(buffer, packet.body);
         buffer.writeVarInt(Math.min(3, packet.traits.size()));
         for (int i = 0; i < Math.min(3, packet.traits.size()); i++) buffer.writeUtf(packet.traits.get(i), 32);
-        buffer.writeVarInt(packet.rerollRound + 1);
+        buffer.writeVarInt(Math.max(0, Math.min(3, packet.rerollRound + 1)));
     }
 
     public static SubmitCharacterPacket decode(FriendlyByteBuf buffer) {
@@ -51,29 +51,22 @@ public record SubmitCharacterPacket(
         String address = buffer.readUtf(16);
         String title = buffer.readUtf(32);
         CharacterBodyData body = CharacterBodyCodec.read(buffer);
-        int count = Math.min(3, Math.max(0, buffer.readVarInt()));
+        int count = PacketValidation.readCount(buffer, 3, "character trait");
         List<String> traits = new ArrayList<>(count);
         for (int i = 0; i < count; i++) traits.add(buffer.readUtf(32));
-        return new SubmitCharacterPacket(sessionId, first, middle, last, faith, address, title, body, traits, buffer.readVarInt() - 1);
+        return new SubmitCharacterPacket(sessionId, first, middle, last, faith, address, title, body, traits,
+                PacketValidation.readInt(buffer, 0, 3, "trait roll") - 1);
     }
 
     public static void handle(SubmitCharacterPacket packet, Supplier<NetworkEvent.Context> supplier) {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer sender = context.getSender();
         if (sender != null) {
-            context.enqueueWork(() -> SettlementManager.submitCharacter(
-                    sender,
-                    packet.sessionId,
-                    packet.firstName,
-                    packet.middleName,
-                    packet.lastName,
-                    packet.faith,
-                    packet.address,
-                    packet.title,
-                    packet.body,
-                    packet.traits,
-                    packet.rerollRound
-            ));
+            context.enqueueWork(() -> {
+                if (ClientActionLimiter.allow(sender, "character-submit", 20)) SettlementManager.submitCharacter(
+                        sender, packet.sessionId, packet.firstName, packet.middleName, packet.lastName,
+                        packet.faith, packet.address, packet.title, packet.body, packet.traits, packet.rerollRound);
+            });
         }
         context.setPacketHandled(true);
     }

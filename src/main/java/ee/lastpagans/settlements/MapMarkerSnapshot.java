@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import net.minecraft.network.FriendlyByteBuf;
@@ -9,18 +10,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 public record MapMarkerSnapshot(List<Marker> markers) {
+    public MapMarkerSnapshot {
+        markers = markers == null ? List.of() : List.copyOf(markers);
+    }
+
     public static MapMarkerSnapshot from(ServerLevel level) {
         SettlementData settlements = SettlementData.get(level);
         CampaignData campaign = CampaignData.get(level);
         List<Marker> values = new ArrayList<>();
         for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
+            if (values.size() >= 2048) break;
             if (!settlement.hasTownSquare()) continue;
             String factionName = settlement.getFactionTeam().isBlank() ? "Independent" : settlement.getFactionTeam();
             if (!settlement.getFactionTeam().isBlank() && FactionEvents.recruitsFactionManager != null) {
                 RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(settlement.getFactionTeam());
                 if (faction != null) factionName = faction.getTeamDisplayName();
             }
-            CampaignData.SettlementVisualRecord visual = campaign.visualFor(settlement.getId());
+            CampaignData.SettlementVisualRecord visual = campaign.visual(settlement.getId());
+            CampaignData.FactionProfile profile = campaign.factionProfileIfPresent(settlement.getFactionTeam());
             values.add(new Marker(
                     settlement.getId(),
                     settlement.getName(),
@@ -33,20 +40,21 @@ public record MapMarkerSnapshot(List<Marker> markers) {
                     factionName,
                     settlement.getDisplayedPopulation(),
                     settlement.getStability(),
-                    visual.getBannerMode().name(),
-                    FactionColorUtil.rgb(FactionColorUtil.dye(campaign.factionProfile(settlement.getFactionTeam()).teamDye()))
+                    visual == null ? CampaignData.BannerMode.FACTION.name() : visual.getBannerMode().name(),
+                    FactionColorUtil.rgb(FactionColorUtil.dye(profile == null ? "white" : profile.teamDye()))
             ));
         }
         return new MapMarkerSnapshot(values);
     }
 
     public void encode(FriendlyByteBuf buffer) {
-        buffer.writeVarInt(markers.size());
-        markers.forEach(marker -> marker.encode(buffer));
+        int count = Math.min(2048, markers.size());
+        buffer.writeVarInt(count);
+        for (int i = 0; i < count; i++) markers.get(i).encode(buffer);
     }
 
     public static MapMarkerSnapshot decode(FriendlyByteBuf buffer) {
-        int count = Math.min(2048, buffer.readVarInt());
+        int count = PacketValidation.readCount(buffer, 2048, "map marker");
         List<Marker> markers = new ArrayList<>(count);
         for (int i = 0; i < count; i++) markers.add(Marker.decode(buffer));
         return new MapMarkerSnapshot(markers);

@@ -47,7 +47,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
 
     @Override public void tick() {
         super.tick();
-        if (++refreshTicks >= 20) {
+        if (++refreshTicks >= 100) {
             refreshTicks = 0;
             SettlementNetwork.CHANNEL.sendToServer(new ResearchActionPacket("REFRESH", ""));
         }
@@ -141,7 +141,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
             String state = entry.completed() ? "DONE" : entry.available() ? "READY" : "LOCKED";
             graphics.drawString(font, state, node.x() + 24, node.y() + 15, color, false);
         }
-        if (maxScroll() > 0) graphics.drawString(font, "Mouse wheel to scroll technology rows", left + TREE_X + 8, top + TREE_Y + TREE_H - 13, 0xFF888888, false);
+        if (maxScroll() > 0) graphics.drawString(font, "Scroll for more", left + TREE_X + 8, top + TREE_Y + TREE_H - 13, 0xFF888888, false);
     }
 
     private void renderDependencyEdges(GuiGraphics graphics, Map<String, Node> byId) {
@@ -175,7 +175,7 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "TECHNOLOGY", x, y, 0xFFE7D8B0, false);
         ResearchSnapshot.TechnologyEntry entry = selected >= 0 && selected < snapshot.technologies().size() ? snapshot.technologies().get(selected) : null;
         if (entry == null) {
-            graphics.drawWordWrap(font, Component.literal("Select a technology node. Arrows show the prerequisite path: research the node on the left before its descendants become available."), x, y + 22, 166, 0xFFAAAAAA);
+            graphics.drawWordWrap(font, Component.literal("Select a technology. Links show prerequisites."), x, y + 22, 166, 0xFFAAAAAA);
             return;
         }
         graphics.renderItem(icon(entry.icon()), x, y + 22);

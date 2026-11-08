@@ -65,7 +65,6 @@ import java.util.Set;
 
 public final class SettlementManager {
     public static final double MANPOWER_PER_POPULATION = 0.40D;
-    public static final int PROFESSIONAL_WEALTH_COST = 10;
     public static final int SMALL_SETTLEMENT_POPULATION = 50;
     public static final double SMALL_LEVY_SHARE = 0.75D;
     public static final double NORMAL_LEVY_SHARE = 0.50D;
@@ -82,8 +81,6 @@ public final class SettlementManager {
     public static final String TAG_MERCENARY_MISSED_PAYMENTS = "SettlementsMercenaryMissedPayments";
     public static final String TAG_MERCENARY_COMPANY = "SettlementsMercenaryCompany";
     public static final String TAG_UNIT_TYPE = "SettlementsUnitType";
-    public static final int MERCENARY_DEFAULT_WAGE = 20;
-    public static final int MERCENARY_DEFAULT_INTERVAL_DAYS = 7;
     public static final int MERCENARY_DESERTION_MISSES = 3;
 
     public static final TagKey<Item> CURRENCY = TagKey.create(
@@ -94,6 +91,14 @@ public final class SettlementManager {
     private static final long SETTLEMENT_DELETE_CONFIRM_MILLIS = 30_000L;
 
     private SettlementManager() {
+    }
+
+    public static void clearPlayerState(UUID playerId) {
+        if (playerId != null) PENDING_SETTLEMENT_DELETIONS.remove(playerId);
+    }
+
+    public static void clearRuntimeState() {
+        PENDING_SETTLEMENT_DELETIONS.clear();
     }
 
     public static void open(ServerPlayer player) {
@@ -183,7 +188,6 @@ public final class SettlementManager {
             if (data.getSettlement(settlement.getId()) == null) {
                 player.sendSystemMessage(Component.literal(result));
                 CampaignManager.openMain(player);
-                CampaignManager.sendMapMarkers(player);
                 return;
             }
             sendSnapshot(player, settlement, false, result);
@@ -233,7 +237,11 @@ public final class SettlementManager {
             case REFRESH -> "Stats refreshed.";
         };
         sendSnapshot(player, settlement, false, result);
-        CampaignManager.sendMapMarkers(player);
+        if (switch (action) {
+            case RECRUIT_UNIT, RAISE_LEVY, RETURN_LEVY, CLAIM_CONTRACT, SET_CUSTOM_BANNER,
+                    USE_FACTION_BANNER, CLEAR_BANNER, RENAME_SETTLEMENT, SET_TOWN_SQUARE -> true;
+            default -> false;
+        }) CampaignManager.broadcastMapMarkers(player.getServer());
     }
 
     public static void handleAreaSelection(ServerPlayer player, AreaSelectionPacket packet) {
@@ -271,7 +279,8 @@ public final class SettlementManager {
         if (type.horizontalOnly()) second = new BlockPos(second.getX(), first.getY(), second.getZ());
         BlockPos min = AreaSelection.min(first, second), max = AreaSelection.max(first, second);
         int width = max.getX() - min.getX() + 1, height = max.getY() - min.getY() + 1, depth = max.getZ() - min.getZ() + 1;
-        if (width > 128 || depth > 128 || height > 128) return "Selections may be at most 128 blocks on each axis.";
+        if (width > CampaignSystemsData.MAX_REGION_AXIS || depth > CampaignSystemsData.MAX_REGION_AXIS
+                || height > CampaignSystemsData.MAX_REGION_AXIS) return "Selections may be at most 128 blocks on each axis.";
         if (min.getY() < player.serverLevel().getMinBuildHeight() || max.getY() >= player.serverLevel().getMaxBuildHeight()) return "That selection extends outside the buildable world.";
         if (min.distSqr(player.blockPosition()) > 192D * 192D && max.distSqr(player.blockPosition()) > 192D * 192D) return "Move within 192 blocks of the area before confirming it.";
         String dimension = player.serverLevel().dimension().location().toString();
@@ -279,9 +288,14 @@ public final class SettlementManager {
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
         return switch (type) {
             case HOUSING -> {
+                if (region.volume() > CampaignSystemsData.MAX_HOUSING_VOLUME) {
+                    yield "Housing areas may contain at most " + CampaignSystemsData.MAX_HOUSING_VOLUME + " blocks.";
+                }
                 if (areaIndex >= 0) {
                     if (!extra.replaceHousingArea(settlement.getId(), areaIndex, region)) yield "That housing area no longer exists.";
-                } else extra.addHousingArea(settlement.getId(), region);
+                } else if (!extra.addHousingArea(settlement.getId(), region)) {
+                    yield "A settlement may have at most " + CampaignSystemsData.MAX_HOUSING_AREAS + " housing areas.";
+                }
                 int beds = CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement);
                 yield (areaIndex >= 0 ? "Housing area updated: " : "Housing area added: ") + beds + " total housing bed(s).";
             }
@@ -332,10 +346,6 @@ public final class SettlementManager {
                 ? action.get() : "Only the settlement owner or an administrator may do that.";
     }
 
-    public static String recruitProfessionals(ServerPlayer player, SettlementData.SettlementRecord settlement, int amount) {
-        return recruitProfessionals(player, settlement, CampaignData.UnitType.RECRUIT, amount);
-    }
-
     public static String recruitProfessionals(ServerPlayer player, SettlementData.SettlementRecord settlement, CampaignData.UnitType unitType, int amount) {
         if (amount <= 0) return "Invalid recruitment amount.";
         String validation = validateMilitarySpawnSetup(player.getServer(), settlement);
@@ -379,31 +389,6 @@ public final class SettlementManager {
             case NOMAD -> 25;
             case LEVY -> 0;
         };
-    }
-
-    public static String raiseLevy(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        String validation = validateMilitarySpawnSetup(player.getServer(), settlement);
-        if (validation != null) return validation;
-        int available = settlement.getAvailableManpower();
-        if (available <= 0) return "No available manpower to mobilise.";
-        double share = settlement.getCivilianPopulation() < SMALL_SETTLEMENT_POPULATION ? SMALL_LEVY_SHARE : NORMAL_LEVY_SHARE;
-        int manpowerSpent = Math.max(1, (int) Math.floor(available * share));
-        int count = manpowerSpent * 2;
-        ServerLevel level = resolveMusterGroundLevel(player.getServer(), settlement);
-        if (level == null) return "The saved Muster Ground dimension is unavailable.";
-        PlayerTeam team = settlement.getEffectiveRecruitsTeam().isBlank() ? null : level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
-        UUID temporaryBatch = UUID.randomUUID();
-        List<UUID> spawned = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            AbstractRecruitEntity recruit = spawnRecruit(level, player, settlement, CampaignData.UnitType.LEVY, i, team, true, temporaryBatch);
-            if (recruit == null) { discardSpawned(level, spawned); return "Levy spawning failed; no manpower was charged."; }
-            spawned.add(recruit.getUUID());
-        }
-        settlement.spendAvailableManpower(manpowerSpent);
-        UUID storedBatch = settlement.addLevyBatch(manpowerSpent, spawned);
-        for (UUID uuid : spawned) { Entity entity = level.getEntity(uuid); if (entity != null) entity.getPersistentData().putUUID(TAG_BATCH, storedBatch); }
-        int percent = (int) Math.round(share * 100.0D);
-        return "Raised " + count + " Levymen using " + manpowerSpent + " available MP (" + percent + "% mobilisation).";
     }
 
     static AbstractRecruitEntity spawnRecruit(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,
@@ -1045,31 +1030,6 @@ public final class SettlementManager {
         });
     }
 
-    private static BlockPos offsetSpawn(BlockPos base, int index) {
-        int width = 7;
-        int row = index / width;
-        int x = (index % width) - (width / 2);
-        int z = row - 1;
-        return base.offset(x * 2, 0, z * 2);
-    }
-
-    private static BlockPos findSafeSpawn(ServerLevel level, BlockPos base, int index) {
-        BlockPos preferred = offsetSpawn(base, index);
-        for (int radius = 0; radius <= 8; radius++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    if (radius > 0 && Math.abs(dx) != radius && Math.abs(dz) != radius) continue;
-                    BlockPos column = preferred.offset(dx, 0, dz);
-                    for (int dy = 3; dy >= -3; dy--) {
-                        BlockPos candidate = column.offset(0, dy, 0);
-                        if (isSafeSpawn(level, candidate)) return candidate;
-                    }
-                }
-            }
-        }
-        return preferred;
-    }
-
     private static boolean isSafeSpawn(ServerLevel level, BlockPos pos) {
         return level.getBlockState(pos).isAir()
                 && level.getBlockState(pos.above()).isAir()
@@ -1409,7 +1369,6 @@ public final class SettlementManager {
         String clean = SettlementData.cleanText(value, settlement.getName(), 64);
         if (clean.isBlank()) return "Settlement name cannot be blank.";
         settlement.rename(clean);
-        CampaignManager.broadcastMapMarkers(player.getServer());
         return "Settlement renamed to " + settlement.getName() + ".";
     }
 

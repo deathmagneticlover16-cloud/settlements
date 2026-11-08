@@ -8,6 +8,7 @@ import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.UUID;
 public final class MercenaryCompanyData extends SavedData {
     private static final String DATA_NAME = "settlements_mercenary_companies";
     private final Map<String, CompanyContract> contracts = new LinkedHashMap<>();
+    private final Collection<CompanyContract> contractsView = Collections.unmodifiableCollection(contracts.values());
     private final Map<String, Map<String, Integer>> trust = new HashMap<>();
     private final Set<UUID> retiredUnits = new java.util.HashSet<>();
 
@@ -60,7 +62,7 @@ public final class MercenaryCompanyData extends SavedData {
         return tag;
     }
 
-    public Collection<CompanyContract> contracts() { return List.copyOf(contracts.values()); }
+    public Collection<CompanyContract> contracts() { return contractsView; }
     public CompanyContract contract(String companyId) { return contracts.get(SettlementData.normalizeId(companyId)); }
     public void put(CompanyContract contract) { if (contract != null && !contract.companyId().isBlank()) { contracts.put(contract.companyId(), contract); setDirty(); } }
     public CompanyContract remove(String companyId) { CompanyContract removed = contracts.remove(SettlementData.normalizeId(companyId)); if (removed != null) setDirty(); return removed; }

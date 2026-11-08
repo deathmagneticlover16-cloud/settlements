@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 
@@ -24,13 +25,18 @@ public record HousingAreasSnapshot(String settlementId, String settlementName, b
         buffer.writeUtf(settlementId, 64);
         buffer.writeUtf(settlementName, 64);
         buffer.writeBoolean(canManage);
-        buffer.writeCollection(areas, (buf, area) -> area.encode(buf));
+        PacketValidation.writeCollection(buffer, areas, CampaignSystemsData.MAX_HOUSING_AREAS, (buf, area) -> area.encode(buf));
         buffer.writeUtf(message, 256);
     }
 
     public static HousingAreasSnapshot decode(FriendlyByteBuf buffer) {
-        return new HousingAreasSnapshot(buffer.readUtf(64), buffer.readUtf(64), buffer.readBoolean(),
-                buffer.readList(Entry::decode), buffer.readUtf(256));
+        String settlementId = buffer.readUtf(64);
+        String settlementName = buffer.readUtf(64);
+        boolean canManage = buffer.readBoolean();
+        int count = PacketValidation.readCount(buffer, CampaignSystemsData.MAX_HOUSING_AREAS, "housing area");
+        List<Entry> entries = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) entries.add(Entry.decode(buffer));
+        return new HousingAreasSnapshot(settlementId, settlementName, canManage, List.copyOf(entries), buffer.readUtf(256));
     }
 
     public record Entry(int index, String dimension, BlockPos min, BlockPos max) {

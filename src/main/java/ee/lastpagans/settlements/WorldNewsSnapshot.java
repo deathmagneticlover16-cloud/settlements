@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -27,13 +28,12 @@ public record WorldNewsSnapshot(long currentDay, List<Entry> entries) {
 
     public void encode(FriendlyByteBuf buffer) {
         buffer.writeLong(currentDay);
-        buffer.writeVarInt(entries.size());
-        entries.forEach(entry -> entry.encode(buffer));
+        PacketValidation.writeCollection(buffer, entries, 1000, (buf, entry) -> entry.encode(buf));
     }
 
     public static WorldNewsSnapshot decode(FriendlyByteBuf buffer) {
         long currentDay = buffer.readLong();
-        int count = Math.min(1000, buffer.readVarInt());
+        int count = PacketValidation.readCount(buffer, 1000, "world news");
         List<Entry> entries = new ArrayList<>(count);
         for (int i = 0; i < count; i++) entries.add(Entry.decode(buffer));
         return new WorldNewsSnapshot(currentDay, entries);

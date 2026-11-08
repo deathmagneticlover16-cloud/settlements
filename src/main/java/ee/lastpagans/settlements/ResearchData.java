@@ -8,6 +8,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -20,6 +21,7 @@ public final class ResearchData extends SavedData {
 
     /** One active project per political research polity. Progress is stored in 1/1000 ticks. */
     private final Map<String, ActiveResearch> active = new HashMap<>();
+    private final Set<String> activePolitiesView = Collections.unmodifiableSet(active.keySet());
     private final Map<String, Set<String>> completed = new HashMap<>();
 
     public static ResearchData get(ServerLevel level) {
@@ -138,7 +140,7 @@ public final class ResearchData extends SavedData {
         if (sourceCompleted != null || sourceActive != null) setDirty();
     }
 
-    public Set<String> politiesWithActiveResearch() { return Set.copyOf(active.keySet()); }
+    public Set<String> politiesWithActiveResearch() { return activePolitiesView; }
 
     public record ActiveResearch(String polityKey, String stageId, String stageName, long baseTicks, long progressScaledTicks) {
         public ActiveResearch withProgress(long value) { return new ActiveResearch(polityKey, stageId, stageName, baseTicks, value); }

@@ -1,6 +1,8 @@
 package ee.lastpagans.settlements.client;
 
 import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
@@ -29,6 +31,23 @@ public final class TaxRateSlider extends AbstractSliderButton {
 
     @Override protected void updateMessage() { setMessage(Component.literal("Taxation: " + percent() + "% — " + band())); }
     @Override protected void applyValue() { updateMessage(); }
+
+    @Override
+    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        int trackY = getY() + height - 5;
+        graphics.fill(getX(), getY(), getX() + width, getY() + height, active ? 0xFF9C8355 : 0xFF4B4740);
+        graphics.fill(getX() + 1, getY() + 1, getX() + width - 1, getY() + height - 1, 0xFF24211C);
+        graphics.fill(getX() + 7, trackY, getX() + width - 7, trackY + 2, 0xFF111111);
+        int handleX = getX() + 7 + (int)Math.round((width - 14) * value);
+        int handleColor = active && isHoveredOrFocused() ? 0xFFFFE2A3 : 0xFFB89A5E;
+        graphics.fill(handleX - 2, trackY - 3, handleX + 3, trackY + 5, handleColor);
+        var font = Minecraft.getInstance().font;
+        String label = getMessage().getString();
+        int available = Math.max(1, width - 12);
+        if (font.width(label) > available) label = font.plainSubstrByWidth(label, Math.max(1, available - font.width("…"))) + "…";
+        graphics.drawCenteredString(font, label, getX() + width / 2,
+                getY() + 3, active ? 0xFFF4E8CC : 0xFF777777);
+    }
 
     @Override public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         boolean handled = super.keyPressed(keyCode, scanCode, modifiers);

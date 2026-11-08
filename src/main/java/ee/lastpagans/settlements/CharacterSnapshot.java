@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import net.minecraft.network.FriendlyByteBuf;
@@ -88,6 +89,7 @@ public record CharacterSnapshot(
                 .filter(settlement -> administrator || (!extra.settlementProtected(settlement.getId())
                         && !extra.factionProtected(settlement.getFactionTeam())))
                 .map(settlement -> new HoldingEntry(settlement.getId(), settlement.getName(), settlement.getRank().displayName()))
+                .limit(32)
                 .toList();
 
         List<TraitEntry> traits = character.getTraits().stream().map(id -> {
@@ -95,6 +97,7 @@ public record CharacterSnapshot(
             if (definition == null) return new TraitEntry(id, id, "minecraft:book", "NEUTRAL", "Unknown trait", List.of());
             List<String> effects = definition.effects().stream()
                     .map(effect -> effect.label() + " " + effect.displayValue())
+                    .limit(16)
                     .toList();
             return new TraitEntry(definition.id(), definition.name(), definition.iconItem(), definition.tone().name(), definition.description(), effects);
         }).toList();
@@ -144,10 +147,8 @@ public record CharacterSnapshot(
         buffer.writeUtf(factionRank, 32);
         buffer.writeUtf(primarySeat, 64);
         buffer.writeUtf(spouse, 80);
-        buffer.writeVarInt(holdings.size());
-        holdings.forEach(value -> value.encode(buffer));
-        buffer.writeVarInt(traits.size());
-        traits.forEach(value -> value.encode(buffer));
+        PacketValidation.writeCollection(buffer, holdings, 32, (buf, value) -> value.encode(buf));
+        PacketValidation.writeCollection(buffer, traits, 32, (buf, value) -> value.encode(buf));
     }
 
     public static CharacterSnapshot decode(FriendlyByteBuf buffer) {
@@ -170,10 +171,10 @@ public record CharacterSnapshot(
         String factionRank = buffer.readUtf(32);
         String primarySeat = buffer.readUtf(64);
         String spouse = buffer.readUtf(80);
-        int size = Math.min(32, buffer.readVarInt());
+        int size = PacketValidation.readCount(buffer, 32, "character holding");
         List<HoldingEntry> holdings = new ArrayList<>(size);
         for (int i = 0; i < size; i++) holdings.add(HoldingEntry.decode(buffer));
-        int traitCount = Math.min(32, buffer.readVarInt());
+        int traitCount = PacketValidation.readCount(buffer, 32, "character trait");
         List<TraitEntry> traits = new ArrayList<>(traitCount);
         for (int i = 0; i < traitCount; i++) traits.add(TraitEntry.decode(buffer));
         return new CharacterSnapshot(accountName, displayName, firstName, middleName, lastName, renameCurrencyCost, titleLine, faith, devotion, devotionTier, reliabilityTracked, reliability, reliabilityTier, address, house,
@@ -207,8 +208,7 @@ public record CharacterSnapshot(
             buffer.writeUtf(iconItem, 64);
             buffer.writeUtf(tone, 16);
             buffer.writeUtf(description, 180);
-            buffer.writeVarInt(effects.size());
-            effects.forEach(value -> buffer.writeUtf(value, 96));
+            PacketValidation.writeCollection(buffer, effects, 16, (buf, value) -> buf.writeUtf(value, 96));
         }
 
         private static TraitEntry decode(FriendlyByteBuf buffer) {
@@ -217,7 +217,7 @@ public record CharacterSnapshot(
             String icon = buffer.readUtf(64);
             String tone = buffer.readUtf(16);
             String description = buffer.readUtf(180);
-            int count = Math.min(16, buffer.readVarInt());
+            int count = PacketValidation.readCount(buffer, 16, "trait effect");
             List<String> effects = new ArrayList<>(count);
             for (int i = 0; i < count; i++) effects.add(buffer.readUtf(96));
             return new TraitEntry(id, name, icon, tone, description, effects);

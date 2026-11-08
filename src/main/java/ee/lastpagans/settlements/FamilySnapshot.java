@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -54,12 +55,15 @@ public record FamilySnapshot(
         List<AdditionalSpouse> additionalSpouses = new ArrayList<>();
         int secondaryIndex = 1;
         for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(player.getUUID())) {
+            if (additionalSpouses.size() >= 3) break;
             additionalSpouses.add(new AdditionalSpouse(additional.spouseName(), additional.spouseFaith(), additional.spouseTraits(), additional.spouseEffect(), CampaignData.spouseEffectPercent(secondaryIndex++)));
         }
         boolean canMarryAdditional = marriage != null && maxSpouses > spouseCount;
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
-        CampaignSystemsData.CandidateHistory history = extra.candidateHistory(player.getUUID());
-        String preferredGender = history.preferredGender();
+        CampaignSystemsData.CandidateHistory history = extra.candidateHistoryIfPresent(player.getUUID());
+        String preferredGender = history == null ? "ANY" : history.preferredGender();
+        List<String> rejectedCandidates = history == null ? List.of() : history.rejectedIds();
+        List<String> seenCandidates = history == null ? List.of() : history.seenIds();
         int spouseQuality = character == null ? 0 : CampaignDefinitions.totalEffect(character.getTraits(), CampaignDefinitions.EffectKind.SPOUSE_QUALITY);
         if (marriage != null) {
             if (marriage.kind() == CampaignData.MarriageKind.PLAYER && marriage.spousePlayerId() != null) {
@@ -106,13 +110,14 @@ public record FamilySnapshot(
                 })
                 .filter(java.util.Objects::nonNull)
                 .sorted(java.util.Comparator.comparing(PlayerCandidate::name, String.CASE_INSENSITIVE_ORDER))
+                .limit(64)
                 .toList();
 
         String preferredFaith = character != null && character.isCreated() ? character.getFaith() : "";
-        List<CampaignData.NpcSpouse> generatedCandidates = campaign.candidatesFor(player.getUUID(), day, history.rejectedIds(), history.seenIds(), spouseQuality, preferredFaith);
+        List<CampaignData.NpcSpouse> generatedCandidates = campaign.candidatesFor(player.getUUID(), day, rejectedCandidates, seenCandidates, spouseQuality, preferredFaith);
         generatedCandidates.forEach(value -> extra.markCandidateSeen(player.getUUID(), value.name()));
         List<Candidate> candidates = generatedCandidates.stream()
-                .filter(value -> history.rejectedIds().stream().noneMatch(rejected -> rejected.equalsIgnoreCase(value.id()) || rejected.equalsIgnoreCase(value.name())))
+                .filter(value -> rejectedCandidates.stream().noneMatch(rejected -> rejected.equalsIgnoreCase(value.id()) || rejected.equalsIgnoreCase(value.name())))
                 .filter(value -> canMarryAdditional ? value.gender().equalsIgnoreCase("FEMALE") : (preferredGender.equals("ANY") || value.gender().equalsIgnoreCase(preferredGender)))
                 .map(value -> new Candidate(
                         value.id(), value.name(), value.gender(), value.faith(), value.culture(), value.traitsText(), value.effect(),
@@ -165,16 +170,13 @@ public record FamilySnapshot(
         buffer.writeVarInt(spouseCount);
         buffer.writeVarInt(maxSpouses);
         buffer.writeBoolean(canMarryAdditional);
-        buffer.writeVarInt(additionalSpouses.size());
-        additionalSpouses.forEach(value -> value.encode(buffer));
+        PacketValidation.writeCollection(buffer, additionalSpouses, 3, (buf, value) -> value.encode(buf));
         buffer.writeUtf(preferredGender, 12);
         buffer.writeBoolean(pendingProposer != null);
         if (pendingProposer != null) buffer.writeUUID(pendingProposer);
         buffer.writeUtf(pendingProposerName, 80);
-        buffer.writeVarInt(playerCandidates.size());
-        playerCandidates.forEach(candidate -> candidate.encode(buffer));
-        buffer.writeVarInt(candidates.size());
-        candidates.forEach(candidate -> candidate.encode(buffer));
+        PacketValidation.writeCollection(buffer, playerCandidates, 64, (buf, value) -> value.encode(buf));
+        PacketValidation.writeCollection(buffer, candidates, 64, (buf, value) -> value.encode(buf));
         buffer.writeLong(currentDay);
         buffer.writeLong(nextRefreshDay);
         buffer.writeBoolean(canRefresh);
@@ -194,16 +196,16 @@ public record FamilySnapshot(
         int spouseCount = buffer.readVarInt();
         int maxSpouses = buffer.readVarInt();
         boolean canMarryAdditional = buffer.readBoolean();
-        int additionalCount = Math.min(3, buffer.readVarInt());
+        int additionalCount = PacketValidation.readCount(buffer, 3, "additional spouse");
         List<AdditionalSpouse> additionalSpouses = new ArrayList<>(additionalCount);
         for (int i = 0; i < additionalCount; i++) additionalSpouses.add(AdditionalSpouse.decode(buffer));
         String preferredGender = buffer.readUtf(12);
         UUID pending = buffer.readBoolean() ? buffer.readUUID() : null;
         String pendingName = buffer.readUtf(80);
-        int playerCount = Math.min(64, buffer.readVarInt());
+        int playerCount = PacketValidation.readCount(buffer, 64, "player marriage candidate");
         List<PlayerCandidate> playerCandidates = new ArrayList<>(playerCount);
         for (int i = 0; i < playerCount; i++) playerCandidates.add(PlayerCandidate.decode(buffer));
-        int count = Math.min(64, buffer.readVarInt());
+        int count = PacketValidation.readCount(buffer, 64, "marriage candidate");
         List<Candidate> candidates = new ArrayList<>(count);
         for (int i = 0; i < count; i++) candidates.add(Candidate.decode(buffer));
         long currentDay = buffer.readLong();

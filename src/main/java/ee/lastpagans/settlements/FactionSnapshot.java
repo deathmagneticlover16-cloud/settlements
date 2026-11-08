@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.world.RecruitsFaction;
 import com.talhanation.recruits.world.RecruitsPlayerInfo;
@@ -55,8 +56,9 @@ public record FactionSnapshot(
 
         SettlementData settlementData = SettlementData.get(player.serverLevel());
         CampaignData campaign = CampaignData.get(player.serverLevel());
+        CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
         boolean actualLeader = player.getUUID().equals(faction.getTeamLeaderUUID());
-        boolean protectedFaction = CampaignSystemsData.get(player.serverLevel()).factionProtected(factionId);
+        boolean protectedFaction = campaignSystems.factionProtected(factionId);
         boolean administrator = player.createCommandSourceStack().hasPermission(2);
         boolean viewerLeader = actualLeader && (!protectedFaction || administrator);
         int viewerTier = viewerLeader ? 4 : protectedFaction && !administrator ? 0
@@ -89,7 +91,7 @@ public record FactionSnapshot(
                 .toList();
         List<SettlementEntry> settlements = owned.stream().map(settlement -> new SettlementEntry(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(),
-                settlement.getDisplayedPopulation(), settlement.getStability(), CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
+                settlement.getDisplayedPopulation(), settlement.getStability(), campaignSystems.lastTaxIncome(settlement.getId()),
                 settlement.isCapital()
         )).toList();
 
@@ -105,11 +107,13 @@ public record FactionSnapshot(
         allies.sort(String.CASE_INSENSITIVE_ORDER);
         enemies.sort(String.CASE_INSENSITIVE_ORDER);
 
-        CampaignData.FactionProfile profile = campaign.factionProfile(factionId);
-        List<RankEntry> ranks = profile.rankTitles().entrySet().stream()
-                .sorted(Map.Entry.<Integer, String>comparingByKey().reversed())
-                .map(entry -> new RankEntry(entry.getKey(), entry.getValue()))
-                .toList();
+        CampaignData.FactionProfile profile = campaign.factionProfileIfPresent(factionId);
+        List<RankEntry> ranks = new ArrayList<>();
+        for (int tier = 4; tier >= 0; tier--) {
+            String title = profile == null ? CampaignDefinitions.defaultRankTitle(tier)
+                    : profile.rankTitles().getOrDefault(tier, CampaignDefinitions.defaultRankTitle(tier));
+            ranks.add(new RankEntry(tier, title));
+        }
 
         return new FactionSnapshot(
                 factionId,
@@ -120,11 +124,11 @@ public record FactionSnapshot(
                 viewerTier,
                 viewerRank,
                 owned.isEmpty() ? campaign.getDefaultRosterId() : campaign.assignedRosterName(owned.get(0)),
-                profile.government().displayName(),
-                profile.teamDye(),
-                profile.unitDye(),
-                owned.stream().mapToInt(settlement -> CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId())).sum(),
-                owned.isEmpty() ? CampaignSystemsData.get(player.serverLevel()).treasuryBalance(factionId) : StateTreasury.balance(player.serverLevel(), owned.get(0)),
+                profile == null ? CampaignData.GovernmentType.MONARCHY.displayName() : profile.government().displayName(),
+                profile == null ? "white" : profile.teamDye(),
+                profile == null ? "white" : profile.unitDye(),
+                owned.stream().mapToInt(settlement -> campaignSystems.lastTaxIncome(settlement.getId())).sum(),
+                owned.isEmpty() ? campaignSystems.treasuryBalance(factionId) : StateTreasury.balance(player.serverLevel(), owned.get(0)),
                 owned.stream().mapToInt(SettlementData.SettlementRecord::getDisplayedPopulation).sum(),
                 campaign.activeWarsFor(factionId).size(),
                 members,
@@ -142,7 +146,7 @@ public record FactionSnapshot(
                         .map(candidate -> {
                             SettlementData.CharacterRecord character = settlementData.getCharacter(candidate.getUUID());
                             String characterName = character != null && character.isCreated() ? character.getDisplayName() : candidate.getGameProfile().getName();
-                            boolean invited = CampaignSystemsData.get(player.serverLevel()).hasFactionInvitation(factionId, candidate.getUUID());
+                            boolean invited = campaignSystems.hasFactionInvitation(factionId, candidate.getUUID());
                             return new PlayerChoice(candidate.getUUID(), candidate.getGameProfile().getName(), characterName, invited);
                         })
                         .sorted(Comparator.comparing(PlayerChoice::characterName, String.CASE_INSENSITIVE_ORDER)).toList() : List.of(),
@@ -182,7 +186,7 @@ public record FactionSnapshot(
                         .thenComparing(SettlementData.SettlementRecord::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(settlement -> new SettlementEntry(settlement.getId(), settlement.getName(), settlement.getRank().displayName(),
                         settlement.getDisplayedPopulation(), settlement.getStability(),
-                        CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()), settlement.isCapital()))
+                        extra.lastTaxIncome(settlement.getId()), settlement.isCapital()))
                 .toList();
         return new FactionSnapshot("", "Independent", new CompoundTag(), "None", false, 0, "Independent",
                 "None", "Independent", "white", "white", 0, 0,
@@ -212,15 +216,15 @@ public record FactionSnapshot(
         buffer.writeVarInt(stateTreasury);
         buffer.writeVarInt(realmPopulation);
         buffer.writeVarInt(activeWars);
-        writeList(buffer, members, MemberEntry::encode);
-        writeList(buffer, settlements, SettlementEntry::encode);
-        buffer.writeVarInt(allies.size()); allies.forEach(value -> buffer.writeUtf(value, 64));
-        buffer.writeVarInt(enemies.size()); enemies.forEach(value -> buffer.writeUtf(value, 64));
-        writeList(buffer, ranks, RankEntry::encode);
-        writeList(buffer, availableFactions, FactionChoice::encode);
-        writeList(buffer, joinRequests, RequestEntry::encode);
-        writeList(buffer, invitations, InvitationEntry::encode);
-        writeList(buffer, inviteCandidates, PlayerChoice::encode);
+        writeList(buffer, members, 512, MemberEntry::encode);
+        writeList(buffer, settlements, 512, SettlementEntry::encode);
+        PacketValidation.writeCollection(buffer, allies, 256, (buf, value) -> buf.writeUtf(value, 64));
+        PacketValidation.writeCollection(buffer, enemies, 256, (buf, value) -> buf.writeUtf(value, 64));
+        writeList(buffer, ranks, 16, RankEntry::encode);
+        writeList(buffer, availableFactions, 512, FactionChoice::encode);
+        writeList(buffer, joinRequests, 512, RequestEntry::encode);
+        writeList(buffer, invitations, 512, InvitationEntry::encode);
+        writeList(buffer, inviteCandidates, 512, PlayerChoice::encode);
         buffer.writeUtf(message, 256);
     }
 
@@ -243,10 +247,10 @@ public record FactionSnapshot(
         int activeWars = buffer.readVarInt();
         List<MemberEntry> members = readList(buffer, MemberEntry::decode, 512);
         List<SettlementEntry> settlements = readList(buffer, SettlementEntry::decode, 512);
-        int allyCount = Math.min(256, buffer.readVarInt());
+        int allyCount = PacketValidation.readCount(buffer, 256, "faction ally");
         List<String> allies = new ArrayList<>(allyCount);
         for (int i = 0; i < allyCount; i++) allies.add(buffer.readUtf(64));
-        int enemyCount = Math.min(256, buffer.readVarInt());
+        int enemyCount = PacketValidation.readCount(buffer, 256, "faction enemy");
         List<String> enemies = new ArrayList<>(enemyCount);
         for (int i = 0; i < enemyCount; i++) enemies.add(buffer.readUtf(64));
         List<RankEntry> ranks = readList(buffer, RankEntry::decode, 16);
@@ -259,13 +263,14 @@ public record FactionSnapshot(
                 availableFactions, joinRequests, invitations, inviteCandidates, buffer.readUtf(256));
     }
 
-    private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, Encoder<T> encoder) {
-        buffer.writeVarInt(values.size());
-        values.forEach(value -> encoder.encode(value, buffer));
+    private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, int maximum, Encoder<T> encoder) {
+        int count = Math.min(maximum, values.size());
+        buffer.writeVarInt(count);
+        for (int i = 0; i < count; i++) encoder.encode(values.get(i), buffer);
     }
 
     private static <T> List<T> readList(FriendlyByteBuf buffer, Decoder<T> decoder, int maximum) {
-        int count = Math.min(maximum, buffer.readVarInt());
+        int count = PacketValidation.readCount(buffer, maximum, "faction entry");
         List<T> values = new ArrayList<>(count);
         for (int i = 0; i < count; i++) values.add(decoder.decode(buffer));
         return values;

@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -97,14 +98,22 @@ public record ResearchSnapshot(
         buffer.writeVarInt(speedPercent);
         buffer.writeVarInt(researchTier);
         buffer.writeVarLong(remainingSeconds);
-        buffer.writeCollection(technologies, (buf, value) -> value.encode(buf));
+        PacketValidation.writeCollection(buffer, technologies, 512, (buf, value) -> value.encode(buf));
         buffer.writeUtf(message, 256);
     }
 
     public static ResearchSnapshot decode(FriendlyByteBuf buffer) {
-        return new ResearchSnapshot(buffer.readBoolean(), buffer.readUtf(128), buffer.readUtf(96), buffer.readBoolean(),
-                buffer.readUtf(128), buffer.readUtf(128), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarLong(),
-                buffer.readList(TechnologyEntry::decode), buffer.readUtf(256));
+        boolean installed = buffer.readBoolean();
+        String polityKey = buffer.readUtf(128), polityName = buffer.readUtf(96);
+        boolean canManage = buffer.readBoolean();
+        String activeId = buffer.readUtf(128), activeName = buffer.readUtf(128);
+        int progress = buffer.readVarInt(), speed = buffer.readVarInt(), tier = buffer.readVarInt();
+        long remaining = buffer.readVarLong();
+        int count = PacketValidation.readCount(buffer, 512, "technology");
+        List<TechnologyEntry> technologies = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) technologies.add(TechnologyEntry.decode(buffer));
+        return new ResearchSnapshot(installed, polityKey, polityName, canManage, activeId, activeName,
+                progress, speed, tier, remaining, List.copyOf(technologies), buffer.readUtf(256));
     }
 
     public record TechnologyEntry(String id, String name, String icon, long durationSeconds,
@@ -118,15 +127,21 @@ public record ResearchSnapshot(
             buffer.writeBoolean(completed);
             buffer.writeBoolean(available);
             buffer.writeUtf(dependencies == null ? "" : dependencies, 384);
-            buffer.writeCollection(dependencyIds == null ? List.<String>of() : dependencyIds, (buf, value) -> buf.writeUtf(value, 128));
+            PacketValidation.writeCollection(buffer, dependencyIds, 64, (buf, value) -> buf.writeUtf(value, 128));
             buffer.writeVarInt(requiredTier);
             buffer.writeUtf(tierMode == null ? "MIN" : tierMode, 16);
             buffer.writeVarInt(depth);
         }
         private static TechnologyEntry decode(FriendlyByteBuf buffer) {
-            return new TechnologyEntry(buffer.readUtf(128), buffer.readUtf(128), buffer.readUtf(128), buffer.readVarLong(),
-                    buffer.readBoolean(), buffer.readBoolean(), buffer.readUtf(384), buffer.readList(buf -> buf.readUtf(128)),
-                    buffer.readVarInt(), buffer.readUtf(16), buffer.readVarInt());
+            String id = buffer.readUtf(128), name = buffer.readUtf(128), icon = buffer.readUtf(128);
+            long duration = buffer.readVarLong();
+            boolean completed = buffer.readBoolean(), available = buffer.readBoolean();
+            String dependencies = buffer.readUtf(384);
+            int count = PacketValidation.readCount(buffer, 64, "technology dependency");
+            List<String> dependencyIds = new ArrayList<>(count);
+            for (int i = 0; i < count; i++) dependencyIds.add(buffer.readUtf(128));
+            return new TechnologyEntry(id, name, icon, duration, completed, available, dependencies,
+                    List.copyOf(dependencyIds), buffer.readVarInt(), buffer.readUtf(16), buffer.readVarInt());
         }
     }
 }

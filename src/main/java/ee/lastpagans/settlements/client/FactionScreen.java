@@ -309,7 +309,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private void factionSettlementAction(String action) {
         if (snapshot.settlements().isEmpty()) return;
         FactionSnapshot.SettlementEntry settlement = snapshot.settlements().get(Math.min(settlementIndex, snapshot.settlements().size() - 1));
-        SettlementNetwork.CHANNEL.sendToServer(new FactionActionPacket(action, null, 100, settlement.id()));
+        SettlementNetwork.CHANNEL.sendToServer(new FactionActionPacket(action, null, 0, settlement.id()));
     }
 
     private void factionInvitation(boolean accept) {

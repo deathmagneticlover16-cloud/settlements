@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import ee.lastpagans.settlements.network.PacketValidation;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.world.RecruitsFaction;
@@ -45,9 +46,10 @@ public record SettlementSnapshot(
         }
 
         CampaignData campaign = CampaignData.get(player.serverLevel());
-        CampaignData.SettlementVisualRecord visual = campaign.visualFor(settlement.getId());
+        CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
+        CampaignData.SettlementVisualRecord visual = campaign.visual(settlement.getId());
         CompoundTag settlementBanner = new CompoundTag();
-        ItemStack custom = visual.getCustomBanner();
+        ItemStack custom = visual == null ? ItemStack.EMPTY : visual.getCustomBanner();
         if (!custom.isEmpty()) custom.save(settlementBanner);
 
         List<UnitTemplateEntry> templates = Arrays.stream(CampaignData.UnitType.values())
@@ -65,16 +67,17 @@ public record SettlementSnapshot(
         return new SettlementSnapshot(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(), settlement.getRank().subtitle(), settlement.getRole(player.getUUID()).name(),
                 SettlementManager.canManage(player, settlement), SettlementManager.canContribute(player, settlement),
-                factionId, factionName, factionBanner, visual.getBannerMode().name(), settlementBanner,
+                factionId, factionName, factionBanner,
+                visual == null ? CampaignData.BannerMode.FACTION.name() : visual.getBannerMode().name(), settlementBanner,
                 limitedView ? "Hidden" : campaign.assignedRosterName(settlement), limitedView ? List.of() : templates,
                 limitedView ? 0 : settlement.getVillagerCount(), limitedView ? 0.0D : settlement.getPopulationMultiplier(), limitedView ? 0 : settlement.getCivilianPopulation(), limitedView ? 0 : settlement.getMilitaryPopulation(), settlement.getDisplayedPopulation(),
                 limitedView ? 0 : settlement.getHousingCapacity(), limitedView ? 0 : settlement.getFreeHousing(), limitedView ? 0 : settlement.getStability(), limitedView ? 0 : settlement.getFood(), limitedView ? 0 : StateTreasury.balance(player.serverLevel(), settlement),
-                limitedView ? "Hidden" : CampaignSystemsData.get(player.serverLevel()).taxDisplayName(settlement.getId()),
-                limitedView ? 100 : CampaignSystemsData.get(player.serverLevel()).taxRatePercent(settlement.getId()),
-                limitedView ? 0 : CampaignSystemsManager.projectedTaxIncome(settlement, CampaignSystemsData.get(player.serverLevel())),
-                limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).lastTaxIncome(settlement.getId()),
-                limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).taxStabilityPerDay(settlement.getId()),
-                limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
+                limitedView ? "Hidden" : campaignSystems.taxDisplayName(settlement.getId()),
+                limitedView ? 100 : campaignSystems.taxRatePercent(settlement.getId()),
+                limitedView ? 0 : CampaignSystemsManager.projectedTaxIncome(settlement, campaignSystems),
+                limitedView ? 0 : campaignSystems.lastTaxIncome(settlement.getId()),
+                limitedView ? 0 : campaignSystems.taxStabilityPerDay(settlement.getId()),
+                limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : campaignSystems.foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
                 limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), limitedView ? 0 : settlement.getPendingContracts(), limitedView ? "Hidden" : settlement.getSettlerGrowthStatus(player.serverLevel().getGameTime()),
                 !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null, !limitedView && settlement.getUpkeepChest() != null,
                 limitedView ? 0 : settlement.getBarracksRadius(), limitedView ? 0 : settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
@@ -97,7 +100,7 @@ public record SettlementSnapshot(
         values.sort(java.util.Comparator.comparingInt((MemberEntry value) -> switch (value.role()) {
             case "OWNER" -> 0; case "CO_OWNER" -> 1; case "CITIZEN" -> 2; default -> 3;
         }).thenComparing(MemberEntry::characterName, String.CASE_INSENSITIVE_ORDER));
-        return List.copyOf(values);
+        return values.stream().limit(64).toList();
     }
 
     private static List<PlayerChoice> memberCandidates(ServerPlayer viewer, SettlementData.SettlementRecord settlement) {
@@ -115,6 +118,7 @@ public record SettlementSnapshot(
                     return new PlayerChoice(candidate.getUUID(), account, characterName);
                 })
                 .sorted(java.util.Comparator.comparing(PlayerChoice::characterName, String.CASE_INSENSITIVE_ORDER))
+                .limit(64)
                 .toList();
     }
 
@@ -313,7 +317,7 @@ public record SettlementSnapshot(
         buffer.writeUtf(settlementId, 64); buffer.writeUtf(settlementName, 64); buffer.writeUtf(rank, 32); buffer.writeUtf(rankSubtitle, 48); buffer.writeUtf(role, 16); buffer.writeBoolean(canManage); buffer.writeBoolean(canContribute);
         buffer.writeUtf(factionId, 64); buffer.writeUtf(factionName, 64); buffer.writeNbt(factionBanner);
         buffer.writeUtf(bannerMode, 16); buffer.writeNbt(settlementBannerStack); buffer.writeUtf(rosterName, 64);
-        writeList(buffer, unitTemplates, UnitTemplateEntry::encode);
+        writeList(buffer, unitTemplates, 16, UnitTemplateEntry::encode);
         buffer.writeVarInt(villagerCount); buffer.writeDouble(populationMultiplier); buffer.writeVarInt(civilianPopulation); buffer.writeVarInt(militaryPopulation); buffer.writeVarInt(totalPopulation);
         buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(treasury);
         buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(taxRatePercent); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay);
@@ -322,8 +326,8 @@ public record SettlementSnapshot(
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet); buffer.writeBoolean(upkeepChestSet);
         buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
-        writeList(buffer, effects, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions);
-        writeList(buffer, members, MemberEntry::encode); writeList(buffer, memberCandidates, PlayerChoice::encode); buffer.writeUtf(message, 256);
+        writeList(buffer, effects, 32, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions);
+        writeList(buffer, members, 64, MemberEntry::encode); writeList(buffer, memberCandidates, 64, PlayerChoice::encode); buffer.writeUtf(message, 256);
     }
 
     public static SettlementSnapshot decode(FriendlyByteBuf buffer) {
@@ -345,24 +349,24 @@ public record SettlementSnapshot(
     }
 
     private static void writeStrings(FriendlyByteBuf buffer, List<String> values) {
-        buffer.writeVarInt(values.size());
-        values.forEach(value -> buffer.writeUtf(value, 220));
+        PacketValidation.writeCollection(buffer, values, 64, (buf, value) -> buf.writeUtf(value, 220));
     }
 
     private static List<String> readStrings(FriendlyByteBuf buffer) {
-        int count = Math.min(64, buffer.readVarInt());
+        int count = PacketValidation.readCount(buffer, 64, "settlement text");
         List<String> values = new ArrayList<>(count);
         for (int i = 0; i < count; i++) values.add(buffer.readUtf(220));
         return values;
     }
 
-    private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, Encoder<T> encoder) {
-        buffer.writeVarInt(values.size());
-        values.forEach(value -> encoder.encode(value, buffer));
+    private static <T> void writeList(FriendlyByteBuf buffer, List<T> values, int maximum, Encoder<T> encoder) {
+        int count = Math.min(maximum, values.size());
+        buffer.writeVarInt(count);
+        for (int i = 0; i < count; i++) encoder.encode(values.get(i), buffer);
     }
 
     private static <T> List<T> readList(FriendlyByteBuf buffer, Decoder<T> decoder, int maximum) {
-        int count = Math.min(maximum, buffer.readVarInt());
+        int count = PacketValidation.readCount(buffer, maximum, "settlement entry");
         List<T> values = new ArrayList<>(count);
         for (int i = 0; i < count; i++) values.add(decoder.decode(buffer));
         return values;

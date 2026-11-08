@@ -10,6 +10,7 @@
     "WildfireGenderPacketAuthorityMixin"
   ],
   "client": [
+    "CampaignButtonMixin",
     "RecruitsTeamKeyMixin",
     "WorldMapScreenAccessor",
     "WildfirePreviewSaveMixin",
