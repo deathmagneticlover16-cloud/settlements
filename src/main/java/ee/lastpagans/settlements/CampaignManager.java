@@ -491,7 +491,6 @@ public final class CampaignManager {
             case "JOIN_SETTLEMENT_WAR" -> joinSettlementWar(player, data, own, warId, day);
             case "IGNORE_SETTLEMENT_WAR" -> ignoreSettlementWar(player, data, own, warId);
             case "SEND_AID" -> sendWarAid(player, data, own, warId, extra, day);
-            case "CANCEL_AID" -> cancelWarAid(player, data, own, warId, proposalId, day);
             case "ACCEPT_PROPOSAL" -> acceptProposal(player, data, own, proposalId, day);
             case "REJECT_PROPOSAL" -> rejectProposal(player, data, own, proposalId);
             case "BREAK_TREATY" -> breakTreaty(player, data, own, targetFaction, day);
@@ -689,60 +688,21 @@ public final class CampaignManager {
         if (targetSettlement.isBlank()) return "This war has no settlement aid target.";
         String[] split = extra == null ? new String[0] : extra.split("\\|", -1);
         int manpower = parsePositive(split, 0); int treasury = parsePositive(split, 1); int food = parsePositive(split, 2);
-        if (split.length < 6) return "Your client is using an outdated war-aid packet. Reconnect with the current Settlements build.";
-        boolean manpowerRecurring = Boolean.parseBoolean(split[3]);
-        boolean treasuryRecurring = Boolean.parseBoolean(split[4]);
-        boolean foodRecurring = Boolean.parseBoolean(split[5]);
+        if (split.length < 3) return "Your client is using an outdated war-aid packet. Reconnect with the current Settlements build.";
         if (manpower + treasury + food <= 0) return "Enter at least one aid amount.";
         SettlementData.SettlementRecord target = SettlementData.get(player.serverLevel()).getSettlement(targetSettlement);
         if (target == null) return "The aided settlement no longer exists.";
         String payment = transferFactionAid(player.serverLevel(), own, target, manpower, treasury, food);
         if (payment != null) return payment;
-        CampaignSystemsData extraData = CampaignSystemsData.get(player.serverLevel());
-        if (manpowerRecurring && manpower > 0) extraData.addWarAid(war.id(),
-                new CampaignSystemsData.AidRecord(UUID.randomUUID(), own, targetSettlement, manpower, 0, 0, true, day + 1));
-        if (treasuryRecurring && treasury > 0) extraData.addWarAid(war.id(),
-                new CampaignSystemsData.AidRecord(UUID.randomUUID(), own, targetSettlement, 0, treasury, 0, true, day + 1));
-        if (foodRecurring && food > 0) extraData.addWarAid(war.id(),
-                new CampaignSystemsData.AidRecord(UUID.randomUUID(), own, targetSettlement, 0, 0, food, true, day + 1));
-        // Supporting one of your settlements is a small positive Reliability signal. It is
-        // intentionally awarded per aid order rather than per resource/daily tick to prevent
-        // trivial recurring transfers from becoming a reputation farm.
+        // Supporting one of your settlements is a small positive Reliability signal per direct order.
         changeReliability(player.serverLevel(), data, own, 1);
+        target.addChronicle("Received one-time war aid from " + factionName(own) + ": "
+                + manpower + " manpower, " + treasury + " treasury, " + food + " Food.");
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.NORMAL, "War aid sent",
                 factionName(own) + " sent aid to " + target.getName() + ".", day, own, targetSettlement, CampaignData.NewsVisibility.PUBLIC);
         if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(player.getServer(), target.getId(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
         else CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID RECEIVED", factionName(own) + " sent aid to " + target.getName() + ".");
-        java.util.List<String> recurringLabels = new java.util.ArrayList<>();
-        if (manpowerRecurring && manpower > 0) recurringLabels.add("manpower");
-        if (treasuryRecurring && treasury > 0) recurringLabels.add("treasury");
-        if (foodRecurring && food > 0) recurringLabels.add("food");
-        return "Aid delivered to " + target.getName() + (recurringLabels.isEmpty() ? "."
-                : ". Daily: " + String.join(", ", recurringLabels) + ".");
-    }
-
-    private static String cancelWarAid(ServerPlayer player, CampaignData data, String own, UUID warId, UUID aidId, long day) {
-        if (!canManageDiplomacy(player, own, 2)) return "Your faction rank cannot cancel war aid.";
-        CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
-        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "That war is no longer active.";
-        if (aidId == null) return "Select an active recurring aid commitment to cancel.";
-        CampaignSystemsData extraData = CampaignSystemsData.get(player.serverLevel());
-        CampaignSystemsData.AidRecord aid = extraData.warAid(war.id()).stream()
-                .filter(value -> aidId.equals(value.id())).findFirst().orElse(null);
-        if (aid == null || !aid.recurring()) return "That recurring aid commitment no longer exists.";
-        if (!own.equals(aid.fromFaction())) return "You may only cancel your own faction's aid commitments.";
-        SettlementData.SettlementRecord target = SettlementData.get(player.serverLevel()).getSettlement(aid.targetSettlement());
-        if (!extraData.removeWarAid(war.id(), aid.id())) return "That recurring aid commitment no longer exists.";
-
-        String targetName = target == null ? aid.targetSettlement() : target.getName();
-        data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MINOR, "War aid cancelled",
-                factionName(own) + " cancelled recurring aid to " + targetName + ".", day, own, aid.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);
-        CampaignToastSender.faction(player.getServer(), own, "AID CANCELLED", "Recurring aid to " + targetName + " has been cancelled.");
-        if (target != null) {
-            if (target.getFactionTeam().isBlank()) CampaignToastSender.settlementManagers(player.getServer(), target.getId(), "AID CANCELLED", factionName(own) + " cancelled recurring aid to your settlement.");
-            else CampaignToastSender.faction(player.getServer(), target.getFactionTeam(), "AID CANCELLED", factionName(own) + " cancelled recurring aid to " + targetName + ".");
-        }
-        return "Recurring aid to " + targetName + " cancelled.";
+        return "Aid delivered to " + target.getName() + ".";
     }
 
     private static int parsePositive(String[] split, int index) {
@@ -889,7 +849,7 @@ public final class CampaignManager {
             String[] p = raw.split("~", -1); if (p.length < 5) continue;
             int amount = parseInt(p[2], 0, 1_000_000); int duration = parseInt(p[3], 0, 3650);
             String type = p[0].toUpperCase(Locale.ROOT); String target = SettlementData.cleanText(p[1], "", 80); String text = SettlementData.cleanText(p[4], "", 120);
-            if (List.of("TREASURY","MANPOWER","REPARATIONS","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RENOUNCE_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
+            if (List.of("TREASURY","MANPOWER","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RENOUNCE_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
                 terms.add(new CampaignSystemsData.PeaceTerm(type, target, amount, duration, text));
         }
         return List.copyOf(terms);
@@ -933,7 +893,7 @@ public final class CampaignManager {
         data.endWar(war.id(), day, compulsory ? "Capitulation peace terms enforced." : "Negotiated peace terms accepted.");
         extra.clearWarInterventionState(war.id());
         synchronizeWarPeace(player.serverLevel(), data, war, day);
-        extra.removeWarAid(war.id()); extra.removePeaceOffer(offerId);
+        extra.removePeaceOffer(offerId);
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR, "Peace treaty concluded",
                 "The war ended under negotiated peace terms.", day, "", offer.targetSettlement(), CampaignData.NewsVisibility.PUBLIC);
         toastPoliticalSide(player.getServer(), offer.proposerFaction(), offer.proposerSettlement(),
@@ -955,7 +915,6 @@ public final class CampaignManager {
         return switch (term.type()) {
             case "TREASURY" -> ceilDiv(term.amount(), 100);
             case "MANPOWER" -> ceilDiv(term.amount(), 5);
-            case "REPARATIONS" -> (int)Math.min(100L, ceilDiv((long)term.amount() * (long)term.durationDays(), 100L));
             case "NAP" -> Math.min(20, ceilDiv(term.durationDays(), 7));
             case "CONVERT_FAITH" -> 25;
             case "TRANSFER_CLAIM" -> 8;
@@ -1024,9 +983,6 @@ public final class CampaignManager {
             switch (term.type()) {
                 case "TREASURY" -> treasuryNeed += term.amount();
                 case "MANPOWER" -> manpowerNeed += term.amount();
-                case "REPARATIONS" -> {
-                    if (winnerFaction.isBlank() || loserFaction.isBlank()) return "recurring reparations require two factions";
-                }
                 case "NAP" -> {
                     if (winnerFaction.isBlank() || loserFaction.isBlank()) return "a forced NAP requires two factions";
                 }
@@ -1145,7 +1101,6 @@ public final class CampaignManager {
                         extra.addModifier(winnerSettlement.getId(), CampaignSystemsManager.standardModifier(level, winnerSettlement.getId(), "foreign_soldiers", 0L));
                     }
                 }
-                case "REPARATIONS" -> { if (!loserFaction.isBlank() && !winnerFaction.isBlank() && term.amount() > 0 && term.durationDays() > 0) extra.addReparation(new CampaignSystemsData.ReparationRecord(UUID.randomUUID(), loserFaction, winnerFaction, term.amount(), term.durationDays(), day + 1)); }
                 case "NAP" -> { if (!winnerFaction.isBlank() && !loserFaction.isBlank() && term.durationDays() > 0) { dataRelationNap(level, winnerFaction, loserFaction, day); extra.setForcedNap(winnerFaction, loserFaction, day + term.durationDays()); } }
                 case "CONVERT_FAITH" -> convertSideFaith(level, loserFaction, loserSettlement, term.text());
                 case "TRANSFER_SETTLEMENT" -> transferSettlementByTreaty(level, term.targetId(), winnerFaction, recipientOwner);
@@ -1458,56 +1413,6 @@ public final class CampaignManager {
                     result = "Religious donation made: +" + gain + " Devotion (" + extra.devotion(player.getUUID()) + "/100).";
                 }
             }
-            case "MARRY_NPC" -> {
-                CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
-                if (spouse == null) result = "That generated candidate is no longer available.";
-                else {
-                    CampaignData.MarriageRecord existing = data.getMarriage(player.getUUID());
-                    if (existing == null) {
-                        data.marryNpc(player.getUUID(), spouse, day);
-                        data.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL,
-                                "Marriage", SettlementManager.characterOrAccountName(player) + " married " + spouse.name() + ".",
-                                day, factionId(player), "", CampaignData.NewsVisibility.PUBLIC);
-                        result = "You married " + spouse.name() + ".";
-                    } else {
-                        SettlementData.CharacterRecord character = SettlementData.get(player.serverLevel()).getCharacter(player.getUUID());
-                        int maximumSpouses = character == null ? 1 : SettlementConfig.maxSpousesForFaith(character.getFaith());
-                        boolean permitsAdditionalWives = maximumSpouses > 1;
-                        if (!permitsAdditionalWives) result = "Your faith permits only one active spouse.";
-                        else if (character != null && character.getFaith().equalsIgnoreCase("Islam") && !spouse.gender().equalsIgnoreCase("Female")) result = "Additional spouses under this faith rule must be female candidates.";
-                        else if (data.spouseCount(player.getUUID()) >= maximumSpouses) result = "You already have the maximum of " + maximumSpouses + " spouses permitted by your faith.";
-                        else if (data.marryAdditionalNpc(player.getUUID(), spouse, day)) {
-                            int count = data.spouseCount(player.getUUID());
-                            int percent = CampaignData.spouseEffectPercent(count - 1);
-                            data.addNews(CampaignData.NewsCategory.CHARACTERS, CampaignData.NewsImportance.NORMAL,
-                                    "Marriage", SettlementManager.characterOrAccountName(player) + " married " + spouse.name() + " as an additional spouse.",
-                                    day, factionId(player), "", CampaignData.NewsVisibility.PUBLIC);
-                            result = "You married " + spouse.name() + ". As spouse " + count + ", their settlement effects operate at " + percent + "%.";
-                        } else result = "That additional marriage cannot be made.";
-                    }
-                }
-            }
-            case "REFRESH" -> {
-                if (!data.canRefreshCandidates(player.getUUID(), day)) result = "New candidates become available on day " + data.nextCandidateRefreshDay(player.getUUID()) + ".";
-                else {
-                    CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
-                    CampaignSystemsData.CandidateHistory history = extra.candidateHistory(player.getUUID());
-                    SettlementData.CharacterRecord character = SettlementData.get(player.serverLevel()).getCharacter(player.getUUID());
-                    int quality = character == null ? 0 : CampaignDefinitions.totalEffect(character.getTraits(), CampaignDefinitions.EffectKind.SPOUSE_QUALITY);
-                    data.refreshCandidates(player.getUUID(), day, history.rejectedIds(), history.seenIds(), quality, character == null ? "" : character.getFaith());
-                    result = quality > 0 ? "A new set of spouse candidates has arrived. Your Charisma improved the selection." : "A new set of spouse candidates has arrived.";
-                }
-            }
-            case "SET_GENDER" -> {
-                String gender = value == null ? "ANY" : value.toUpperCase(Locale.ROOT);
-                if (!gender.equals("ANY") && !gender.equals("MALE") && !gender.equals("FEMALE")) result = "Use Any, Male, or Female.";
-                else { CampaignSystemsData.get(player.serverLevel()).setCandidateGender(player.getUUID(), gender); result = "Marriage candidate filter set to " + gender.toLowerCase(Locale.ROOT) + "."; }
-            }
-            case "REJECT_CANDIDATE" -> {
-                CampaignData.NpcSpouse spouse = data.getCandidate(player.getUUID(), value);
-                if (spouse == null) result = "That candidate is no longer available.";
-                else { CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel()); extra.rejectCandidate(player.getUUID(), spouse.id()); extra.rejectCandidate(player.getUUID(), spouse.name()); data.rejectCandidate(player.getUUID(), spouse.id()); result = spouse.name() + " was rejected and will not be generated for you again."; }
-            }
             case "PROPOSE_PLAYER" -> {
                 ServerPlayer target = targetPlayer == null || player.getServer() == null ? null : player.getServer().getPlayerList().getPlayer(targetPlayer);
                 if (target == null) result = "Select an online player.";
@@ -1542,8 +1447,8 @@ public final class CampaignManager {
             case "DIVORCE" -> {
                 CampaignData.MarriageRecord marriage = data.getMarriage(player.getUUID());
                 if (marriage == null) result = "You are not married.";
-                else if (day - marriage.marriedDay() < 7L || data.getAdditionalNpcMarriages(player.getUUID()).stream().anyMatch(extraMarriage -> day - extraMarriage.marriedDay() < 7L))
-                    result = "A voluntary divorce is unavailable until every active marriage has lasted at least 7 Minecraft days.";
+                else if (day - marriage.marriedDay() < 7L)
+                    result = "A voluntary divorce is unavailable until the marriage has lasted at least 7 Minecraft days.";
                 else {
                     UUID spouseId = marriage.spousePlayerId();
                     String firstFaction = factionId(player);

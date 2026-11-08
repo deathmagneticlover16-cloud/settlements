@@ -1,5 +1,24 @@
 # Changelog
 
+## 4.0.0
+
+### System simplification
+
+- Replaced NPC spouse candidates and multiple spouses with player-to-player marriage.
+- Added automatic immigration with settlement controls and server-configured limits.
+- Removed Settler Contracts, Levy Tradition, recurring war aid, and recurring reparations.
+- Replaced discrete casualty and levy-service tiers with scalable pressure effects.
+- Discarded removed-system data and pre-4.0 campaign modifiers instead of converting them.
+
+### Performance, safety, and interface
+
+- Consolidated periodic server work, removed redundant client polling, and cached map-marker snapshots and read-only data views.
+- Removed duplicate packet queue hops, bounded variable-length network collections, and rate-limited every client action route.
+- Bounded housing scans, skipped unloaded chunks, and reduced capture-zone and marker rebuild work.
+- Replaced vanilla campaign buttons and the tax slider with the Settlements interface theme.
+- Removed legacy branding, build scripts, unused conflict states, duplicate military paths, and obsolete helpers.
+- Network protocol is 44.
+
 ## 3.0.0
 
 ### Economy
@@ -13,18 +32,7 @@
 - Consolidated Settlement, Military, Faction, and Diplomacy into tabbed workspaces.
 - Moved Main Seat selection into the Character Sheet.
 - Simplified character creation and campaign navigation.
-- Replaced vanilla campaign buttons and the tax slider with a compact Settlements visual theme.
-- Added custom treasury and Stability iconography and reduced instructional text.
-
-### Performance and safety
-
-- Consolidated periodic server work, removed redundant client polling, and cached map-marker snapshots and read-only data views.
-- Removed duplicate packet queue hops, bounded every variable-length network collection, and rate-limited client actions.
-- Bounded region and housing scans, skipped unloaded chunks, and reduced capture-zone and marker rebuild work.
-- Cleared transient player/server caches on logout and shutdown.
-
 ### Internals
 
 - Removed retired save, command, API, and network formats.
-- Removed unused conflict states, duplicate military paths, obsolete helpers, and legacy branded build documents.
 - Network protocol is 43.

@@ -74,15 +74,11 @@ public record CharacterSnapshot(
 
         String spouseName = "";
         CampaignData.MarriageRecord marriage = campaign.getMarriage(player.getUUID());
-        if (marriage != null) {
-            if (marriage.kind() == CampaignData.MarriageKind.PLAYER && marriage.spousePlayerId() != null) {
-                SettlementData.CharacterRecord spouseCharacter = data.getCharacter(marriage.spousePlayerId());
-                spouseName = spouseCharacter != null && spouseCharacter.isCreated()
-                        ? spouseCharacter.getDisplayName()
-                        : marriage.spousePlayerId().toString();
-            } else {
-                spouseName = marriage.spouseName();
-            }
+        if (marriage != null && marriage.spousePlayerId() != null) {
+            SettlementData.CharacterRecord spouseCharacter = data.getCharacter(marriage.spousePlayerId());
+            spouseName = spouseCharacter != null && spouseCharacter.isCreated()
+                    ? spouseCharacter.getDisplayName()
+                    : marriage.spousePlayerId().toString();
         }
 
         List<HoldingEntry> holdings = data.getOwnedSettlements(player.getUUID()).stream()

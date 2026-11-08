@@ -9,4 +9,6 @@ Use in-game completion for the complete command tree.
 - `/settlements admin stats set|add <settlement> treasury <amount>` changes a settlement polity treasury.
 - `/settlements admin faction treasury set|add <faction> <amount>` changes a faction treasury.
 
-Retired Wealth and Prosperity command aliases are not supported.
+Settlement managers control automatic immigration from the Residents tab; the global switch and limits live in server configuration.
+
+The `wealth` command and stat aliases no longer exist. Prosperity, settler-contract, Levy Tradition, recurring-aid, and recurring-reparation commands do not exist.

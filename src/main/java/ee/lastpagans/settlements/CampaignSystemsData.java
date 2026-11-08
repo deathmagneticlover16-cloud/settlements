@@ -27,6 +27,7 @@ public final class CampaignSystemsData extends SavedData {
     public static final int MAX_REGION_AXIS = 128;
     public static final int MAX_HOUSING_AREAS = 32;
     public static final long MAX_HOUSING_VOLUME = 32_768L;
+    private static final int FORMAT_VERSION = 4;
 
     private final Map<String, Integer> stateTreasuries = new HashMap<>();
     private final Map<String, Integer> marriageAlliances = new HashMap<>();
@@ -39,8 +40,6 @@ public final class CampaignSystemsData extends SavedData {
     private final Map<String, Integer> taxPolicies = new HashMap<>();
     private final Map<String, Long> lastTaxDay = new HashMap<>();
     private final Map<String, Integer> lastTaxIncome = new HashMap<>();
-    /** Capped settlement memory of repeated real levy service. It grants only modest starting XP. */
-    private final Map<String, Integer> levyTradition = new HashMap<>();
     /** Temporary manpower awarded by peace terms. It is recruitable, but never raises a settlement's native MP ceiling. */
     private final Map<String, Integer> foreignManpower = new HashMap<>();
     private final Map<String, Long> debugTimeOffsetMillis = new HashMap<>();
@@ -60,12 +59,9 @@ public final class CampaignSystemsData extends SavedData {
     private final Map<UUID, Long> levyCooldownUntil = new HashMap<>();
     private final Map<UUID, PeaceOfferRecord> peaceOffers = new LinkedHashMap<>();
     private final Collection<PeaceOfferRecord> peaceOffersView = Collections.unmodifiableCollection(peaceOffers.values());
-    private final Map<UUID, List<AidRecord>> aidByWar = new HashMap<>();
     private final Map<UUID, Integer> warScore = new HashMap<>();
     private final Map<UUID, List<String>> ignoredWarInterventions = new HashMap<>();
-    private final Map<UUID, CandidateHistory> candidateHistory = new HashMap<>();
     private final Map<String, Long> forcedNapUntilDay = new HashMap<>();
-    private final List<ReparationRecord> reparations = new ArrayList<>();
     private final Map<UUID, MercenaryContractRecord> mercenaryContracts = new LinkedHashMap<>();
     private final Collection<MercenaryContractRecord> mercenaryContractsView = Collections.unmodifiableCollection(mercenaryContracts.values());
     private final List<FactionInvitationRecord> factionInvitations = new ArrayList<>();
@@ -89,7 +85,6 @@ public final class CampaignSystemsData extends SavedData {
         readStringIntMap(tag, "TaxPolicies", data.taxPolicies);
         readStringLongMap(tag, "LastTaxDay", data.lastTaxDay);
         readStringIntMap(tag, "LastTaxIncome", data.lastTaxIncome);
-        readStringIntMap(tag, "LevyTradition", data.levyTradition);
         readStringIntMap(tag, "ForeignManpower", data.foreignManpower);
         readStringLongMap(tag, "DebugOffsets", data.debugTimeOffsetMillis);
         readStringLongMap(tag, "LastModifierDay", data.lastModifierDay);
@@ -127,16 +122,18 @@ public final class CampaignSystemsData extends SavedData {
             HolySiteRecord site = HolySiteRecord.fromNBT((CompoundTag) raw);
             if (site.region.valid() && !site.faith.isBlank()) data.holySites.add(site);
         }
-        for (Tag raw : tag.getList("Modifiers", Tag.TAG_COMPOUND)) {
-            CompoundTag entry = (CompoundTag) raw;
-            String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
-            if (settlement.isBlank()) continue;
-            List<ModifierRecord> values = new ArrayList<>();
-            for (Tag modifierRaw : entry.getList("Values", Tag.TAG_COMPOUND)) {
-                ModifierRecord value = ModifierRecord.fromNBT((CompoundTag) modifierRaw);
-                if (!value.id.isBlank()) values.add(value);
+        if (tag.getInt("FormatVersion") >= FORMAT_VERSION) {
+            for (Tag raw : tag.getList("Modifiers", Tag.TAG_COMPOUND)) {
+                CompoundTag entry = (CompoundTag) raw;
+                String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
+                if (settlement.isBlank()) continue;
+                List<ModifierRecord> values = new ArrayList<>();
+                for (Tag modifierRaw : entry.getList("Values", Tag.TAG_COMPOUND)) {
+                    ModifierRecord value = ModifierRecord.fromNBT((CompoundTag) modifierRaw);
+                    if (!value.id.isBlank()) values.add(value);
+                }
+                if (!values.isEmpty()) data.settlementModifiers.put(settlement, values);
             }
-            if (!values.isEmpty()) data.settlementModifiers.put(settlement, values);
         }
         for (Tag raw : tag.getList("LevyMobilizations", Tag.TAG_COMPOUND)) {
             LevyMobilization value = LevyMobilization.fromNBT((CompoundTag) raw);
@@ -151,14 +148,6 @@ public final class CampaignSystemsData extends SavedData {
             PeaceOfferRecord value = PeaceOfferRecord.fromNBT((CompoundTag) raw);
             if (value.proposalId != null) data.peaceOffers.put(value.proposalId, value);
         }
-        for (Tag raw : tag.getList("WarAid", Tag.TAG_COMPOUND)) {
-            CompoundTag entry = (CompoundTag) raw;
-            if (!entry.hasUUID("War")) continue;
-            UUID war = entry.getUUID("War");
-            List<AidRecord> values = new ArrayList<>();
-            for (Tag aidRaw : entry.getList("Values", Tag.TAG_COMPOUND)) values.add(AidRecord.fromNBT((CompoundTag) aidRaw));
-            if (!values.isEmpty()) data.aidByWar.put(war, values);
-        }
         readUuidIntMap(tag, "WarScore", data.warScore);
         for (Tag raw : tag.getList("IgnoredWarInterventions", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
@@ -167,15 +156,7 @@ public final class CampaignSystemsData extends SavedData {
             for (Tag factionRaw : entry.getList("Factions", Tag.TAG_STRING)) factions.add(factionRaw.getAsString());
             if (!factions.isEmpty()) data.ignoredWarInterventions.put(entry.getUUID("War"), factions);
         }
-        for (Tag raw : tag.getList("CandidateHistory", Tag.TAG_COMPOUND)) {
-            CandidateHistory history = CandidateHistory.fromNBT((CompoundTag) raw);
-            if (history.playerId != null) data.candidateHistory.put(history.playerId, history);
-        }
         readStringLongMap(tag, "ForcedNapUntil", data.forcedNapUntilDay);
-        for (Tag raw : tag.getList("Reparations", Tag.TAG_COMPOUND)) {
-            ReparationRecord value = ReparationRecord.fromNBT((CompoundTag) raw);
-            if (value.id() != null && !value.payerFaction().isBlank() && !value.receiverFaction().isBlank()) data.reparations.add(value);
-        }
         for (Tag raw : tag.getList("MercenaryContracts", Tag.TAG_COMPOUND)) {
             MercenaryContractRecord value = MercenaryContractRecord.fromNBT((CompoundTag) raw);
             if (value.unitId() != null && !value.settlementId().isBlank()) data.mercenaryContracts.put(value.unitId(), value);
@@ -193,6 +174,7 @@ public final class CampaignSystemsData extends SavedData {
 
     @Override
     public CompoundTag save(CompoundTag tag) {
+        tag.putInt("FormatVersion", FORMAT_VERSION);
         writeStringIntMap(tag, "StateTreasuries", stateTreasuries);
         writeStringIntMap(tag, "MarriageAlliances", marriageAlliances);
         writeUuidIntMap(tag, "Devotion", devotion);
@@ -203,7 +185,6 @@ public final class CampaignSystemsData extends SavedData {
         writeStringIntMap(tag, "TaxPolicies", taxPolicies);
         writeStringLongMap(tag, "LastTaxDay", lastTaxDay);
         writeStringIntMap(tag, "LastTaxIncome", lastTaxIncome);
-        writeStringIntMap(tag, "LevyTradition", levyTradition);
         writeStringIntMap(tag, "ForeignManpower", foreignManpower);
         writeStringLongMap(tag, "DebugOffsets", debugTimeOffsetMillis);
         writeStringLongMap(tag, "LastModifierDay", lastModifierDay);
@@ -229,9 +210,6 @@ public final class CampaignSystemsData extends SavedData {
         ListTag deployments = new ListTag(); levyDeployments.values().forEach(value -> deployments.add(value.toNBT())); tag.put("LevyDeployments", deployments);
         writeUuidLongMap(tag, "LevyCooldowns", levyCooldownUntil);
         ListTag peace = new ListTag(); peaceOffers.values().forEach(value -> peace.add(value.toNBT())); tag.put("PeaceOffers", peace);
-        ListTag aid = new ListTag();
-        aidByWar.forEach((war, values) -> { CompoundTag entry = new CompoundTag(); entry.putUUID("War", war); ListTag list = new ListTag(); values.forEach(value -> list.add(value.toNBT())); entry.put("Values", list); aid.add(entry); });
-        tag.put("WarAid", aid);
         writeUuidIntMap(tag, "WarScore", warScore);
         ListTag ignoredInterventions = new ListTag();
         ignoredWarInterventions.forEach((war, factions) -> {
@@ -240,9 +218,7 @@ public final class CampaignSystemsData extends SavedData {
             entry.put("Factions", list); ignoredInterventions.add(entry);
         });
         tag.put("IgnoredWarInterventions", ignoredInterventions);
-        ListTag histories = new ListTag(); candidateHistory.values().forEach(value -> histories.add(value.toNBT())); tag.put("CandidateHistory", histories);
         writeStringLongMap(tag, "ForcedNapUntil", forcedNapUntilDay);
-        ListTag reparationsTag = new ListTag(); reparations.forEach(value -> reparationsTag.add(value.toNBT())); tag.put("Reparations", reparationsTag);
         ListTag mercenaryTag = new ListTag(); mercenaryContracts.values().forEach(value -> mercenaryTag.add(value.toNBT())); tag.put("MercenaryContracts", mercenaryTag);
         ListTag invitationTag = new ListTag(); factionInvitations.forEach(value -> invitationTag.add(value.toNBT())); tag.put("FactionInvitations", invitationTag);
         ListTag retiredLevyTag = new ListTag(); retiredLevyUnits.forEach(value -> retiredLevyTag.add(net.minecraft.nbt.NbtUtils.createUUID(value))); tag.put("RetiredLevyUnits", retiredLevyTag);
@@ -309,9 +285,6 @@ public final class CampaignSystemsData extends SavedData {
         lastTaxIncome.put(id, Math.max(0, income));
         setDirty();
     }
-    public int levyTradition(String settlement) { return levyTradition.getOrDefault(SettlementData.normalizeId(settlement), 0); }
-    public void setLevyTradition(String settlement, int value) { String id = SettlementData.normalizeId(settlement); if (id.isBlank()) return; levyTradition.put(id, clamp(value, 0, 50)); setDirty(); }
-    public int changeLevyTradition(String settlement, int delta) { setLevyTradition(settlement, levyTradition(settlement) + delta); return levyTradition(settlement); }
     public int foreignManpower(String settlement) { return foreignManpower.getOrDefault(SettlementData.normalizeId(settlement), 0); }
     public void setForeignManpower(String settlement, int value) {
         String id = SettlementData.normalizeId(settlement);
@@ -393,7 +366,6 @@ public final class CampaignSystemsData extends SavedData {
         taxPolicies.remove(id);
         lastTaxDay.remove(id);
         lastTaxIncome.remove(id);
-        levyTradition.remove(id);
         foreignManpower.remove(id);
         debugTimeOffsetMillis.remove(id);
         lastModifierDay.remove(id);
@@ -406,8 +378,6 @@ public final class CampaignSystemsData extends SavedData {
         levyDeployments.values().removeIf(value -> id.equals(value.settlementId));
         mercenaryContracts.values().removeIf(value -> id.equals(value.settlementId()));
         peaceOffers.values().removeIf(value -> id.equals(value.proposerSettlement()) || id.equals(value.targetSettlement()));
-        aidByWar.values().forEach(values -> values.removeIf(value -> id.equals(SettlementData.normalizeId(value.targetSettlement()))));
-        aidByWar.entrySet().removeIf(entry -> entry.getValue().isEmpty());
         setDirty();
     }
 
@@ -438,19 +408,6 @@ public final class CampaignSystemsData extends SavedData {
     public Collection<PeaceOfferRecord> peaceOffers() { return peaceOffersView; }
     public void putPeaceOffer(PeaceOfferRecord value) { if (value != null && value.proposalId != null) { peaceOffers.put(value.proposalId, value); setDirty(); } }
     public void removePeaceOffer(UUID proposal) { if (peaceOffers.remove(proposal) != null) setDirty(); }
-    public List<AidRecord> warAid(UUID war) { return List.copyOf(aidByWar.getOrDefault(war, List.of())); }
-    public void addWarAid(UUID war, AidRecord value) { if (war == null || value == null) return; aidByWar.computeIfAbsent(war, key -> new ArrayList<>()).add(value); setDirty(); }
-    public void replaceWarAid(UUID war, List<AidRecord> values) { if (war == null) return; if (values == null || values.isEmpty()) aidByWar.remove(war); else aidByWar.put(war, new ArrayList<>(values)); setDirty(); }
-    public void removeWarAid(UUID war) { if (aidByWar.remove(war) != null) setDirty(); }
-    public boolean removeWarAid(UUID war, UUID aidId) {
-        if (war == null || aidId == null) return false;
-        List<AidRecord> values = aidByWar.get(war);
-        if (values == null) return false;
-        boolean removed = values.removeIf(value -> aidId.equals(value.id()));
-        if (values.isEmpty()) aidByWar.remove(war);
-        if (removed) setDirty();
-        return removed;
-    }
     public int warScore(UUID war) { return clamp(warScore.getOrDefault(war, 0), -100, 100); }
     public void setWarScore(UUID war, int score) { if (war == null) return; warScore.put(war, clamp(score, -100, 100)); setDirty(); }
     public void changeWarScore(UUID war, int delta) { setWarScore(war, warScore(war) + delta); }
@@ -466,23 +423,12 @@ public final class CampaignSystemsData extends SavedData {
     }
     public void clearWarInterventionState(UUID war) { if (war != null && ignoredWarInterventions.remove(war) != null) setDirty(); }
 
-    public CandidateHistory candidateHistory(UUID player) { return candidateHistory.computeIfAbsent(player, CandidateHistory::new); }
-    public CandidateHistory candidateHistoryIfPresent(UUID player) { return player == null ? null : candidateHistory.get(player); }
-    public void setCandidateGender(UUID player, String gender) { CandidateHistory h = candidateHistory(player); h.setPreferredGender(gender); setDirty(); }
-    public void rejectCandidate(UUID player, String id) { CandidateHistory h = candidateHistory(player); h.reject(id); setDirty(); }
-    public void markCandidateSeen(UUID player, String id) { CandidateHistory h = candidateHistory(player); h.seen(id); setDirty(); }
-
     public long forcedNapUntil(String firstFaction, String secondFaction) { return forcedNapUntilDay.getOrDefault(pairKey(firstFaction, secondFaction), 0L); }
     public void setForcedNap(String firstFaction, String secondFaction, long untilDay) {
         String key = pairKey(firstFaction, secondFaction); if (key.isBlank()) return;
         if (untilDay <= 0) forcedNapUntilDay.remove(key); else forcedNapUntilDay.put(key, untilDay); setDirty();
     }
     public boolean forcedNapActive(String firstFaction, String secondFaction, long day) { return forcedNapUntil(firstFaction, secondFaction) > day; }
-    public List<ReparationRecord> reparations() { return List.copyOf(reparations); }
-    public void addReparation(ReparationRecord value) { if (value != null) { reparations.add(value); setDirty(); } }
-    public void replaceReparations(List<ReparationRecord> values) { reparations.clear(); if (values != null) reparations.addAll(values); setDirty(); }
-    public void removeReparation(UUID id) { if (id != null && reparations.removeIf(value -> id.equals(value.id()))) setDirty(); }
-
     public Collection<MercenaryContractRecord> mercenaryContracts() { return mercenaryContractsView; }
     public MercenaryContractRecord mercenaryContract(UUID unitId) { return unitId == null ? null : mercenaryContracts.get(unitId); }
     public void putMercenaryContract(MercenaryContractRecord value) { if (value != null && value.unitId() != null) { mercenaryContracts.put(value.unitId(), value); setDirty(); } }
@@ -538,7 +484,6 @@ public final class CampaignSystemsData extends SavedData {
         levyCooldownUntil.remove(player);
         levyMobilizations.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
         levyDeployments.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
-        candidateHistory.remove(player);
         mercenaryContracts.entrySet().removeIf(entry -> player.equals(entry.getValue().originalOwnerId()));
         factionInvitations.removeIf(value -> player.equals(value.targetPlayer()) || player.equals(value.inviter()));
         setDirty();
@@ -551,7 +496,6 @@ public final class CampaignSystemsData extends SavedData {
         lastHolyVisitDay.remove(player);
         lastPrayerDay.remove(player);
         levyCooldownUntil.remove(player);
-        candidateHistory.remove(player);
         setDirty();
     }
 
@@ -563,8 +507,6 @@ public final class CampaignSystemsData extends SavedData {
         levyDeployments.entrySet().removeIf(entry -> player.equals(entry.getValue().ownerId));
         setDirty();
     }
-    public void resetCandidateHistory(UUID player) { if (player != null && candidateHistory.remove(player) != null) setDirty(); }
-
     public record RegionRecord(String dimension, BlockPos min, BlockPos max, AreaSelection.Shape shape) {
         public RegionRecord(String dimension, BlockPos min, BlockPos max) { this(dimension, min, max, AreaSelection.Shape.BOX); }
         public RegionRecord {
@@ -647,13 +589,6 @@ public final class CampaignSystemsData extends SavedData {
         private static PeaceTerm fromNBT(CompoundTag tag) { return new PeaceTerm(tag.getString("Type"), tag.getString("Target"), tag.getInt("Amount"), tag.getInt("Duration"), tag.getString("Text")); }
     }
 
-    public record AidRecord(UUID id, String fromFaction, String targetSettlement, int manpower, int treasury, int food, boolean recurring, long nextDay) {
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("From", fromFaction == null ? "" : fromFaction); tag.putString("Target", SettlementData.normalizeId(targetSettlement)); tag.putInt("Manpower", Math.max(0, manpower)); tag.putInt("Treasury", Math.max(0, treasury)); tag.putInt("Food", Math.max(0, food)); tag.putBoolean("Recurring", recurring); tag.putLong("NextDay", nextDay); return tag; }
-        private static AidRecord fromNBT(CompoundTag tag) { return new AidRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("From"), tag.getString("Target"), tag.getInt("Manpower"), tag.getInt("Treasury"), tag.getInt("Food"), tag.getBoolean("Recurring"), tag.getLong("NextDay")); }
-    }
-
-
-
     public record FactionInvitationRecord(UUID id, String factionId, UUID targetPlayer, UUID inviter, long createdAtMillis) {
         public FactionInvitationRecord {
             if (id == null) id = UUID.randomUUID();
@@ -700,37 +635,6 @@ public final class CampaignSystemsData extends SavedData {
         public MercenaryContractRecord update(long nextDay, int missed, boolean pending) {
             return new MercenaryContractRecord(unitId, originalOwnerId, settlementId, factionId, wage, intervalDays, nextDay, missed, pending);
         }
-    }
-
-    public record ReparationRecord(UUID id, String payerFaction, String receiverFaction, int treasuryPerDay, int remainingDays, long nextDay) {
-        public ReparationRecord { if (id == null) id = UUID.randomUUID(); payerFaction = payerFaction == null ? "" : payerFaction; receiverFaction = receiverFaction == null ? "" : receiverFaction; treasuryPerDay = Math.max(0, treasuryPerDay); remainingDays = Math.max(0, remainingDays); }
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Id", id); tag.putString("Payer", payerFaction); tag.putString("Receiver", receiverFaction); tag.putInt("Treasury", treasuryPerDay); tag.putInt("Remaining", remainingDays); tag.putLong("NextDay", nextDay); return tag; }
-        private static ReparationRecord fromNBT(CompoundTag tag) { return new ReparationRecord(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.getString("Payer"), tag.getString("Receiver"), tag.getInt("Treasury"), tag.getInt("Remaining"), tag.getLong("NextDay")); }
-        public ReparationRecord next(long day, int remaining) { return new ReparationRecord(id, payerFaction, receiverFaction, treasuryPerDay, remaining, day); }
-    }
-
-    public static final class CandidateHistory {
-        private final UUID playerId;
-        private String preferredGender = "ANY";
-        private final List<String> rejectedIds = new ArrayList<>();
-        private final List<String> seenIds = new ArrayList<>();
-        private CandidateHistory(UUID playerId) { this.playerId = playerId; }
-        public String preferredGender() { return preferredGender; }
-        public void setPreferredGender(String value) { preferredGender = value == null ? "ANY" : value.toUpperCase(Locale.ROOT); }
-        public List<String> rejectedIds() { return List.copyOf(rejectedIds); }
-        public List<String> seenIds() { return List.copyOf(seenIds); }
-        public void reject(String id) {
-            if (id != null && rejectedIds.stream().noneMatch(value -> value.equalsIgnoreCase(id))) {
-                rejectedIds.add(id); while (rejectedIds.size() > 256) rejectedIds.remove(0);
-            }
-        }
-        public void seen(String id) {
-            if (id != null && seenIds.stream().noneMatch(value -> value.equalsIgnoreCase(id))) {
-                seenIds.add(id); while (seenIds.size() > 256) seenIds.remove(0);
-            }
-        }
-        private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); if (playerId != null) tag.putUUID("Player", playerId); tag.putString("Gender", preferredGender); ListTag rejected = new ListTag(); rejectedIds.forEach(value -> rejected.add(net.minecraft.nbt.StringTag.valueOf(value))); tag.put("Rejected", rejected); ListTag seen = new ListTag(); seenIds.forEach(value -> seen.add(net.minecraft.nbt.StringTag.valueOf(value))); tag.put("Seen", seen); return tag; }
-        private static CandidateHistory fromNBT(CompoundTag tag) { CandidateHistory history = new CandidateHistory(tag.hasUUID("Player") ? tag.getUUID("Player") : null); history.preferredGender = tag.getString("Gender").isBlank() ? "ANY" : tag.getString("Gender"); for (Tag raw : tag.getList("Rejected", Tag.TAG_STRING)) history.rejectedIds.add(raw.getAsString()); for (Tag raw : tag.getList("Seen", Tag.TAG_STRING)) history.seenIds.add(raw.getAsString()); return history; }
     }
 
     private static String pairKey(String a, String b) { if (a == null || b == null || a.isBlank() || b.isBlank()) return ""; return a.compareToIgnoreCase(b) <= 0 ? a + "|" + b : b + "|" + a; }

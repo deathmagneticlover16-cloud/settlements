@@ -8,28 +8,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+/** Server-authoritative player-to-player marriage state. */
 public record FamilySnapshot(
         String characterName,
         boolean married,
         String spouseName,
         String spouseFaith,
-        String spouseCulture,
         String spouseTraits,
         String spouseEffect,
-        boolean playerSpouse,
         boolean canDivorce,
-        int spouseCount,
-        int maxSpouses,
-        boolean canMarryAdditional,
-        List<AdditionalSpouse> additionalSpouses,
-        String preferredGender,
         UUID pendingProposer,
         String pendingProposerName,
         List<PlayerCandidate> playerCandidates,
-        List<Candidate> candidates,
         long currentDay,
-        long nextRefreshDay,
-        boolean canRefresh,
         String message
 ) {
     public static FamilySnapshot from(ServerPlayer player, String message) {
@@ -37,59 +28,32 @@ public record FamilySnapshot(
         SettlementData characters = SettlementData.get(player.serverLevel());
         SettlementData.CharacterRecord character = characters.getCharacter(player.getUUID());
         String characterName = character != null && character.isCreated()
-                ? character.getDisplayName()
-                : player.getGameProfile().getName();
+                ? character.getDisplayName() : player.getGameProfile().getName();
 
         CampaignData.MarriageRecord marriage = campaign.getMarriage(player.getUUID());
         String spouseName = "";
         String spouseFaith = "";
-        String spouseCulture = "";
         String spouseTraits = "";
         String spouseEffect = "";
-        boolean playerSpouse = false;
         long day = player.serverLevel().getDayTime() / 24000L;
-        boolean canDivorce = marriage != null && day - marriage.marriedDay() >= 7L
-                && campaign.getAdditionalNpcMarriages(player.getUUID()).stream().allMatch(value -> day - value.marriedDay() >= 7L);
-        int maxSpouses = character == null ? SettlementConfig.DEFAULT_MAX_SPOUSES.get() : SettlementConfig.maxSpousesForFaith(character.getFaith());
-        int spouseCount = campaign.spouseCount(player.getUUID());
-        List<AdditionalSpouse> additionalSpouses = new ArrayList<>();
-        int secondaryIndex = 1;
-        for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(player.getUUID())) {
-            if (additionalSpouses.size() >= 3) break;
-            additionalSpouses.add(new AdditionalSpouse(additional.spouseName(), additional.spouseFaith(), additional.spouseTraits(), additional.spouseEffect(), CampaignData.spouseEffectPercent(secondaryIndex++)));
-        }
-        boolean canMarryAdditional = marriage != null && maxSpouses > spouseCount;
-        CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
-        CampaignSystemsData.CandidateHistory history = extra.candidateHistoryIfPresent(player.getUUID());
-        String preferredGender = history == null ? "ANY" : history.preferredGender();
-        List<String> rejectedCandidates = history == null ? List.of() : history.rejectedIds();
-        List<String> seenCandidates = history == null ? List.of() : history.seenIds();
-        int spouseQuality = character == null ? 0 : CampaignDefinitions.totalEffect(character.getTraits(), CampaignDefinitions.EffectKind.SPOUSE_QUALITY);
-        if (marriage != null) {
-            if (marriage.kind() == CampaignData.MarriageKind.PLAYER && marriage.spousePlayerId() != null) {
-                SettlementData.CharacterRecord spouse = characters.getCharacter(marriage.spousePlayerId());
-                spouseName = spouse != null && spouse.isCreated() ? spouse.getDisplayName() : marriage.spousePlayerId().toString();
-                spouseFaith = spouse != null && spouse.isCreated() ? spouse.getFaith() : "Unknown";
-                spouseCulture = "Player character";
-                spouseTraits = spouse != null ? traitNames(spouse.getTraits()) : "Unknown";
-                if (spouse != null && spouse.isCreated()) {
-                    int stability = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
-                    int treasury = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.TREASURY);
-                    int morale = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.MORALE);
-                    List<String> effects = new ArrayList<>();
-                    if (stability != 0) effects.add((stability > 0 ? "+" : "") + stability + " stability/day");
-                    if (treasury != 0) effects.add((treasury > 0 ? "+" : "") + treasury + " State Treasury/day");
-                    if (morale != 0) effects.add((morale > 0 ? "+" : "") + morale + " recruit morale");
-                    spouseEffect = effects.isEmpty() ? "Marriage Alliance; no direct capital trait effects"
-                            : "Marriage Alliance; capital receives " + String.join(", ", effects);
-                } else spouseEffect = "Player marriage alliance";
-                playerSpouse = true;
+        boolean canDivorce = marriage != null && day - marriage.marriedDay() >= 7L;
+        if (marriage != null && marriage.spousePlayerId() != null) {
+            SettlementData.CharacterRecord spouse = characters.getCharacter(marriage.spousePlayerId());
+            spouseName = spouse != null && spouse.isCreated() ? spouse.getDisplayName() : marriage.spousePlayerId().toString();
+            spouseFaith = spouse != null && spouse.isCreated() ? spouse.getFaith() : "Unknown";
+            spouseTraits = spouse != null ? traitNames(spouse.getTraits()) : "Unknown";
+            if (spouse != null && spouse.isCreated()) {
+                int stability = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
+                int treasury = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.TREASURY);
+                int morale = CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.MORALE);
+                List<String> effects = new ArrayList<>();
+                if (stability != 0) effects.add((stability > 0 ? "+" : "") + stability + " stability/day");
+                if (treasury != 0) effects.add((treasury > 0 ? "+" : "") + treasury + " State Treasury/day");
+                if (morale != 0) effects.add((morale > 0 ? "+" : "") + morale + " recruit morale");
+                spouseEffect = effects.isEmpty() ? "Marriage alliance; no direct capital trait effects"
+                        : "Marriage alliance; capital receives " + String.join(", ", effects);
             } else {
-                spouseName = marriage.spouseName();
-                spouseFaith = marriage.spouseFaith();
-                spouseCulture = marriage.spouseCulture();
-                spouseTraits = marriage.spouseTraits();
-                spouseEffect = marriage.spouseEffect();
+                spouseEffect = "Player marriage alliance";
             }
         }
 
@@ -100,54 +64,24 @@ public record FamilySnapshot(
             pendingName = proposer != null && proposer.isCreated() ? proposer.getDisplayName() : pending.toString();
         }
 
-        List<PlayerCandidate> playerCandidates = player.getServer().getPlayerList().getPlayers().stream()
-                .filter(other -> !other.getUUID().equals(player.getUUID()))
-                .filter(other -> campaign.getMarriage(other.getUUID()) == null)
-                .map(other -> {
-                    SettlementData.CharacterRecord otherCharacter = characters.getCharacter(other.getUUID());
-                    return otherCharacter != null && otherCharacter.isCreated()
-                            ? new PlayerCandidate(other.getUUID(), otherCharacter.getDisplayName()) : null;
+        List<PlayerCandidate> playerCandidates = marriage == null
+                ? player.getServer().getPlayerList().getPlayers().stream()
+                .filter(onlinePlayer -> !onlinePlayer.getUUID().equals(player.getUUID()))
+                .filter(onlinePlayer -> campaign.getMarriage(onlinePlayer.getUUID()) == null)
+                .map(onlinePlayer -> {
+                    SettlementData.CharacterRecord candidateCharacter = characters.getCharacter(onlinePlayer.getUUID());
+                    return candidateCharacter != null && candidateCharacter.isCreated()
+                            ? new PlayerCandidate(onlinePlayer.getUUID(), candidateCharacter.getDisplayName()) : null;
                 })
                 .filter(java.util.Objects::nonNull)
                 .sorted(java.util.Comparator.comparing(PlayerCandidate::name, String.CASE_INSENSITIVE_ORDER))
                 .limit(64)
-                .toList();
+                .toList()
+                : List.of();
 
-        String preferredFaith = character != null && character.isCreated() ? character.getFaith() : "";
-        List<CampaignData.NpcSpouse> generatedCandidates = campaign.candidatesFor(player.getUUID(), day, rejectedCandidates, seenCandidates, spouseQuality, preferredFaith);
-        generatedCandidates.forEach(value -> extra.markCandidateSeen(player.getUUID(), value.name()));
-        List<Candidate> candidates = generatedCandidates.stream()
-                .filter(value -> rejectedCandidates.stream().noneMatch(rejected -> rejected.equalsIgnoreCase(value.id()) || rejected.equalsIgnoreCase(value.name())))
-                .filter(value -> canMarryAdditional ? value.gender().equalsIgnoreCase("FEMALE") : (preferredGender.equals("ANY") || value.gender().equalsIgnoreCase(preferredGender)))
-                .map(value -> new Candidate(
-                        value.id(), value.name(), value.gender(), value.faith(), value.culture(), value.traitsText(), value.effect(),
-                        value.stabilityBonus(), value.treasuryPerDay(), value.moraleBonus()
-                )).toList();
-
-        return new FamilySnapshot(
-                characterName,
-                marriage != null,
-                spouseName,
-                spouseFaith,
-                spouseCulture,
-                spouseTraits,
-                spouseEffect,
-                playerSpouse,
-                canDivorce,
-                spouseCount,
-                maxSpouses,
-                canMarryAdditional,
-                List.copyOf(additionalSpouses),
-                preferredGender,
-                pending,
-                pendingName,
-                playerCandidates,
-                candidates,
-                day,
-                campaign.nextCandidateRefreshDay(player.getUUID()),
-                campaign.canRefreshCandidates(player.getUUID(), day),
-                message == null ? "" : message
-        );
+        return new FamilySnapshot(characterName, marriage != null, spouseName, spouseFaith, spouseTraits,
+                spouseEffect, canDivorce, pending, pendingName, playerCandidates, day,
+                message == null ? "" : message);
     }
 
     private static String traitNames(List<String> ids) {
@@ -162,24 +96,14 @@ public record FamilySnapshot(
         buffer.writeBoolean(married);
         buffer.writeUtf(spouseName, 80);
         buffer.writeUtf(spouseFaith, 48);
-        buffer.writeUtf(spouseCulture, 32);
         buffer.writeUtf(spouseTraits, 128);
         buffer.writeUtf(spouseEffect, 160);
-        buffer.writeBoolean(playerSpouse);
         buffer.writeBoolean(canDivorce);
-        buffer.writeVarInt(spouseCount);
-        buffer.writeVarInt(maxSpouses);
-        buffer.writeBoolean(canMarryAdditional);
-        PacketValidation.writeCollection(buffer, additionalSpouses, 3, (buf, value) -> value.encode(buf));
-        buffer.writeUtf(preferredGender, 12);
         buffer.writeBoolean(pendingProposer != null);
         if (pendingProposer != null) buffer.writeUUID(pendingProposer);
         buffer.writeUtf(pendingProposerName, 80);
         PacketValidation.writeCollection(buffer, playerCandidates, 64, (buf, value) -> value.encode(buf));
-        PacketValidation.writeCollection(buffer, candidates, 64, (buf, value) -> value.encode(buf));
         buffer.writeLong(currentDay);
-        buffer.writeLong(nextRefreshDay);
-        buffer.writeBoolean(canRefresh);
         buffer.writeUtf(message, 256);
     }
 
@@ -188,76 +112,20 @@ public record FamilySnapshot(
         boolean married = buffer.readBoolean();
         String spouseName = buffer.readUtf(80);
         String spouseFaith = buffer.readUtf(48);
-        String spouseCulture = buffer.readUtf(32);
         String spouseTraits = buffer.readUtf(128);
         String spouseEffect = buffer.readUtf(160);
-        boolean playerSpouse = buffer.readBoolean();
         boolean canDivorce = buffer.readBoolean();
-        int spouseCount = buffer.readVarInt();
-        int maxSpouses = buffer.readVarInt();
-        boolean canMarryAdditional = buffer.readBoolean();
-        int additionalCount = PacketValidation.readCount(buffer, 3, "additional spouse");
-        List<AdditionalSpouse> additionalSpouses = new ArrayList<>(additionalCount);
-        for (int i = 0; i < additionalCount; i++) additionalSpouses.add(AdditionalSpouse.decode(buffer));
-        String preferredGender = buffer.readUtf(12);
         UUID pending = buffer.readBoolean() ? buffer.readUUID() : null;
         String pendingName = buffer.readUtf(80);
         int playerCount = PacketValidation.readCount(buffer, 64, "player marriage candidate");
-        List<PlayerCandidate> playerCandidates = new ArrayList<>(playerCount);
-        for (int i = 0; i < playerCount; i++) playerCandidates.add(PlayerCandidate.decode(buffer));
-        int count = PacketValidation.readCount(buffer, 64, "marriage candidate");
-        List<Candidate> candidates = new ArrayList<>(count);
-        for (int i = 0; i < count; i++) candidates.add(Candidate.decode(buffer));
-        long currentDay = buffer.readLong();
-        long nextRefreshDay = buffer.readLong();
-        boolean canRefresh = buffer.readBoolean();
-        return new FamilySnapshot(name, married, spouseName, spouseFaith, spouseCulture, spouseTraits,
-                spouseEffect, playerSpouse, canDivorce, spouseCount, maxSpouses, canMarryAdditional, additionalSpouses, preferredGender, pending, pendingName, playerCandidates, candidates, currentDay, nextRefreshDay,
-                canRefresh, buffer.readUtf(256));
-    }
-
-    public record AdditionalSpouse(String name, String faith, String traits, String effect, int effectPercent) {
-        private void encode(FriendlyByteBuf buffer) {
-            buffer.writeUtf(name, 80); buffer.writeUtf(faith, 48); buffer.writeUtf(traits, 128); buffer.writeUtf(effect, 160); buffer.writeVarInt(effectPercent);
-        }
-        private static AdditionalSpouse decode(FriendlyByteBuf buffer) {
-            return new AdditionalSpouse(buffer.readUtf(80), buffer.readUtf(48), buffer.readUtf(128), buffer.readUtf(160), buffer.readVarInt());
-        }
+        List<PlayerCandidate> candidates = new ArrayList<>(playerCount);
+        for (int i = 0; i < playerCount; i++) candidates.add(PlayerCandidate.decode(buffer));
+        return new FamilySnapshot(name, married, spouseName, spouseFaith, spouseTraits, spouseEffect,
+                canDivorce, pending, pendingName, candidates, buffer.readLong(), buffer.readUtf(256));
     }
 
     public record PlayerCandidate(UUID id, String name) {
         private void encode(FriendlyByteBuf buffer) { buffer.writeUUID(id); buffer.writeUtf(name, 80); }
         private static PlayerCandidate decode(FriendlyByteBuf buffer) { return new PlayerCandidate(buffer.readUUID(), buffer.readUtf(80)); }
-    }
-
-    public record Candidate(
-            String id,
-            String name,
-            String gender,
-            String faith,
-            String culture,
-            String traits,
-            String effect,
-            int stabilityBonus,
-            int treasuryPerDay,
-            int moraleBonus
-    ) {
-        private void encode(FriendlyByteBuf buffer) {
-            buffer.writeUtf(id, 64);
-            buffer.writeUtf(name, 80);
-            buffer.writeUtf(gender, 12);
-            buffer.writeUtf(faith, 48);
-            buffer.writeUtf(culture, 32);
-            buffer.writeUtf(traits, 128);
-            buffer.writeUtf(effect, 160);
-            buffer.writeInt(stabilityBonus);
-            buffer.writeInt(treasuryPerDay);
-            buffer.writeInt(moraleBonus);
-        }
-
-        private static Candidate decode(FriendlyByteBuf buffer) {
-            return new Candidate(buffer.readUtf(64), buffer.readUtf(80), buffer.readUtf(12), buffer.readUtf(48), buffer.readUtf(32),
-                    buffer.readUtf(128), buffer.readUtf(160), buffer.readInt(), buffer.readInt(), buffer.readInt());
-        }
     }
 }

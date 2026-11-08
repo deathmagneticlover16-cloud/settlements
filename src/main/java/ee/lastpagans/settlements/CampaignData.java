@@ -40,10 +40,7 @@ public final class CampaignData extends SavedData {
     private final Map<String, Integer> factionReliability = new HashMap<>();
 
     private final Map<UUID, MarriageRecord> marriages = new HashMap<>();
-    private final Map<UUID, List<MarriageRecord>> additionalNpcMarriages = new HashMap<>();
     private final Map<UUID, UUID> pendingPlayerMarriageProposals = new HashMap<>();
-    private final Map<UUID, List<NpcSpouse>> spouseCandidates = new HashMap<>();
-    private final Map<UUID, Long> spouseCandidateGeneratedDay = new HashMap<>();
 
     private final Map<String, FactionProfile> factionProfiles = new HashMap<>();
     private final List<WorldNewsEntry> worldNews = new ArrayList<>();
@@ -98,29 +95,14 @@ public final class CampaignData extends SavedData {
         }
         for (Tag raw : tag.getList("Marriages", Tag.TAG_COMPOUND)) {
             MarriageRecord marriage = MarriageRecord.fromNBT((CompoundTag) raw);
-            if (marriage.playerId != null) data.marriages.put(marriage.playerId, marriage);
-        }
-        for (Tag raw : tag.getList("AdditionalNpcMarriages", Tag.TAG_COMPOUND)) {
-            MarriageRecord marriage = MarriageRecord.fromNBT((CompoundTag) raw);
-            if (marriage.playerId != null && marriage.kind == MarriageKind.NPC)
-                data.additionalNpcMarriages.computeIfAbsent(marriage.playerId, key -> new ArrayList<>()).add(marriage);
+            if (marriage.playerId != null && marriage.spousePlayerId != null)
+                data.marriages.put(marriage.playerId, marriage);
         }
         for (Tag raw : tag.getList("MarriageProposals", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
             if (entry.hasUUID("Target") && entry.hasUUID("Proposer")) {
                 data.pendingPlayerMarriageProposals.put(entry.getUUID("Target"), entry.getUUID("Proposer"));
             }
-        }
-        for (Tag raw : tag.getList("SpouseCandidateSets", Tag.TAG_COMPOUND)) {
-            CompoundTag entry = (CompoundTag) raw;
-            if (!entry.hasUUID("Player")) continue;
-            UUID player = entry.getUUID("Player");
-            List<NpcSpouse> values = new ArrayList<>();
-            for (Tag candidateRaw : entry.getList("Candidates", Tag.TAG_COMPOUND)) {
-                values.add(NpcSpouse.fromNBT((CompoundTag) candidateRaw));
-            }
-            if (!values.isEmpty()) data.spouseCandidates.put(player, values);
-            data.spouseCandidateGeneratedDay.put(player, entry.getLong("GeneratedDay"));
         }
         for (Tag raw : tag.getList("FactionProfiles", Tag.TAG_COMPOUND)) {
             FactionProfile profile = FactionProfile.fromNBT((CompoundTag) raw);
@@ -178,9 +160,6 @@ public final class CampaignData extends SavedData {
         ListTag marriageList = new ListTag();
         marriages.values().forEach(marriage -> marriageList.add(marriage.toNBT()));
         tag.put("Marriages", marriageList);
-        ListTag additionalMarriageList = new ListTag();
-        additionalNpcMarriages.values().forEach(values -> values.forEach(marriage -> additionalMarriageList.add(marriage.toNBT())));
-        tag.put("AdditionalNpcMarriages", additionalMarriageList);
 
         ListTag marriageProposals = new ListTag();
         pendingPlayerMarriageProposals.forEach((target, proposer) -> {
@@ -190,18 +169,6 @@ public final class CampaignData extends SavedData {
             marriageProposals.add(entry);
         });
         tag.put("MarriageProposals", marriageProposals);
-
-        ListTag candidateSets = new ListTag();
-        spouseCandidates.forEach((player, candidates) -> {
-            CompoundTag entry = new CompoundTag();
-            entry.putUUID("Player", player);
-            entry.putLong("GeneratedDay", spouseCandidateGeneratedDay.getOrDefault(player, 0L));
-            ListTag values = new ListTag();
-            candidates.forEach(candidate -> values.add(candidate.toNBT()));
-            entry.put("Candidates", values);
-            candidateSets.add(entry);
-        });
-        tag.put("SpouseCandidateSets", candidateSets);
 
         ListTag profiles = new ListTag();
         factionProfiles.values().forEach(profile -> profiles.add(profile.toNBT()));
@@ -454,49 +421,6 @@ public final class CampaignData extends SavedData {
         return marriages.get(playerId);
     }
 
-    public List<MarriageRecord> getAdditionalNpcMarriages(UUID playerId) {
-        return List.copyOf(additionalNpcMarriages.getOrDefault(playerId, List.of()));
-    }
-
-    public int spouseCount(UUID playerId) {
-        return (marriages.containsKey(playerId) ? 1 : 0) + additionalNpcMarriages.getOrDefault(playerId, List.of()).size();
-    }
-
-    public static int spouseEffectPercent(int spouseIndex) {
-        return switch (Math.max(0, spouseIndex)) {
-            case 0 -> 100;
-            case 1 -> SettlementConfig.SECOND_SPOUSE_EFFECT_PERCENT.get();
-            case 2 -> SettlementConfig.THIRD_SPOUSE_EFFECT_PERCENT.get();
-            default -> SettlementConfig.LATER_SPOUSE_EFFECT_PERCENT.get();
-        };
-    }
-
-    public static int scaledSpouseEffect(int value, int spouseIndex) {
-        return Math.round(value * spouseEffectPercent(spouseIndex) / 100.0F);
-    }
-
-    public boolean marryAdditionalNpc(UUID playerId, NpcSpouse spouse, long day) {
-        if (playerId == null || spouse == null || !marriages.containsKey(playerId)) return false;
-        MarriageRecord primary = marriages.get(playerId);
-        if (primary != null && primary.kind == MarriageKind.NPC && primary.spouseId.equals(spouse.id())) return false;
-        List<MarriageRecord> values = additionalNpcMarriages.computeIfAbsent(playerId, key -> new ArrayList<>());
-        if (values.size() >= 3) return false;
-        if (values.stream().anyMatch(value -> value.spouseId.equals(spouse.id()))) return false;
-        values.add(MarriageRecord.forNpc(playerId, spouse, day));
-        List<NpcSpouse> candidates = spouseCandidates.get(playerId);
-        if (candidates != null) candidates.removeIf(value -> value.id().equals(spouse.id()));
-        setDirty();
-        return true;
-    }
-
-    public void marryNpc(UUID playerId, NpcSpouse spouse, long day) {
-        marriages.put(playerId, MarriageRecord.forNpc(playerId, spouse, day));
-        List<NpcSpouse> candidates = spouseCandidates.get(playerId);
-        if (candidates != null && spouse != null) candidates.removeIf(value -> value.id().equals(spouse.id()));
-        pendingPlayerMarriageProposals.remove(playerId);
-        setDirty();
-    }
-
     public boolean proposePlayerMarriage(UUID proposer, UUID target) {
         if (proposer == null || target == null || proposer.equals(target)) return false;
         if (marriages.containsKey(proposer) || marriages.containsKey(target)) return false;
@@ -526,10 +450,8 @@ public final class CampaignData extends SavedData {
 
     public void divorce(UUID playerId) {
         MarriageRecord marriage = marriages.remove(playerId);
-        additionalNpcMarriages.remove(playerId);
-        if (marriage != null && marriage.kind == MarriageKind.PLAYER && marriage.spousePlayerId != null) {
+        if (marriage != null && marriage.spousePlayerId != null) {
             marriages.remove(marriage.spousePlayerId);
-            additionalNpcMarriages.remove(marriage.spousePlayerId);
         }
         setDirty();
     }
@@ -538,8 +460,6 @@ public final class CampaignData extends SavedData {
         divorce(playerId);
         pendingPlayerMarriageProposals.remove(playerId);
         pendingPlayerMarriageProposals.entrySet().removeIf(entry -> playerId.equals(entry.getValue()));
-        spouseCandidates.remove(playerId);
-        spouseCandidateGeneratedDay.remove(playerId);
         setDirty();
     }
 
@@ -556,81 +476,6 @@ public final class CampaignData extends SavedData {
         boolean changed = false;
         for (FactionProfile profile : factionProfiles.values()) changed |= profile.memberRanks.remove(playerId) != null;
         if (changed) setDirty();
-    }
-
-    public List<NpcSpouse> candidatesFor(UUID playerId, long day) {
-        return candidatesFor(playerId, day, List.of(), List.of(), 0, "");
-    }
-
-    public List<NpcSpouse> candidatesFor(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
-        return candidatesFor(playerId, day, rejectedNames, seenNames, qualityBonus, "");
-    }
-
-    public List<NpcSpouse> candidatesFor(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
-        List<NpcSpouse> values = spouseCandidates.get(playerId);
-        if (values == null || values.isEmpty()) {
-            values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus, preferredFaith);
-            spouseCandidates.put(playerId, values);
-            spouseCandidateGeneratedDay.put(playerId, day);
-            setDirty();
-        }
-        return List.copyOf(values);
-    }
-
-    public boolean canRefreshCandidates(UUID playerId, long day) {
-        return day - spouseCandidateGeneratedDay.getOrDefault(playerId, Long.MIN_VALUE / 2) >= 7L;
-    }
-
-    public List<NpcSpouse> refreshCandidates(UUID playerId, long day) {
-        return refreshCandidates(playerId, day, List.of(), List.of(), 0, "");
-    }
-
-    public List<NpcSpouse> refreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
-        return refreshCandidates(playerId, day, rejectedNames, seenNames, qualityBonus, "");
-    }
-
-    public List<NpcSpouse> refreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
-        if (!canRefreshCandidates(playerId, day)) return candidatesFor(playerId, day, rejectedNames, seenNames, qualityBonus, preferredFaith);
-        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus, preferredFaith);
-        spouseCandidates.put(playerId, values);
-        spouseCandidateGeneratedDay.put(playerId, day);
-        setDirty();
-        return List.copyOf(values);
-    }
-
-    public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day) {
-        return forceRefreshCandidates(playerId, day, List.of(), List.of(), 0, "");
-    }
-
-    public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus) {
-        return forceRefreshCandidates(playerId, day, rejectedNames, seenNames, qualityBonus, "");
-    }
-
-    public List<NpcSpouse> forceRefreshCandidates(UUID playerId, long day, List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
-        List<NpcSpouse> values = generateCandidates(playerId, day, 10, rejectedNames, seenNames, qualityBonus, preferredFaith);
-        spouseCandidates.put(playerId, values);
-        spouseCandidateGeneratedDay.put(playerId, day);
-        setDirty();
-        return List.copyOf(values);
-    }
-
-    public long nextCandidateRefreshDay(UUID playerId) {
-        return spouseCandidateGeneratedDay.getOrDefault(playerId, 0L) + 7L;
-    }
-
-    public NpcSpouse getCandidate(UUID playerId, String candidateId) {
-        if (candidateId == null) return null;
-        return spouseCandidates.getOrDefault(playerId, List.of()).stream()
-                .filter(candidate -> candidate.id().equals(candidateId))
-                .findFirst().orElse(null);
-    }
-
-    public boolean rejectCandidate(UUID playerId, String candidateId) {
-        List<NpcSpouse> values = spouseCandidates.get(playerId);
-        if (values == null || candidateId == null) return false;
-        boolean changed = values.removeIf(value -> candidateId.equals(value.id()));
-        if (changed) setDirty();
-        return changed;
     }
 
     public FactionProfile factionProfile(String factionId) {
@@ -708,121 +553,6 @@ public final class CampaignData extends SavedData {
 
     private void trimWorldNews() {
         while (worldNews.size() > 1000) worldNews.remove(worldNews.size() - 1);
-    }
-
-    private static List<NpcSpouse> generateCandidates(UUID playerId, long day, int count,
-                                                       List<String> rejectedNames, List<String> seenNames, int qualityBonus, String preferredFaith) {
-        String[] cultures = {"Baltic", "Finnic", "Norse", "Germanic", "Slavic", "Roman"};
-        String[][] firstNames = {
-                {"Aino", "Linda", "Maia", "Leelo", "Ilmar", "Jaan", "Lembit", "Marek"},
-                {"Kyllikki", "Aila", "Tuuli", "Vaino", "Tapio", "Mikko", "Kauko", "Sampo"},
-                {"Astrid", "Sigrid", "Freydis", "Ingrid", "Ragnar", "Leif", "Eirik", "Harald"},
-                {"Adelheid", "Helena", "Gertrud", "Mathilde", "Konrad", "Otto", "Heinrich", "Bruno"},
-                {"Miroslava", "Milena", "Zora", "Danica", "Bogdan", "Milos", "Radomir", "Vladan"},
-                {"Julia", "Aurelia", "Claudia", "Marcella", "Marcus", "Lucius", "Gaius", "Titus"}
-        };
-        String[][] lastNames = {
-                {"Tamm", "Varik", "Kask", "Saar", "Lepp", "Raud", "Vaher", "Mets"},
-                {"Korhonen", "Virtanen", "Maki", "Laine", "Niemi", "Kivi", "Aho", "Jarvi"},
-                {"Eiriksson", "Haraldsdottir", "Ulfsson", "Ragnarsdottir", "Bjornsson", "Sigurdsdottir"},
-                {"Falk", "Stein", "Wulf", "Hartmann", "Lind", "Bauer", "Keller", "Brandt"},
-                {"Dragovic", "Mirovic", "Radic", "Kovac", "Veselin", "Dabrowski", "Novak", "Vukic"},
-                {"Valerius", "Cassius", "Flavius", "Aemilius", "Aurelius", "Claudius", "Cornelius", "Julius"}
-        };
-        String[][] religions = {
-                {"Baltic Paganism", "Finnic Paganism", "Catholic Christianity"},
-                {"Finnic Paganism", "Orthodox Christianity", "Catholic Christianity"},
-                {"Norse Paganism", "Catholic Christianity"},
-                {"Catholic Christianity", "Orthodox Christianity"},
-                {"Slavic Paganism", "Orthodox Christianity", "Catholic Christianity"},
-                {"Roman Paganism", "Catholic Christianity", "Orthodox Christianity"}
-        };
-        List<String> traitPool = CampaignDefinitions.playableTraits().stream().map(CampaignDefinitions.TraitDefinition::id).toList();
-        long seed = day * 341873128712L;
-        if (playerId != null) seed ^= playerId.getMostSignificantBits() ^ playerId.getLeastSignificantBits();
-        java.util.Random random = new java.util.Random(seed);
-        List<NpcSpouse> result = new ArrayList<>();
-        List<String> generatedNames = new ArrayList<>();
-        int qualityRolls = 1 + Math.max(0, Math.min(2, qualityBonus));
-        for (int i = 0; i < count; i++) {
-            String gender = i < count / 2 ? "Female" : "Male";
-            int culture = 0;
-            String first = "";
-            String last = "";
-            String fullName = "";
-            boolean acceptedName = false;
-            // Rejected people should stay gone. Previously-seen names have a 75% reroll chance, so they
-            // remain possible without dominating every weekly candidate refresh.
-            for (int attempt = 0; attempt < 64; attempt++) {
-                boolean romanPreferred = preferredFaith != null && preferredFaith.equalsIgnoreCase("Roman Paganism");
-                culture = romanPreferred && random.nextDouble() < 0.70D ? 5 : random.nextInt(cultures.length);
-                int firstIndex = "Female".equals(gender) ? random.nextInt(4) : 4 + random.nextInt(Math.max(1, firstNames[culture].length - 4));
-                first = firstNames[culture][firstIndex];
-                last = lastNames[culture][random.nextInt(lastNames[culture].length)];
-                if (culture == 5 && "Female".equals(gender) && last.endsWith("us")) last = last.substring(0, last.length() - 2) + "a";
-                fullName = first + " " + last;
-                if (containsIgnoreCase(rejectedNames, fullName) || containsIgnoreCase(generatedNames, fullName)) continue;
-                if (containsIgnoreCase(seenNames, fullName) && random.nextDouble() < 0.75D) continue;
-                acceptedName = true;
-                break;
-            }
-            if (!acceptedName) {
-                // The finite default name pool can theoretically be exhausted after many years of rejections.
-                // Keep the candidate generic while guaranteeing that a deliberately rejected person never returns.
-                int suffix = 2;
-                String base = first + " " + last;
-                fullName = base;
-                while (containsIgnoreCase(rejectedNames, fullName) || containsIgnoreCase(generatedNames, fullName))
-                    fullName = base + " " + suffix++;
-            }
-            generatedNames.add(fullName);
-            String faith = religions[culture][random.nextInt(religions[culture].length)];
-
-            List<String> traits = List.of();
-            int bestScore = Integer.MIN_VALUE;
-            for (int roll = 0; roll < qualityRolls; roll++) {
-                List<String> shuffled = new ArrayList<>(traitPool);
-                java.util.Collections.shuffle(shuffled, random);
-                List<String> attempt = List.copyOf(shuffled.subList(0, Math.min(3, shuffled.size())));
-                int score = spouseTraitScore(attempt);
-                if (score > bestScore) { bestScore = score; traits = attempt; }
-            }
-            int stability = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.STABILITY);
-            int treasury = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.TREASURY);
-            int morale = CampaignDefinitions.totalEffect(traits, CampaignDefinitions.EffectKind.MORALE);
-            String id = "generated_" + Long.toUnsignedString(random.nextLong(), 36);
-            String effect = describeSpouseEffects(stability, treasury, morale);
-            result.add(new NpcSpouse(id, fullName, gender, faith, cultures[culture], traits, effect, stability, treasury, morale));
-        }
-        return result;
-    }
-
-    private static int spouseTraitScore(List<String> traits) {
-        int score = 0;
-        for (String id : traits) {
-            CampaignDefinitions.TraitDefinition definition = CampaignDefinitions.trait(id);
-            if (definition == null) continue;
-            score += switch (definition.tone()) {
-                case POSITIVE -> 2;
-                case MIXED -> 1;
-                case NEUTRAL -> 0;
-                case NEGATIVE -> -2;
-            };
-        }
-        return score;
-    }
-
-    private static boolean containsIgnoreCase(List<String> values, String wanted) {
-        if (values == null || wanted == null) return false;
-        return values.stream().anyMatch(value -> value != null && value.equalsIgnoreCase(wanted));
-    }
-
-    private static String describeSpouseEffects(int stability, int treasury, int morale) {
-        List<String> parts = new ArrayList<>();
-        if (stability != 0) parts.add((stability > 0 ? "+" : "") + stability + " daily stability");
-        if (treasury != 0) parts.add((treasury > 0 ? "+" : "") + treasury + " State Treasury/day");
-        if (morale != 0) parts.add((morale > 0 ? "+" : "") + morale + " recruit morale");
-        return parts.isEmpty() ? "No direct settlement modifier" : String.join(", ", parts);
     }
 
     public enum GovernmentType {
@@ -940,11 +670,6 @@ public final class CampaignData extends SavedData {
     public enum WarStatus {
         ACTIVE,
         ENDED
-    }
-
-    public enum MarriageKind {
-        NPC,
-        PLAYER
     }
 
     public enum WarGoal {
@@ -1388,98 +1113,17 @@ public final class CampaignData extends SavedData {
         }
     }
 
-    public record NpcSpouse(
-            String id,
-            String name,
-            String gender,
-            String faith,
-            String culture,
-            List<String> traits,
-            String effect,
-            int stabilityBonus,
-            int treasuryPerDay,
-            int moraleBonus
-    ) {
-        private CompoundTag toNBT() {
-            CompoundTag tag = new CompoundTag();
-            tag.putString("Id", id);
-            tag.putString("Name", name);
-            tag.putString("Gender", gender);
-            tag.putString("Faith", faith);
-            tag.putString("Culture", culture);
-            ListTag traitList = new ListTag();
-            traits.forEach(value -> traitList.add(net.minecraft.nbt.StringTag.valueOf(value)));
-            tag.put("Traits", traitList);
-            tag.putString("Effect", effect);
-            tag.putInt("StabilityBonus", stabilityBonus);
-            tag.putInt("TreasuryPerDay", treasuryPerDay);
-            tag.putInt("MoraleBonus", moraleBonus);
-            return tag;
-        }
-
-        private static NpcSpouse fromNBT(CompoundTag tag) {
-            List<String> traits = new ArrayList<>();
-            for (Tag raw : tag.getList("Traits", Tag.TAG_STRING)) traits.add(raw.getAsString());
-            return new NpcSpouse(
-                    tag.getString("Id"),
-                    tag.getString("Name"),
-                    tag.getString("Gender").isBlank() ? "Unspecified" : tag.getString("Gender"),
-                    tag.getString("Faith"),
-                    tag.getString("Culture"),
-                    List.copyOf(traits),
-                    tag.getString("Effect"),
-                    tag.getInt("StabilityBonus"),
-                    tag.getInt("TreasuryPerDay"),
-                    tag.getInt("MoraleBonus")
-            );
-        }
-
-        public String traitsText() {
-            return traits.stream().map(value -> {
-                CampaignDefinitions.TraitDefinition definition = CampaignDefinitions.trait(value);
-                return definition == null ? value : definition.name();
-            }).reduce((a, b) -> a + ", " + b).orElse("None");
-        }
-    }
-
     public static final class MarriageRecord {
         private final UUID playerId;
-        private MarriageKind kind;
         private UUID spousePlayerId;
-        private String spouseId = "";
-        private String spouseName = "";
-        private String spouseFaith = "";
-        private String spouseCulture = "";
-        private final List<String> spouseTraits = new ArrayList<>();
-        private String spouseEffect = "";
-        private int stabilityBonus;
-        private int treasuryPerDay;
-        private int moraleBonus;
         private long marriedDay;
 
         private MarriageRecord(UUID playerId) {
             this.playerId = playerId;
         }
 
-        private static MarriageRecord forNpc(UUID playerId, NpcSpouse spouse, long day) {
-            MarriageRecord record = new MarriageRecord(playerId);
-            record.kind = MarriageKind.NPC;
-            record.spouseId = spouse.id;
-            record.spouseName = spouse.name;
-            record.spouseFaith = spouse.faith;
-            record.spouseCulture = spouse.culture;
-            record.spouseTraits.addAll(spouse.traits);
-            record.spouseEffect = spouse.effect;
-            record.stabilityBonus = spouse.stabilityBonus;
-            record.treasuryPerDay = spouse.treasuryPerDay;
-            record.moraleBonus = spouse.moraleBonus;
-            record.marriedDay = Math.max(0L, day);
-            return record;
-        }
-
         private static MarriageRecord forPlayer(UUID playerId, UUID spousePlayerId, long day) {
             MarriageRecord record = new MarriageRecord(playerId);
-            record.kind = MarriageKind.PLAYER;
             record.spousePlayerId = spousePlayerId;
             record.marriedDay = Math.max(0L, day);
             return record;
@@ -1487,23 +1131,7 @@ public final class CampaignData extends SavedData {
 
         private static MarriageRecord fromNBT(CompoundTag tag) {
             MarriageRecord record = new MarriageRecord(tag.hasUUID("Player") ? tag.getUUID("Player") : null);
-            try { record.kind = MarriageKind.valueOf(tag.getString("Kind")); } catch (IllegalArgumentException ignored) { record.kind = MarriageKind.NPC; }
             if (tag.hasUUID("SpousePlayer")) record.spousePlayerId = tag.getUUID("SpousePlayer");
-            record.spouseId = tag.getString("SpouseId");
-            record.spouseName = tag.getString("SpouseName");
-            record.spouseFaith = tag.getString("SpouseFaith");
-            record.spouseCulture = tag.getString("SpouseCulture");
-            for (Tag raw : tag.getList("SpouseTraitList", Tag.TAG_STRING)) record.spouseTraits.add(raw.getAsString());
-            if (record.spouseTraits.isEmpty() && tag.contains("SpouseTraits", Tag.TAG_STRING)) {
-                for (String value : tag.getString("SpouseTraits").split(",")) {
-                    String id = CampaignDefinitions.normalize(value);
-                    if (!id.isBlank()) record.spouseTraits.add(id);
-                }
-            }
-            record.spouseEffect = tag.getString("SpouseEffect");
-            record.stabilityBonus = tag.getInt("StabilityBonus");
-            record.treasuryPerDay = tag.getInt("TreasuryPerDay");
-            record.moraleBonus = tag.getInt("MoraleBonus");
             record.marriedDay = tag.getLong("MarriedDay");
             return record;
         }
@@ -1511,64 +1139,31 @@ public final class CampaignData extends SavedData {
         private CompoundTag toNBT() {
             CompoundTag tag = new CompoundTag();
             if (playerId != null) tag.putUUID("Player", playerId);
-            tag.putString("Kind", kind.name());
             if (spousePlayerId != null) tag.putUUID("SpousePlayer", spousePlayerId);
-            tag.putString("SpouseId", spouseId);
-            tag.putString("SpouseName", spouseName);
-            tag.putString("SpouseFaith", spouseFaith);
-            tag.putString("SpouseCulture", spouseCulture);
-            ListTag traits = new ListTag();
-            spouseTraits.forEach(value -> traits.add(net.minecraft.nbt.StringTag.valueOf(value)));
-            tag.put("SpouseTraitList", traits);
-            tag.putString("SpouseEffect", spouseEffect);
-            tag.putInt("StabilityBonus", stabilityBonus);
-            tag.putInt("TreasuryPerDay", treasuryPerDay);
-            tag.putInt("MoraleBonus", moraleBonus);
             tag.putLong("MarriedDay", marriedDay);
             return tag;
         }
 
         public UUID playerId() { return playerId; }
-        public MarriageKind kind() { return kind; }
         public UUID spousePlayerId() { return spousePlayerId; }
-        public String spouseId() { return spouseId; }
-        public String spouseName() { return spouseName; }
-        public String spouseFaith() { return spouseFaith; }
-        public String spouseCulture() { return spouseCulture; }
-        public List<String> spouseTraitIds() { return List.copyOf(spouseTraits); }
-        public String spouseTraits() {
-            return spouseTraits.stream().map(value -> {
-                CampaignDefinitions.TraitDefinition definition = CampaignDefinitions.trait(value);
-                return definition == null ? value : definition.name();
-            }).reduce((a, b) -> a + ", " + b).orElse("None");
-        }
-        public String spouseEffect() { return spouseEffect; }
-        public int stabilityBonus() { return stabilityBonus; }
-        public int treasuryPerDay() { return treasuryPerDay; }
-        public int moraleBonus() { return moraleBonus; }
 
-        /**
-         * Player marriages intentionally use the spouse's live character traits rather than
-         * snapshotting bonuses when the marriage is created. This means later legitimate
-         * character edits/admin repairs stay in sync. NPC marriages keep their generated
-         * fixed bonuses.
-         */
+        /** Player marriage effects always use the spouse's live character traits. */
         public int effectiveStabilityBonus(SettlementData characters) {
-            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return stabilityBonus;
+            if (spousePlayerId == null || characters == null) return 0;
             SettlementData.CharacterRecord spouse = characters.getCharacter(spousePlayerId);
             return spouse == null || !spouse.isCreated() ? 0
                     : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.STABILITY);
         }
 
         public int effectiveTreasuryPerDay(SettlementData characters) {
-            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return treasuryPerDay;
+            if (spousePlayerId == null || characters == null) return 0;
             SettlementData.CharacterRecord spouse = characters.getCharacter(spousePlayerId);
             return spouse == null || !spouse.isCreated() ? 0
                     : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.TREASURY);
         }
 
         public int effectiveMoraleBonus(SettlementData characters) {
-            if (kind != MarriageKind.PLAYER || spousePlayerId == null || characters == null) return moraleBonus;
+            if (spousePlayerId == null || characters == null) return 0;
             SettlementData.CharacterRecord spouse = characters.getCharacter(spousePlayerId);
             return spouse == null || !spouse.isCreated() ? 0
                     : CampaignDefinitions.totalEffect(spouse.getTraits(), CampaignDefinitions.EffectKind.MORALE);

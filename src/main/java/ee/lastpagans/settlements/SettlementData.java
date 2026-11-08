@@ -31,7 +31,6 @@ public final class SettlementData extends SavedData {
     private final Map<UUID, String> selectedSettlementByPlayer = new HashMap<>();
     private final Map<UUID, CharacterRecord> characters = new HashMap<>();
     private final Collection<CharacterRecord> charactersView = Collections.unmodifiableCollection(characters.values());
-    private final Set<UUID> redeemedSettlerContracts = new HashSet<>();
 
     public static SettlementData get(ServerLevel level) {
         ServerLevel storage = level.getServer().overworld();
@@ -70,7 +69,6 @@ public final class SettlementData extends SavedData {
                 }
             }
         }
-        readUuidSet(tag, "RedeemedSettlerContracts", data.redeemedSettlerContracts);
         data.enforceUniqueVillagerRegistries();
         return data;
     }
@@ -95,7 +93,6 @@ public final class SettlementData extends SavedData {
         ListTag characterList = new ListTag();
         characters.values().forEach(character -> characterList.add(character.toNBT()));
         tag.put("Characters", characterList);
-        writeUuidSet(tag, "RedeemedSettlerContracts", redeemedSettlerContracts);
         return tag;
     }
 
@@ -232,21 +229,6 @@ public final class SettlementData extends SavedData {
     }
 
 
-    public boolean isSettlerContractRedeemed(UUID contractId) {
-        return contractId != null && redeemedSettlerContracts.contains(contractId);
-    }
-
-    public boolean redeemSettlerContract(UUID contractId) {
-        if (contractId == null) return false;
-        boolean added = redeemedSettlerContracts.add(contractId);
-        if (added) setDirty();
-        return added;
-    }
-
-    public void unredeemSettlerContract(UUID contractId) {
-        if (contractId != null && redeemedSettlerContracts.remove(contractId)) setDirty();
-    }
-
     public CharacterRecord getCharacter(UUID playerId) {
         return characters.get(playerId);
     }
@@ -381,10 +363,10 @@ public final class SettlementData extends SavedData {
         private int availableManpower;
         private int maximumManpower;
         private int housingCapacity;
-        private int pendingContracts;
+        private boolean immigrationEnabled = true;
         private long lastFoodDay = Long.MIN_VALUE;
         private long lastPlagueCheckDay = Long.MIN_VALUE;
-        private long lastContractGameTime = Long.MIN_VALUE;
+        private long lastImmigrationGameTime = Long.MIN_VALUE;
         private String notice = "";
 
         private String townSquareDimension = "";
@@ -441,10 +423,11 @@ public final class SettlementData extends SavedData {
             availableManpower = Math.max(0, tag.getInt("AvailableManpower"));
             maximumManpower = Math.max(0, tag.getInt("MaximumManpower"));
             housingCapacity = Math.max(0, tag.getInt("HousingCapacity"));
-            pendingContracts = Math.max(0, tag.getInt("PendingContracts"));
+            immigrationEnabled = !tag.contains("ImmigrationEnabled", Tag.TAG_BYTE) || tag.getBoolean("ImmigrationEnabled");
             lastFoodDay = tag.getLong("LastFoodDay");
             lastPlagueCheckDay = tag.contains("LastPlagueCheckDay") ? tag.getLong("LastPlagueCheckDay") : Long.MIN_VALUE;
-            lastContractGameTime = tag.contains("LastContractGameTime", Tag.TAG_LONG) ? tag.getLong("LastContractGameTime") : Long.MIN_VALUE;
+            lastImmigrationGameTime = tag.contains("LastImmigrationGameTime", Tag.TAG_LONG)
+                    ? tag.getLong("LastImmigrationGameTime") : Long.MIN_VALUE;
             notice = cleanText(tag.getString("Notice"), "", 160);
             factionTeam = tag.getString("FactionTeam");
             backingFactionTeam = tag.getString("BackingFactionTeam");
@@ -523,10 +506,10 @@ public final class SettlementData extends SavedData {
             tag.putInt("AvailableManpower", availableManpower);
             tag.putInt("MaximumManpower", maximumManpower);
             tag.putInt("HousingCapacity", housingCapacity);
-            tag.putInt("PendingContracts", pendingContracts);
+            tag.putBoolean("ImmigrationEnabled", immigrationEnabled);
             tag.putLong("LastFoodDay", lastFoodDay);
             tag.putLong("LastPlagueCheckDay", lastPlagueCheckDay);
-            if (lastContractGameTime != Long.MIN_VALUE) tag.putLong("LastContractGameTime", lastContractGameTime);
+            if (lastImmigrationGameTime != Long.MIN_VALUE) tag.putLong("LastImmigrationGameTime", lastImmigrationGameTime);
             tag.putString("Notice", notice);
             tag.putString("FactionTeam", factionTeam);
             tag.putString("BackingFactionTeam", backingFactionTeam);
@@ -602,7 +585,7 @@ public final class SettlementData extends SavedData {
         public int getMaximumManpower() { return maximumManpower; }
         public int getUsedManpower() { return professionalUnits.size(); }
         public int getHousingCapacity() { return housingCapacity; }
-        public int getPendingContracts() { return pendingContracts; }
+        public boolean isImmigrationEnabled() { return immigrationEnabled; }
         public String getNotice() { return notice; }
         public String getTownSquareDimension() { return townSquareDimension; }
         public BlockPos getTownSquare() { return townSquare; }
@@ -774,8 +757,7 @@ public final class SettlementData extends SavedData {
             dirty();
         }
         public void changeAvailableManpower(int delta) { setAvailableManpower(availableManpower + delta); }
-        public void setPendingContracts(int value) { pendingContracts = Math.max(0, value); dirty(); }
-        public void changePendingContracts(int delta) { setPendingContracts(pendingContracts + delta); }
+        public void setImmigrationEnabled(boolean value) { immigrationEnabled = value; dirty(); }
         public void setHousingCapacity(int value) { housingCapacity = Math.max(0, value); dirty(); }
         public void changeHousingCapacity(int delta) { setHousingCapacity(housingCapacity + delta); }
         public void setNotice(String value) { notice = cleanText(value, "", 160); dirty(); }
@@ -1103,71 +1085,62 @@ public final class SettlementData extends SavedData {
                     if (spouseStability != 0) changeStability(spouseStability);
                     if (spouseTreasury != 0 && level != null) StateTreasury.change(level, this, spouseTreasury);
                 }
-                int spouseIndex = 1;
-                for (CampaignData.MarriageRecord additional : campaign.getAdditionalNpcMarriages(ownerId)) {
-                    int stability = CampaignData.scaledSpouseEffect(additional.stabilityBonus(), spouseIndex);
-                    int spouseTreasury = CampaignData.scaledSpouseEffect(additional.treasuryPerDay(), spouseIndex);
-                    if (stability != 0) changeStability(stability);
-                    if (spouseTreasury != 0 && level != null) StateTreasury.change(level, this, spouseTreasury);
-                    spouseIndex++;
-                }
             }
 
             dirty();
         }
 
-        /**
-         * Population growth is intentionally independent from Minecraft day length. Eligible settlements
-         * generate contracts on an active-server timer so seasonal/day-length mods cannot turn one settler
-         * into an hour-long wait. The very first eligible contract is immediate on the next settlement tick.
-         */
-        public void processSettlerContracts(long gameTime, long day, CampaignData campaign) {
-            int maxPending = SettlementConfig.SETTLER_CONTRACT_MAX_PENDING.get();
-            int minimumStability = SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get();
-            int reserve = SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get();
-            int cost = SettlementConfig.SETTLER_CONTRACT_FOOD_COST.get();
-            int requiredFood = Math.max(reserve, cost);
-            if (pendingContracts >= maxPending || getFreeHousing() <= 0 || stability < minimumStability || food < requiredFood) return;
+        /** Immigration uses active server time so day-length mods do not distort population growth. */
+        public boolean isImmigrationReady(long gameTime) {
+            if (!SettlementConfig.IMMIGRATION_ENABLED.get() || !immigrationEnabled) return false;
+            int minimumStability = SettlementConfig.IMMIGRATION_MIN_STABILITY.get();
+            int requiredFood = Math.max(SettlementConfig.IMMIGRATION_FOOD_RESERVE.get(), SettlementConfig.IMMIGRATION_FOOD_COST.get());
+            if (!hasTownSquare() || hasPendingFirstSettlers()
+                    || getVillagerCount() >= SettlementConfig.IMMIGRATION_MAX_PHYSICAL_RESIDENTS.get()
+                    || getFreeHousing() <= 0 || stability < minimumStability || food < requiredFood) return false;
+            return lastImmigrationGameTime == Long.MIN_VALUE
+                    || gameTime - lastImmigrationGameTime >= immigrationIntervalTicks();
+        }
 
-            long intervalTicks = settlerContractIntervalTicks();
-            if (lastContractGameTime != Long.MIN_VALUE && gameTime - lastContractGameTime < intervalTicks) return;
-
-            food = Math.max(0, food - cost);
-            pendingContracts++;
-            lastContractGameTime = Math.max(0L, gameTime);
-            addChronicle("A Settler Contract became available.");
+        public void recordImmigration(long gameTime, long day, CampaignData campaign) {
+            food = Math.max(0, food - SettlementConfig.IMMIGRATION_FOOD_COST.get());
+            lastImmigrationGameTime = Math.max(0L, gameTime);
+            addChronicle("A new immigrant arrived.");
             if (campaign != null) {
                 campaign.addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MINOR,
-                        "New settlers sought", name + " has prepared a Settler Contract.", day,
+                        "New arrival", "An immigrant settled in " + name + ".", day,
                         factionTeam, id, CampaignData.NewsVisibility.FACTION);
             }
             dirty();
         }
 
-        public String getSettlerGrowthStatus(long gameTime) {
-            int maxPending = SettlementConfig.SETTLER_CONTRACT_MAX_PENDING.get();
-            int minimumStability = SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get();
-            int reserve = SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get();
-            int cost = SettlementConfig.SETTLER_CONTRACT_FOOD_COST.get();
+        public String getImmigrationStatus(long gameTime) {
+            int minimumStability = SettlementConfig.IMMIGRATION_MIN_STABILITY.get();
+            int reserve = SettlementConfig.IMMIGRATION_FOOD_RESERVE.get();
+            int cost = SettlementConfig.IMMIGRATION_FOOD_COST.get();
             int requiredFood = Math.max(reserve, cost);
-            if (pendingContracts >= maxPending) return "Paused: contract queue full (" + pendingContracts + "/" + maxPending + ").";
+            if (!SettlementConfig.IMMIGRATION_ENABLED.get()) return "Disabled by server configuration.";
+            if (!immigrationEnabled) return "Paused by settlement management.";
+            if (!hasTownSquare()) return "Blocked: no Town Square.";
+            if (hasPendingFirstSettlers()) return "Waiting for the founding settlers to arrive.";
+            if (getVillagerCount() >= SettlementConfig.IMMIGRATION_MAX_PHYSICAL_RESIDENTS.get()) return "Blocked: physical resident cap reached.";
             if (getFreeHousing() <= 0) return "Blocked: no free housing.";
             if (stability < minimumStability) return "Blocked: Stability " + stability + "/" + minimumStability + ".";
             if (food < requiredFood) return "Blocked: Food " + food + "/" + requiredFood + ".";
-            int attraction = settlerAttractionPercent();
-            if (lastContractGameTime == Long.MIN_VALUE) return "Eligible now · attraction " + attraction + "% · costs " + cost + " Food.";
-            long intervalTicks = settlerContractIntervalTicks();
-            long remainingTicks = Math.max(0L, intervalTicks - Math.max(0L, gameTime - lastContractGameTime));
+            int attraction = immigrationAttractionPercent();
+            if (lastImmigrationGameTime == Long.MIN_VALUE) return "Immigration ready · attraction " + attraction + "% · costs " + cost + " Food.";
+            long intervalTicks = immigrationIntervalTicks();
+            long remainingTicks = Math.max(0L, intervalTicks - Math.max(0L, gameTime - lastImmigrationGameTime));
             if (remainingTicks <= 0L) return "Eligible now · attraction " + attraction + "% · costs " + cost + " Food.";
             long seconds = (remainingTicks + 19L) / 20L;
             long minutes = seconds / 60L;
             long remainder = seconds % 60L;
-            return "Next contract in " + (minutes > 0 ? minutes + "m " : "") + remainder + "s · attraction " + attraction + "% · costs " + cost + " Food.";
+            return "Next immigrant in " + (minutes > 0 ? minutes + "m " : "") + remainder + "s · attraction " + attraction + "% · costs " + cost + " Food.";
         }
 
-        private int settlerAttractionPercent() {
-            int minimumStability = SettlementConfig.SETTLER_CONTRACT_MIN_STABILITY.get();
-            int requiredFood = Math.max(SettlementConfig.SETTLER_CONTRACT_FOOD_RESERVE.get(), SettlementConfig.SETTLER_CONTRACT_FOOD_COST.get());
+        private int immigrationAttractionPercent() {
+            int minimumStability = SettlementConfig.IMMIGRATION_MIN_STABILITY.get();
+            int requiredFood = Math.max(SettlementConfig.IMMIGRATION_FOOD_RESERVE.get(), SettlementConfig.IMMIGRATION_FOOD_COST.get());
             double stabilityQuality = 0.15D + 0.85D * clamp01((stability - minimumStability) / (double)Math.max(1, 100 - minimumStability));
             double housingQuality = 0.15D + 0.85D * clamp01(getFreeHousing() / (double)Math.max(1, housingCapacity));
             int mouths = Math.max(1, getVillagerCount() + getProfessionalCount() + getMercenaryCompanyCount());
@@ -1175,22 +1148,15 @@ public final class SettlementData extends SavedData {
             return (int)Math.round(100.0D * stabilityQuality * housingQuality * foodQuality);
         }
 
-        private long settlerContractIntervalTicks() {
-            int fastest = Math.max(1, SettlementConfig.SETTLER_CONTRACT_FASTEST_MINUTES.get());
-            int slowest = Math.max(fastest, SettlementConfig.SETTLER_CONTRACT_SLOWEST_MINUTES.get());
-            double attraction = clamp01(settlerAttractionPercent() / 100.0D);
+        private long immigrationIntervalTicks() {
+            int fastest = Math.max(1, SettlementConfig.IMMIGRATION_FASTEST_MINUTES.get());
+            int slowest = Math.max(fastest, SettlementConfig.IMMIGRATION_SLOWEST_MINUTES.get());
+            double attraction = clamp01(immigrationAttractionPercent() / 100.0D);
             double minutes = slowest - (slowest - fastest) * attraction;
             return Math.max(20L, Math.round(minutes * 60.0D * 20.0D));
         }
 
         private static double clamp01(double value) { return Math.max(0.0D, Math.min(1.0D, value)); }
-
-        public boolean claimContract() {
-            if (pendingContracts <= 0) return false;
-            pendingContracts--;
-            dirty();
-            return true;
-        }
 
         public void addChronicle(String entry) {
             appendLimited(chronicle, entry, 32);

@@ -92,8 +92,9 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     }
 
     private void residentButtons() {
-        if (snapshot.canContribute()) {
-            addRenderableWidget(Button.builder(Component.literal("Claim Settler Contract"), button -> send(SettlementManager.SettlementAction.CLAIM_CONTRACT))
+        if (snapshot.canManage()) {
+            addRenderableWidget(Button.builder(Component.literal(snapshot.immigrationEnabled() ? "Pause Immigration" : "Enable Immigration"),
+                            button -> send(SettlementManager.SettlementAction.TOGGLE_IMMIGRATION))
                     .bounds(left + 20, top + 260, 170, 20).build());
         }
     }
@@ -379,10 +380,11 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         stat(graphics, "Civilian population", snapshot.civilianPopulation(), 22, 154);
         stat(graphics, "Military population", snapshot.militaryPopulation(), 22, 176);
         stat(graphics, "Free housing", snapshot.freeHousing(), 290, 110);
-        stat(graphics, "Contracts ready", snapshot.pendingContracts(), 290, 132);
-        graphics.drawString(font, fitText("Growth: " + snapshot.settlerGrowthStatus(), 220), left + 290, top + 154, CAMPAIGN_TITLE, false);
+        graphics.drawString(font, "Immigration: " + (snapshot.immigrationEnabled() ? "Enabled" : "Paused"), left + 290, top + 132,
+                snapshot.immigrationEnabled() ? 0xFF92D18B : CAMPAIGN_MUTED, false);
+        graphics.drawString(font, fitText("Attraction: " + snapshot.immigrationStatus(), 220), left + 290, top + 154, CAMPAIGN_TITLE, false);
         graphics.drawWordWrap(font, Component.literal(
-                "More settlers require spare housing, sufficient Stability, and a maintained Food reserve. Contract timing uses active server time, not Minecraft days."),
+                "Immigrants arrive automatically when Housing, Stability, and Food allow it. Timing uses active server time, and managers can pause arrivals."),
                 left + 290, top + 174, 220, 0xFFAAAAAA);
     }
 

@@ -3,7 +3,7 @@ package ee.lastpagans.settlements.mixin;
 import ee.lastpagans.settlements.client.ScaledCampaignScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,14 +11,14 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Gives every Settlements campaign action one coherent, asset-independent visual language. */
-@Mixin(Button.class)
+@Mixin(AbstractButton.class)
 public abstract class CampaignButtonMixin {
     @Inject(method = "renderWidget", at = @At("HEAD"), cancellable = true)
     private void settlements$renderCampaignButton(GuiGraphics graphics, int mouseX, int mouseY,
                                                    float partialTick, CallbackInfo callback) {
         Minecraft minecraft = Minecraft.getInstance();
         if (!(minecraft.screen instanceof ScaledCampaignScreen)) return;
-        Button button = (Button) (Object) this;
+        AbstractButton button = (AbstractButton) (Object) this;
         int x = button.getX(), y = button.getY(), width = button.getWidth(), height = button.getHeight();
         boolean highlighted = button.active && button.isHoveredOrFocused();
         int border = button.active ? (highlighted ? 0xFFF0D18A : 0xFF9C8355) : 0xFF4B4740;
