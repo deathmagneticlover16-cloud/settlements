@@ -31,6 +31,11 @@ public record FactionSnapshot(
         int stateTreasury,
         int realmPopulation,
         int activeWars,
+        boolean foundingEnabled,
+        boolean foundingRequiresTown,
+        int foundingPopulation,
+        int foundingStability,
+        int foundingSilver,
         List<MemberEntry> members,
         List<SettlementEntry> settlements,
         List<String> allies,
@@ -50,7 +55,9 @@ public record FactionSnapshot(
         RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(factionId);
         if (faction == null) {
             return new FactionSnapshot(factionId, factionId, new CompoundTag(), "Unknown", false, 0, "Commoner",
-                    "None", "Monarchy", "white", "white", 0, 0, 0, 0, List.of(), List.of(), List.of(), List.of(), defaultRanks(), List.of(), List.of(), List.of(), List.of(),
+                    "None", "Monarchy", "white", "white", 0, 0, 0, 0,
+                    foundingEnabled(), foundingRequiresTown(), foundingPopulation(), foundingStability(), foundingSilver(),
+                    List.of(), List.of(), List.of(), List.of(), defaultRanks(), List.of(), List.of(), List.of(), List.of(),
                     message == null ? "" : message);
         }
 
@@ -91,7 +98,7 @@ public record FactionSnapshot(
                 .toList();
         List<SettlementEntry> settlements = owned.stream().map(settlement -> new SettlementEntry(
                 settlement.getId(), settlement.getName(), settlement.getRank().displayName(),
-                settlement.getDisplayedPopulation(), settlement.getStability(), campaignSystems.lastTaxIncome(settlement.getId()),
+                settlement.getCivilianPopulation(), settlement.getStability(), StateTreasury.balance(player.serverLevel(), settlement), campaignSystems.lastTaxIncome(settlement.getId()),
                 settlement.isCapital()
         )).toList();
 
@@ -131,6 +138,7 @@ public record FactionSnapshot(
                 owned.isEmpty() ? campaignSystems.treasuryBalance(factionId) : StateTreasury.balance(player.serverLevel(), owned.get(0)),
                 owned.stream().mapToInt(SettlementData.SettlementRecord::getDisplayedPopulation).sum(),
                 campaign.activeWarsFor(factionId).size(),
+                foundingEnabled(), foundingRequiresTown(), foundingPopulation(), foundingStability(), foundingSilver(),
                 members,
                 settlements,
                 allies,
@@ -185,12 +193,14 @@ public record FactionSnapshot(
                 .sorted(Comparator.comparingInt((SettlementData.SettlementRecord value) -> value.getRank().ordinal()).reversed()
                         .thenComparing(SettlementData.SettlementRecord::getName, String.CASE_INSENSITIVE_ORDER))
                 .map(settlement -> new SettlementEntry(settlement.getId(), settlement.getName(), settlement.getRank().displayName(),
-                        settlement.getDisplayedPopulation(), settlement.getStability(),
+                        settlement.getCivilianPopulation(), settlement.getStability(), StateTreasury.balance(player.serverLevel(), settlement),
                         extra.lastTaxIncome(settlement.getId()), settlement.isCapital()))
                 .toList();
         return new FactionSnapshot("", "Independent", new CompoundTag(), "None", false, 0, "Independent",
                 "None", "Independent", "white", "white", 0, 0,
-                ownedSettlements.stream().mapToInt(SettlementEntry::population).sum(), 0, List.of(), ownedSettlements, List.of(), List.of(),
+                ownedSettlements.stream().mapToInt(SettlementEntry::population).sum(), 0,
+                foundingEnabled(), foundingRequiresTown(), foundingPopulation(), foundingStability(), foundingSilver(),
+                List.of(), ownedSettlements, List.of(), List.of(),
                 defaultRanks(), factions, List.of(), invitations, List.of(), message == null ? "" : message);
     }
 
@@ -199,6 +209,12 @@ public record FactionSnapshot(
         for (int tier = 4; tier >= 0; tier--) values.add(new RankEntry(tier, CampaignDefinitions.defaultRankTitle(tier)));
         return values;
     }
+
+    private static boolean foundingEnabled() { return SettlementConfig.FACTION_FOUNDING_ENABLED.get(); }
+    private static boolean foundingRequiresTown() { return SettlementConfig.FACTION_FOUNDING_REQUIRE_TOWN.get(); }
+    private static int foundingPopulation() { return SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get(); }
+    private static int foundingStability() { return SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get(); }
+    private static int foundingSilver() { return SettlementConfig.FACTION_FOUNDING_TREASURY_COST.get(); }
 
     public void encode(FriendlyByteBuf buffer) {
         buffer.writeUtf(factionId, 64);
@@ -216,6 +232,11 @@ public record FactionSnapshot(
         buffer.writeVarInt(stateTreasury);
         buffer.writeVarInt(realmPopulation);
         buffer.writeVarInt(activeWars);
+        buffer.writeBoolean(foundingEnabled);
+        buffer.writeBoolean(foundingRequiresTown);
+        buffer.writeVarInt(foundingPopulation);
+        buffer.writeVarInt(foundingStability);
+        buffer.writeVarInt(foundingSilver);
         writeList(buffer, members, 512, MemberEntry::encode);
         writeList(buffer, settlements, 512, SettlementEntry::encode);
         PacketValidation.writeCollection(buffer, allies, 256, (buf, value) -> buf.writeUtf(value, 64));
@@ -245,6 +266,11 @@ public record FactionSnapshot(
         int stateTreasury = buffer.readVarInt();
         int population = buffer.readVarInt();
         int activeWars = buffer.readVarInt();
+        boolean foundingEnabled = buffer.readBoolean();
+        boolean foundingRequiresTown = buffer.readBoolean();
+        int foundingPopulation = buffer.readVarInt();
+        int foundingStability = buffer.readVarInt();
+        int foundingSilver = buffer.readVarInt();
         List<MemberEntry> members = readList(buffer, MemberEntry::decode, 512);
         List<SettlementEntry> settlements = readList(buffer, SettlementEntry::decode, 512);
         int allyCount = PacketValidation.readCount(buffer, 256, "faction ally");
@@ -259,7 +285,9 @@ public record FactionSnapshot(
         List<InvitationEntry> invitations = readList(buffer, InvitationEntry::decode, 512);
         List<PlayerChoice> inviteCandidates = readList(buffer, PlayerChoice::decode, 512);
         return new FactionSnapshot(factionId, factionName, banner, leaderName, viewerLeader, viewerTier, viewerRank, rosterName,
-                government, teamDye, unitDye, dailyTaxIncome, stateTreasury, population, activeWars, members, settlements, allies, enemies, ranks,
+                government, teamDye, unitDye, dailyTaxIncome, stateTreasury, population, activeWars,
+                foundingEnabled, foundingRequiresTown, foundingPopulation, foundingStability, foundingSilver,
+                members, settlements, allies, enemies, ranks,
                 availableFactions, joinRequests, invitations, inviteCandidates, buffer.readUtf(256));
     }
 
@@ -297,19 +325,20 @@ public record FactionSnapshot(
     }
 
     public record SettlementEntry(String id, String name, String rank, int population, int stability,
-                                  int taxIncome, boolean capital) {
+                                  int treasury, int taxIncome, boolean capital) {
         private static void encode(SettlementEntry value, FriendlyByteBuf buffer) {
             buffer.writeUtf(value.id, 64);
             buffer.writeUtf(value.name, 64);
             buffer.writeUtf(value.rank, 32);
             buffer.writeVarInt(value.population);
             buffer.writeVarInt(value.stability);
+            buffer.writeVarInt(value.treasury);
             buffer.writeVarInt(value.taxIncome);
             buffer.writeBoolean(value.capital);
         }
         private static SettlementEntry decode(FriendlyByteBuf buffer) {
             return new SettlementEntry(buffer.readUtf(64), buffer.readUtf(64), buffer.readUtf(32),
-                    buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean());
+                    buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readBoolean());
         }
     }
 

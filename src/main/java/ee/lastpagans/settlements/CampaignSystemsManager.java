@@ -134,19 +134,17 @@ public final class CampaignSystemsManager {
     public static void refreshTaxPolicyModifier(SettlementData.SettlementRecord settlement, CampaignSystemsData extra) {
         String modifierId = "tax_policy";
         int rate = extra.taxRatePercent(settlement.getId());
-        int stability = extra.taxStabilityPerDay(settlement.getId());
-        if (stability == 0 || settlement.getCivilianPopulation() <= 0) {
-            extra.removeModifier(settlement.getId(), modifierId);
-            return;
-        }
-        String tone = rate < 100 ? "POSITIVE" : "NEGATIVE";
+        int stability = extra.taxStabilityImpact(settlement.getId());
+        int adjustment = extra.reconcileTaxStabilityOffset(settlement.getId());
+        if (adjustment != 0) settlement.changeStability(adjustment);
+        String tone = stability > 0 ? "POSITIVE" : "NEGATIVE";
         String detail = rate < 100
-                ? "Lighter taxation improves public order at the cost of State Treasury income."
-                : "Heavier taxation raises State Treasury income but strains public order.";
+                ? "Lighter taxation improves public order at the cost of Silver income."
+                : "This policy applies " + stability + " stability and changes daily Silver income.";
         extra.addModifier(settlement.getId(), new CampaignSystemsData.ModifierRecord(
-                modifierId, extra.taxDisplayName(settlement.getId()) + " Taxation (" + rate + "%)",
+                modifierId, extra.taxDisplayName(settlement.getId()) + " Taxation",
                 "settlements:textures/gui/icons/treasury.png", tone, "Tax policy", detail,
-                stability, 0, 0L));
+                0, 0, 0L));
     }
 
     private static void processTaxes(ServerLevel level, SettlementData.SettlementRecord settlement, CampaignSystemsData extra, long day) {
@@ -295,6 +293,7 @@ public final class CampaignSystemsManager {
                 && settlement.getStability() >= 45 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
                 && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.TOWN)) {
             settlement.setRank(SettlementData.SettlementRank.TOWN);
+            CaptureZoneManager.syncTownSquareMainZone(level, settlement);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 2L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The settlement grew into a Town. Civic Pride spread through the population.");
             long day = level.getDayTime() / 24000L;
@@ -309,6 +308,7 @@ public final class CampaignSystemsManager {
                 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
                 && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.CITY)) {
             settlement.setRank(SettlementData.SettlementRank.CITY);
+            CaptureZoneManager.syncTownSquareMainZone(level, settlement);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 3L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The settlement developed into a City.");
             long day = level.getDayTime() / 24000L;
@@ -324,6 +324,7 @@ public final class CampaignSystemsManager {
                 && settlement.getHousingCapacity() >= settlement.getVillagerCount()
                 && CaptureZoneManager.requirementsMet(level, settlement, SettlementData.SettlementRank.MAJOR_CITY)) {
             settlement.setRank(SettlementData.SettlementRank.MAJOR_CITY);
+            CaptureZoneManager.syncTownSquareMainZone(level, settlement);
             extra.addModifier(settlement.getId(), standardModifier(level, settlement.getId(), "civic_pride", 4L * 24L * 60L * 60L * 1000L));
             settlement.addChronicle("The settlement became a Major City.");
             long day = level.getDayTime() / 24000L;
@@ -721,7 +722,7 @@ public final class CampaignSystemsManager {
                 CampaignManager.changeReliability(server.overworld(), campaign, b, 5);
                 extra.setForcedNap(a, b, 0);
                 CampaignManager.syncRelation(server.overworld(), a, b, CampaignData.TreatyState.NEUTRAL);
-                CampaignToastSender.relationChanged(server, a, b, "Neutral — non-aggression obligation fulfilled");
+                CampaignToastSender.relationChanged(server, a, b, "Neutral - non-aggression obligation fulfilled");
             }
         }
     }

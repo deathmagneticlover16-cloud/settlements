@@ -4,17 +4,16 @@ import com.talhanation.recruits.client.gui.component.BannerRenderer;
 import com.talhanation.recruits.world.RecruitsFaction;
 import ee.lastpagans.settlements.SettlementManager;
 import ee.lastpagans.settlements.SettlementSnapshot;
-import ee.lastpagans.settlements.CaptureZoneData;
 import ee.lastpagans.settlements.AreaSelection;
-import ee.lastpagans.settlements.client.api.ClientCaptureZoneApi;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
 import ee.lastpagans.settlements.network.SettlementActionPacket;
 import ee.lastpagans.settlements.network.HousingAreaActionPacket;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractButton;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -22,30 +21,31 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public final class SettlementScreen extends ScaledCampaignScreen {
     private static final int W = 540, H = 330;
+    private static Tab lastTab = Tab.OVERVIEW;
+    private static ManagePage lastManagePage = ManagePage.LOCATIONS;
     private SettlementSnapshot snapshot;
     private int left, top;
-    private Tab tab = Tab.OVERVIEW;
+    private Tab tab = lastTab;
     private BannerRenderer factionBanner, settlementBanner;
-    private boolean confirmClearClaims;
-    private boolean confirmDeleteSettlement;
-    private ManagePage managePage = ManagePage.LOCATIONS;
+    private long clearClaimsConfirmUntil;
+    private ManagePage managePage = lastManagePage;
     private int effectScroll;
     private EditBox renameBox, transferBox;
-    private DropdownWidget memberDropdown, memberCandidateDropdown;
+    private DropdownWidget memberCandidateDropdown;
     private TaxRateSlider taxSlider;
-    private final Map<String, String> memberIdsByLabel = new LinkedHashMap<>();
-    private final Map<String, String> candidateIdsByLabel = new LinkedHashMap<>();
+    private final java.util.Map<String, String> candidateIdsByLabel = new java.util.LinkedHashMap<>();
+    private String transientMessage = "";
+    private long transientMessageUntil;
 
     public SettlementScreen(SettlementSnapshot snapshot) {
         super(Component.literal("Settlement"));
         this.snapshot = snapshot;
+        setTransientMessage(snapshot.message());
         rebuildBanners();
     }
 
@@ -63,7 +63,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         clearWidgets();
         String[] labels = {"Overview", "Residents", "Treasury", "Effects", "Manage"};
         addCampaignTabs(labels, tab.ordinal(), left + 12, top + 68, 98, 20, 5,
-                index -> { tab = Tab.values()[index]; buildWidgets(); });
+                index -> { tab = Tab.values()[index]; lastTab = tab; buildWidgets(); });
         switch (tab) {
             case OVERVIEW -> overviewButtons();
             case RESIDENTS -> residentButtons();
@@ -93,7 +93,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
     private void residentButtons() {
         if (snapshot.canManage()) {
-            addRenderableWidget(Button.builder(Component.literal(snapshot.immigrationEnabled() ? "Pause Immigration" : "Enable Immigration"),
+            addRenderableWidget(Button.builder(Component.literal(snapshot.immigrationEnabled() ? "Immigration: ON" : "Immigration: OFF"),
                             button -> send(SettlementManager.SettlementAction.TOGGLE_IMMIGRATION))
                     .bounds(left + 20, top + 260, 170, 20).build());
         }
@@ -102,22 +102,12 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private void treasuryButtons() {
         taxSlider = null;
         if (snapshot.canManage()) {
-            taxSlider = addRenderableWidget(new TaxRateSlider(left + 20, top + 220, 312, 18, snapshot.taxRatePercent(),
+            taxSlider = addRenderableWidget(new TaxRateSlider(left + 20, top + 224, 140, 18, snapshot.taxRatePercent(),
                     rate -> send(SettlementManager.SettlementAction.SET_TAX_POLICY, Integer.toString(rate))));
         }
-        if (snapshot.canContribute()) {
-            addRenderableWidget(Button.builder(Component.literal("Deposit Held Food"), button -> send(SettlementManager.SettlementAction.DEPOSIT_FOOD))
-                    .bounds(left + 20, top + 258, 154, 18).build());
-            addRenderableWidget(Button.builder(Component.literal("Deposit Held Currency"), button -> send(SettlementManager.SettlementAction.DEPOSIT_CURRENCY))
-                    .bounds(left + 180, top + 258, 154, 18).build());
-        }
         if (snapshot.canManage()) {
-            addRenderableWidget(Button.builder(Component.literal("Withdraw 1 Currency"), button -> send(SettlementManager.SettlementAction.WITHDRAW_CURRENCY_ONE))
-                    .bounds(left + 20, top + 280, 154, 18).build());
-            addRenderableWidget(Button.builder(Component.literal("Withdraw 10 Currency"), button -> send(SettlementManager.SettlementAction.WITHDRAW_CURRENCY_TEN))
-                    .bounds(left + 180, top + 280, 154, 18).build());
             if (snapshot.upkeepChestSet()) addRenderableWidget(Button.builder(Component.literal("Clear Upkeep Chest"), button -> send(SettlementManager.SettlementAction.CLEAR_UPKEEP_CHEST))
-                    .bounds(left + 356, top + 280, 154, 18).build());
+                    .bounds(left + 356, top + 260, 154, 18).build());
         }
     }
 
@@ -128,24 +118,23 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
     private void managementButtons() {
         if (!snapshot.canManage()) return;
-        String[] labels = {"Locations", "Identity", "Claims", "Capture", "Members"};
-        addCampaignTabs(labels, managePage.ordinal(), left + 20, top + 102, 92, 18, 6, index -> {
+        String[] labels = {"Locations", "Identity", "Claims", "Managers"};
+        addCampaignTabs(labels, managePage.ordinal(), left + 20, top + 102, 112, 18, 6, index -> {
             managePage = ManagePage.values()[index];
-            confirmDeleteSettlement = false;
-            confirmClearClaims = false;
+            lastManagePage = managePage;
+            clearClaimsConfirmUntil = 0L;
             buildWidgets();
         });
         switch (managePage) {
             case LOCATIONS -> locationManagementButtons();
             case IDENTITY -> identityManagementButtons();
             case CLAIMS -> claimManagementButtons();
-            case CAPTURE_ZONES -> captureManagementButtons();
             case MEMBERS -> memberManagementButtons();
         }
     }
 
     private void locationManagementButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Relocate Town Square"), b -> TownSquareRelocationEditor.begin(snapshot.settlementId()))
+        addRenderableWidget(Button.builder(Component.literal("Relocate Town Square"), b -> TownSquareRelocationEditor.begin(snapshot.settlementId(), snapshot.rank()))
                 .bounds(left + 30, top + 146, 150, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Set Upkeep Chest"), b -> send(SettlementManager.SettlementAction.SET_UPKEEP_CHEST))
                 .bounds(left + 195, top + 146, 150, 18).build());
@@ -169,14 +158,12 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 .bounds(left + 30, top + 154, 142, 18).build());
         addRenderableWidget(Button.builder(Component.literal("Use Faction Banner"), button -> send(SettlementManager.SettlementAction.USE_FACTION_BANNER))
                 .bounds(left + 178, top + 154, 152, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("No Banner"), button -> send(SettlementManager.SettlementAction.CLEAR_BANNER))
-                .bounds(left + 336, top + 154, 112, 18).build());
 
         renameBox = new EditBox(font, left + 30, top + 208, 224, 20, Component.literal("New settlement name"));
         renameBox.setMaxLength(64);
         addRenderableWidget(renameBox);
-        addRenderableWidget(Button.builder(Component.literal("Rename"), b -> send(SettlementManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
-                .bounds(left + 260, top + 208, 78, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Rename: 5,000 Silver"), b -> send(SettlementManager.SettlementAction.RENAME_SETTLEMENT, renameBox.getValue()))
+                .bounds(left + 260, top + 208, 142, 20).build());
 
         if ("OWNER".equals(snapshot.role())) {
             transferBox = new EditBox(font, left + 30, top + 252, 224, 20, Component.literal("Online player"));
@@ -185,16 +172,6 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             addRenderableWidget(Button.builder(Component.literal("Transfer Ownership"), b -> send(SettlementManager.SettlementAction.TRANSFER_SETTLEMENT, transferBox.getValue()))
                     .bounds(left + 260, top + 252, 128, 20).build());
 
-            addRenderableWidget(Button.builder(Component.literal(confirmDeleteSettlement ? "CONFIRM DELETE" : "Delete Settlement"), b -> {
-                        if (confirmDeleteSettlement) {
-                            send(SettlementManager.SettlementAction.DELETE_SETTLEMENT, "CONFIRM");
-                            confirmDeleteSettlement = false;
-                        } else {
-                            confirmDeleteSettlement = true;
-                            send(SettlementManager.SettlementAction.DELETE_SETTLEMENT, "ARM");
-                            buildWidgets();
-                        }
-                    }).bounds(left + 30, top + 278, 158, 18).build());
         }
     }
 
@@ -203,18 +180,18 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 .bounds(left + 30, top + 164, 150, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Unlink Current Claim"), button -> send(SettlementManager.SettlementAction.UNLINK_CURRENT_CLAIM))
                 .bounds(left + 30, top + 206, 150, 20).build());
-        addRenderableWidget(Button.builder(Component.literal(confirmClearClaims ? "CONFIRM UNLINK ALL" : "UNLINK ALL CLAIMS"), button -> {
-                    if (confirmClearClaims) { send(SettlementManager.SettlementAction.CLEAR_CLAIMS); confirmClearClaims = false; }
-                    else { confirmClearClaims = true; buildWidgets(); }
-                }).bounds(left + 30, top + 248, 150, 20).build());
-    }
-
-
-    private void captureManagementButtons() {
-        addRenderableWidget(Button.builder(Component.literal("Add Secondary Capture Zone"), b -> beginArea(AreaSelection.Type.CAPTURE_SECONDARY))
-                .bounds(left + 30, top + 166, 222, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Remove Nearest"), b -> send(SettlementManager.SettlementAction.REMOVE_CAPTURE_ZONE))
-                .bounds(left + 30, top + 214, 222, 18).build());
+        boolean armed = clearClaimsConfirmUntil > System.currentTimeMillis();
+        Component label = Component.literal(armed ? "CONFIRM UNLINK ALL" : "UNLINK ALL CLAIMS");
+        addRenderableWidget(new DangerButton(left + 30, top + 248, 150, 20, label, () -> {
+                    long now = System.currentTimeMillis();
+                    if (clearClaimsConfirmUntil > now) {
+                        send(SettlementManager.SettlementAction.CLEAR_CLAIMS);
+                        clearClaimsConfirmUntil = 0L;
+                    } else {
+                        clearClaimsConfirmUntil = now + 5_000L;
+                    }
+                    buildWidgets();
+                }));
     }
 
     private void open(OpenCampaignRequestPacket.ScreenTarget target) {
@@ -226,38 +203,19 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     }
 
     private void memberManagementButtons() {
-        memberIdsByLabel.clear();
         candidateIdsByLabel.clear();
-
-        for (SettlementSnapshot.MemberEntry member : snapshot.members()) {
-            if ("OWNER".equals(member.role())) continue;
-            String label = member.characterName() + " — " + pretty(member.role()) + (member.online() ? "" : " (offline)");
-            memberIdsByLabel.put(label, member.playerId().toString());
-        }
-        List<String> memberLabels = memberIdsByLabel.keySet().stream().toList();
-        memberDropdown = addRenderableWidget(new DropdownWidget(left + 30, top + 150, 300, 20, memberLabels, 0, ignored -> {}));
-        if (memberLabels.isEmpty()) memberDropdown.active = false;
-        addRenderableWidget(Button.builder(Component.literal("Remove Member"), b -> {
-            String id = memberIdsByLabel.get(memberDropdown == null ? "" : memberDropdown.value());
-            if (id != null) send(SettlementManager.SettlementAction.REMOVE_MEMBER, id);
-        }).bounds(left + 340, top + 150, 142, 20).build());
-
         for (SettlementSnapshot.PlayerChoice candidate : snapshot.memberCandidates()) {
             String label = candidate.characterName().equals(candidate.accountName())
                     ? candidate.accountName() : candidate.characterName() + " (" + candidate.accountName() + ")";
             candidateIdsByLabel.put(label, candidate.playerId().toString());
         }
         List<String> candidateLabels = candidateIdsByLabel.keySet().stream().toList();
-        memberCandidateDropdown = addRenderableWidget(new DropdownWidget(left + 30, top + 220, 300, 20, candidateLabels, 0, ignored -> {}));
+        memberCandidateDropdown = addRenderableWidget(new DropdownWidget(left + 30, top + 184, 300, 20, candidateLabels, 0, ignored -> {}));
         if (candidateLabels.isEmpty()) memberCandidateDropdown.active = false;
-        addRenderableWidget(Button.builder(Component.literal("Add Citizen"), b -> {
-            String id = candidateIdsByLabel.get(memberCandidateDropdown == null ? "" : memberCandidateDropdown.value());
-            if (id != null) send(SettlementManager.SettlementAction.ADD_MEMBER_CITIZEN, id);
-        }).bounds(left + 340, top + 212, 142, 18).build());
-        addRenderableWidget(Button.builder(Component.literal("Add Co-owner"), b -> {
+        addRenderableWidget(Button.builder(Component.literal("Add Manager"), b -> {
             String id = candidateIdsByLabel.get(memberCandidateDropdown == null ? "" : memberCandidateDropdown.value());
             if (id != null) send(SettlementManager.SettlementAction.ADD_MEMBER_COOWNER, id);
-        }).bounds(left + 340, top + 234, 142, 18).build());
+        }).bounds(left + 340, top + 184, 142, 20).build());
     }
 
     private void send(SettlementManager.SettlementAction action) { send(action, ""); }
@@ -273,6 +231,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
     public void updateSnapshot(SettlementSnapshot value) {
         snapshot = value;
+        setTransientMessage(value.message());
         rebuildBanners();
         buildWidgets();
     }
@@ -335,12 +294,13 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
         switch (tab) {
             case OVERVIEW -> renderOverview(graphics);
-            case RESIDENTS -> renderResidents(graphics);
+            case RESIDENTS -> renderResidents(graphics, uiMouseX, uiMouseY);
             case TREASURY -> renderTreasury(graphics);
             case EFFECTS -> renderEffects(graphics, uiMouseX, uiMouseY);
             case MANAGEMENT -> renderManagement(graphics);
         }
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, fitText(snapshot.message(), W - 36), left + W / 2, top + 284, CAMPAIGN_MESSAGE);
+        if (!transientMessage.isBlank() && System.currentTimeMillis() < transientMessageUntil)
+            graphics.drawCenteredString(font, fitText(transientMessage, W - 36), left + W / 2, top + 284, CAMPAIGN_MESSAGE);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
         endCampaignRender(graphics);
     }
@@ -373,7 +333,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 left + 292, top + 210, 220, 0xFFAAAAAA);
     }
 
-    private void renderResidents(GuiGraphics graphics) {
+    private void renderResidents(GuiGraphics graphics, int mouseX, int mouseY) {
         if (isLimitedView()) { renderPrivateTabNotice(graphics, "Resident registry"); return; }
         stat(graphics, "Registered villagers", snapshot.villagerCount(), 22, 110);
         stat(graphics, "Population multiplier", String.format(Locale.ROOT, "×%.2f", snapshot.populationMultiplier()), 22, 132);
@@ -383,9 +343,9 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Immigration: " + (snapshot.immigrationEnabled() ? "Enabled" : "Paused"), left + 290, top + 132,
                 snapshot.immigrationEnabled() ? 0xFF92D18B : CAMPAIGN_MUTED, false);
         graphics.drawString(font, fitText("Attraction: " + snapshot.immigrationStatus(), 220), left + 290, top + 154, CAMPAIGN_TITLE, false);
-        graphics.drawWordWrap(font, Component.literal(
-                "Immigrants arrive automatically when Housing, Stability, and Food allow it. Timing uses active server time, and managers can pause arrivals."),
-                left + 290, top + 174, 220, 0xFFAAAAAA);
+        if (mouseX >= left + 20 && mouseX <= left + 235 && mouseY >= top + 126 && mouseY <= top + 146) {
+            graphics.renderTooltip(font, Component.literal("Registered villagers are multiplied into civilian population. The multiplier rises as an established settlement grows."), mouseX, mouseY);
+        }
     }
 
     private void renderTreasury(GuiGraphics graphics) {
@@ -393,20 +353,12 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         stat(graphics, "Food stockpile", snapshot.food(), 22, 110);
         statWithIcon(graphics, "treasury", "State Treasury", snapshot.treasury(), 22, 132);
         stat(graphics, "Mercenary wage cycle", snapshot.mercenaryWages(), 22, 176);
-        graphics.drawString(font, "City upkeep: " + (snapshot.upkeepChestSet() ? "automatic chest linked" : "manual food deposits"), left + 356, top + 246, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
+        graphics.drawString(font, "Upkeep chest: " + (snapshot.upkeepChestSet() ? "linked" : "missing"), left + 356, top + 246, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
 
         graphics.drawString(font, "TAXATION", left + 22, top + 194, 0xFFE7D8B0, false);
-        String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " treasury/day · Last +" + snapshot.lastTaxIncome()
-                + " · Stability " + signed(snapshot.taxStabilityPerDay()) + "/day";
-        graphics.drawString(font, fitText(snapshot.taxRatePercent() + "% " + snapshot.taxPolicy() + " — " + taxEffects, 310), left + 22, top + 206, CAMPAIGN_MUTED, false);
-        graphics.drawString(font, "Low", left + 20, top + 240, 0xFFAAAAAA, false);
-        graphics.drawCenteredString(font, "Normal", left + 176, top + 240, 0xFFAAAAAA);
-        graphics.drawString(font, "High", left + 304, top + 240, 0xFFAAAAAA, false);
-
-        graphics.drawString(font, "RECENT CONTRIBUTIONS", left + 356, top + 110, 0xFFE7D8B0, false);
-        for (int i = 0; i < Math.min(9, snapshot.contributions().size()); i++) {
-            graphics.drawString(font, fitText(snapshot.contributions().get(i), 164), left + 356, top + 130 + i * 15, 0xFFBBBBBB, false);
-        }
+        String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " Silver/day | Last +" + snapshot.lastTaxIncome()
+                + " | Stability " + signed(snapshot.taxStabilityImpact());
+        graphics.drawString(font, fitText(snapshot.taxPolicy() + ": " + taxEffects, 480), left + 22, top + 206, CAMPAIGN_MUTED, false);
     }
 
     private void renderEffects(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -429,14 +381,14 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             if (item == Items.AIR) item = Items.BOOK;
             graphics.renderItem(new ItemStack(item), left + 22, y - 5);
             graphics.drawString(font, fitText(effect.name(), 190), left + 44, y, tone, false);
-            graphics.drawString(font, fitText(effect.source() + " · " + effect.duration(), 250), left + 264, y, 0xFF999999, false);
+            graphics.drawString(font, fitText(effect.source() + " | " + effect.duration(), 250), left + 264, y, 0xFF999999, false);
             if (mouseX >= left + 18 && mouseX <= left + W - 18 && mouseY >= y - 6 && mouseY <= y + 14) {
                 graphics.renderTooltip(font, Component.literal(effect.detail()), mouseX, mouseY);
             }
         }
         if (snapshot.effects().isEmpty()) graphics.drawString(font, "No active settlement modifiers.", left + 22, top + 134, 0xFFAAAAAA, false);
         String effectFooter = snapshot.effects().size() > 7
-                ? "Scroll to view all effects · " + (effectScroll + 1) + "-" + (effectScroll + shown) + " / " + snapshot.effects().size()
+                ? "Scroll to view all effects | " + (effectScroll + 1) + "-" + (effectScroll + shown) + " / " + snapshot.effects().size()
                 : "Hover an entry for the exact mechanical effect.";
         graphics.drawString(font, effectFooter, left + 22, top + 252, 0xFFAA9D7F, false);
     }
@@ -451,7 +403,6 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             case LOCATIONS -> renderLocationManagement(graphics);
             case IDENTITY -> renderIdentityManagement(graphics);
             case CLAIMS -> renderClaimManagement(graphics);
-            case CAPTURE_ZONES -> renderCaptureManagement(graphics);
             case MEMBERS -> renderMemberManagement(graphics);
         }
     }
@@ -460,7 +411,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "SETTLEMENT LOCATIONS", left + 30, top + 128, 0xFFE7D8B0, false);
         graphics.drawString(font, "Town Square: " + (snapshot.townSquareSet() ? "set" : "missing"), left + 30, top + 168, snapshot.townSquareSet() ? 0xFFA9D18E : 0xFFFFA080, false);
         graphics.drawString(font, "Upkeep: " + (snapshot.upkeepChestSet() ? "chest linked" : "missing"), left + 195, top + 168, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFFFA080, false);
-        graphics.drawString(font, "Barracks: " + (snapshot.barracksSet() ? snapshot.barracksRadius() + "r · cap " + snapshot.barracksCapacity() : "missing"), left + 360, top + 168, snapshot.barracksSet() ? 0xFFA9D18E : 0xFFFFA080, false);
+        graphics.drawString(font, "Barracks: " + (snapshot.barracksSet() ? snapshot.barracksRadius() + "r | cap " + snapshot.barracksCapacity() : "missing"), left + 360, top + 168, snapshot.barracksSet() ? 0xFFA9D18E : 0xFFFFA080, false);
 
         graphics.drawString(font, "HOUSING", left + 30, top + 184, 0xFFE7D8B0, false);
         graphics.drawString(font, "Registered capacity: " + snapshot.housingCapacity(), left + 360, top + 184, 0xFFAAAAAA, false);
@@ -479,10 +430,6 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Rename settlement", left + 30, top + 198, 0xFFE7D8B0, false);
         if ("OWNER".equals(snapshot.role())) {
             graphics.drawString(font, "Transfer ownership to an online player", left + 30, top + 242, 0xFFE7D8B0, false);
-            graphics.drawWordWrap(font, Component.literal(confirmDeleteSettlement
-                            ? "PERMANENT: press CONFIRM DELETE to erase this settlement and its linked claims."
-                            : "Delete settlement permanently. All stored settlement data and linked claims are erased."),
-                    left + 198, top + 278, 310, confirmDeleteSettlement ? 0xFFFF7070 : 0xFFB08080);
         } else {
             graphics.drawString(font, "Only the settlement owner may transfer ownership.", left + 30, top + 242, 0xFF888888, false);
         }
@@ -499,43 +446,16 @@ public final class SettlementScreen extends ScaledCampaignScreen {
                 left + 198, top + 162, 306, 0xFFAAAAAA);
         graphics.drawWordWrap(font, Component.literal("Removes only the claim you are currently standing in from this settlement."),
                 left + 198, top + 204, 306, 0xFFAAAAAA);
-        graphics.drawWordWrap(font, Component.literal(confirmClearClaims
+        boolean armed = clearClaimsConfirmUntil > System.currentTimeMillis();
+        graphics.drawWordWrap(font, Component.literal(armed
                         ? "WARNING: press the red button again to remove every linked claim."
                         : "Removes ALL linked claims. This can break a large settlement's territory setup and requires confirmation."),
-                left + 198, top + 246, 306, confirmClearClaims ? 0xFFFF8080 : 0xFFAAAAAA);
-    }
-
-    private void renderCaptureManagement(GuiGraphics graphics) {
-        List<ee.lastpagans.settlements.api.CaptureZoneView> zones = ClientCaptureZoneApi.zonesFor(snapshot.settlementId());
-        int requiredSecondary = switch (snapshot.rank().toLowerCase(Locale.ROOT)) {
-            case "village" -> 0;
-            case "town" -> 1;
-            default -> 2;
-        };
-        long mains = zones.stream().filter(z -> z.type() == CaptureZoneData.ZoneType.MAIN).count();
-        long secondaries = zones.stream().filter(z -> z.type() == CaptureZoneData.ZoneType.SECONDARY).count();
-        graphics.drawString(font, "CAPTURE ZONES", left + 30, top + 128, 0xFFE7D8B0, false);
-        graphics.drawString(font, "Required: 1 Main + " + requiredSecondary + " Secondary", left + 30, top + 142, 0xFFAAAAAA, false);
-        graphics.drawString(font, "Current: " + mains + " Main + " + secondaries + " Secondary", left + 292, top + 142,
-                mains >= 1 && secondaries >= requiredSecondary ? 0xFFA9D18E : 0xFFFFA080, false);
-        graphics.drawString(font, "MAIN OBJECTIVE", left + 30, top + 154, 0xFFE7D8B0, false);
-        graphics.drawWordWrap(font, Component.literal("The Main objective decides military occupation. Secondary objectives must fall before it can be captured."), left + 270, top + 164, 240, 0xFFAAAAAA);
-        graphics.drawString(font, "SECONDARY OBJECTIVES", left + 30, top + 202, 0xFFE7D8B0, false);
-        graphics.drawWordWrap(font, Component.literal("Zones must stay inside linked claims, meet the minimum size, never overlap, and be spread across the settlement."), left + 270, top + 212, 240, 0xFFAAAAAA);
-        int y = top + 258;
-        for (int i = 0; i < Math.min(4, zones.size()); i++) {
-            var zone = zones.get(i);
-            graphics.drawString(font, zone.type().name() + " · " + zone.state().name() + " · " + Math.round(zone.progress() * 100D) + "%",
-                    left + 270, y + i * 12, 0xFFBBBBBB, false);
-        }
+                left + 198, top + 246, 306, armed ? 0xFFFF8080 : 0xFFAAAAAA);
     }
 
     private void renderMemberManagement(GuiGraphics graphics) {
-        graphics.drawString(font, "SETTLEMENT MEMBERS", left + 30, top + 128, 0xFFE7D8B0, false);
-        graphics.drawString(font, "Current members", left + 30, top + 140, 0xFFAAAAAA, false);
-        graphics.drawWordWrap(font, Component.literal("Citizens may view and contribute. Co-owners have settlement management permissions but cannot take ownership away from the owner."),
-                left + 30, top + 178, 452, 0xFFAAAAAA);
-        graphics.drawString(font, "Add an online player from this settlement's polity", left + 30, top + 206, 0xFFE7D8B0, false);
+        graphics.drawString(font, "SETTLEMENT MANAGERS", left + 30, top + 128, 0xFFE7D8B0, false);
+        graphics.drawString(font, "Add an online player from this settlement's faction", left + 30, top + 164, 0xFFE7D8B0, false);
         if (snapshot.memberCandidates().isEmpty()) {
             graphics.drawString(font, "No eligible online players are currently available.", left + 30, top + 252, 0xFF888888, false);
         }
@@ -577,7 +497,46 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         return value.isBlank() ? "" : Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
+    private void setTransientMessage(String message) {
+        if (message == null || message.isBlank()) return;
+        transientMessage = message;
+        transientMessageUntil = System.currentTimeMillis() + 4_000L;
+    }
+
+    @Override public void tick() {
+        super.tick();
+        long now = System.currentTimeMillis();
+        if (transientMessageUntil > 0L && transientMessageUntil <= now) {
+            transientMessage = "";
+            transientMessageUntil = 0L;
+        }
+        if (clearClaimsConfirmUntil > 0L && clearClaimsConfirmUntil <= now) {
+            clearClaimsConfirmUntil = 0L;
+            if (tab == Tab.MANAGEMENT && managePage == ManagePage.CLAIMS) buildWidgets();
+        }
+    }
+
     @Override public boolean isPauseScreen() { return false; }
+
+    private static final class DangerButton extends AbstractButton {
+        private final Runnable action;
+
+        private DangerButton(int x, int y, int width, int height, Component label, Runnable action) {
+            super(x, y, width, height, label);
+            this.action = action;
+        }
+
+        @Override public void onPress() { action.run(); }
+
+        @Override public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            int border = isHoveredOrFocused() ? 0xFFFF8175 : 0xFFB74C45;
+            graphics.fill(getX(), getY(), getX() + width, getY() + height, border);
+            graphics.fill(getX() + 1, getY() + 1, getX() + width - 1, getY() + height - 1, 0xFF5B201E);
+            graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(), getX() + width / 2,
+                    getY() + (height - 8) / 2, active ? 0xFFFFE8E5 : 0xFF8D7775);
+        }
+    }
+
     private enum Tab { OVERVIEW, RESIDENTS, TREASURY, EFFECTS, MANAGEMENT }
-    private enum ManagePage { LOCATIONS, IDENTITY, CLAIMS, CAPTURE_ZONES, MEMBERS }
+    private enum ManagePage { LOCATIONS, IDENTITY, CLAIMS, MEMBERS }
 }

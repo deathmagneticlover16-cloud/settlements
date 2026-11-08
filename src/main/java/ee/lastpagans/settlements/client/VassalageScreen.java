@@ -57,7 +57,7 @@ public final class VassalageScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "VASSALAGE / TRIBUTE", left + 24, top + 18, CAMPAIGN_TITLE, false);
         String overlord = snapshot.ownFactionId().equals(relation.overlordId()) ? snapshot.ownFactionName() : relation.factionName();
         String vassal = snapshot.ownFactionId().equals(relation.vassalId()) ? snapshot.ownFactionName() : relation.factionName();
-        graphics.drawCenteredString(font, overlord + "  — overlord of —  " + vassal, left + W / 2, top + 72, CAMPAIGN_TEXT);
+        graphics.drawCenteredString(font, overlord + "  - overlord of -  " + vassal, left + W / 2, top + 72, CAMPAIGN_TEXT);
         graphics.drawCenteredString(font, canImpose ? "Choose one of four legal tribute tiers." : "Only the overlord ruler may alter the rate.",
                 left + W / 2, top + 91, CAMPAIGN_MUTED);
         int oldPenalty = CampaignManager.tributePenalty(relation.tributeRate());

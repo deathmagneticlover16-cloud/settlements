@@ -1,4 +1,4 @@
-SETTLEMENTS — GUI ART / PNG REPLACEMENT GUIDE
+SETTLEMENTS - GUI ART / PNG REPLACEMENT GUIDE
 
 GOAL
 Settlements GUI artwork should be replaceable as normal resource assets instead of requiring gameplay-code edits. The canonical resource namespace is:
@@ -63,8 +63,8 @@ RECOMMENDED MASTER SIZES
 - Small button source: 80x20 or 96x20
 - Large button source: 160x24 or 192x24
 - Dropdown row: 160x20
-- Trait/modifier/stat icon: 16x16 master, rendered at 16–24 logical pixels as appropriate
-- Stat-bar pieces: design for a 9–12 px internal bar height; keep the frame horizontally scalable
+- Trait/modifier/stat icon: 16x16 master, rendered at 16-24 logical pixels as appropriate
+- Stat-bar pieces: design for a 9-12 px internal bar height; keep the frame horizontally scalable
 - Header/panel borders: make them nine-slice friendly rather than one screen-width bitmap
 
 HOW THE RELEASE ART WORKFLOW SHOULD WORK

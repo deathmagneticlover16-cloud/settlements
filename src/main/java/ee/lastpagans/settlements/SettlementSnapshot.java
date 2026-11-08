@@ -24,13 +24,13 @@ public record SettlementSnapshot(
         String bannerMode, CompoundTag settlementBannerStack, String rosterName, List<UnitTemplateEntry> unitTemplates,
         int villagerCount, double populationMultiplier, int civilianPopulation, int militaryPopulation, int totalPopulation,
         int housingCapacity, int freeHousing, int stability, int food, int treasury,
-        String taxPolicy, int taxRatePercent, int projectedTaxIncome, int lastTaxIncome, int taxStabilityPerDay,
+        String taxPolicy, int taxRatePercent, int projectedTaxIncome, int lastTaxIncome, int taxStabilityImpact,
         int maximumManpower, int availableManpower, int foreignManpower, int usedManpower, int levyReservedManpower, int supportedManpower,
         int professionals, int levymen, boolean immigrationEnabled, String immigrationStatus,
         boolean townSquareSet, boolean musterGroundSet, boolean barracksSet, boolean barracksChestSet, boolean upkeepChestSet,
         int barracksRadius, int barracksCapacity, int averageMorale, int mercenaries, int mercenaryWages, long mercenaryNextPaymentDay, String mercenaryStatus, LevyStatusEntry levyStatus,
         String factionTeam, boolean claimLinked, int claimCount, String claimName,
-        String notice, List<EffectEntry> effects, List<String> chronicle, List<String> contributions,
+        String notice, List<EffectEntry> effects, List<String> chronicle,
         List<MemberEntry> members, List<PlayerChoice> memberCandidates, String message
 ) {
     public static SettlementSnapshot from(SettlementData.SettlementRecord settlement, ServerPlayer player, String message) {
@@ -76,13 +76,13 @@ public record SettlementSnapshot(
                 limitedView ? 100 : campaignSystems.taxRatePercent(settlement.getId()),
                 limitedView ? 0 : CampaignSystemsManager.projectedTaxIncome(settlement, campaignSystems),
                 limitedView ? 0 : campaignSystems.lastTaxIncome(settlement.getId()),
-                limitedView ? 0 : campaignSystems.taxStabilityPerDay(settlement.getId()),
+                limitedView ? 0 : campaignSystems.taxStabilityImpact(settlement.getId()),
                 limitedView ? 0 : settlement.getMaximumManpower(), limitedView ? 0 : settlement.getAvailableManpower(), limitedView ? 0 : campaignSystems.foreignManpower(settlement.getId()), limitedView ? 0 : settlement.getUsedManpower(), limitedView ? 0 : settlement.getLevyReservedManpower(), limitedView ? 0 : settlement.getSupportedManpower(),
                 limitedView ? 0 : settlement.getProfessionalCount(), limitedView ? 0 : settlement.getLivingLevymen(), !limitedView && settlement.isImmigrationEnabled(), limitedView ? "Hidden" : settlement.getImmigrationStatus(player.serverLevel().getGameTime()),
                 !limitedView && settlement.hasTownSquare(), !limitedView && settlement.hasMusterGround(), !limitedView && settlement.hasBarracks(), !limitedView && settlement.getBarracksChest() != null, !limitedView && settlement.getUpkeepChest() != null,
                 limitedView ? 0 : settlement.getBarracksRadius(), limitedView ? 0 : settlement.getBarracksCapacity(), military.averageMorale(), military.mercenaries(), military.totalWages(), military.nextPaymentDay(), military.status(), levyStatus,
                 settlement.getFactionTeam(), !limitedView && settlement.hasClaim(), limitedView ? 0 : settlement.getClaimCount(), limitedView ? "" : settlement.getClaimSummary(), settlement.getNotice(), effects,
-                limitedView ? List.of() : settlement.getChronicle().stream().limit(8).toList(), limitedView ? List.of() : settlement.getContributions().stream().limit(8).toList(),
+                limitedView ? List.of() : settlement.getChronicle().stream().limit(8).toList(),
                 members, memberCandidates, message == null ? "" : message
         );
     }
@@ -98,7 +98,7 @@ public record SettlementSnapshot(
             values.add(new MemberEntry(uuid, account, characterName, role.name(), online != null));
         });
         values.sort(java.util.Comparator.comparingInt((MemberEntry value) -> switch (value.role()) {
-            case "OWNER" -> 0; case "CO_OWNER" -> 1; case "CITIZEN" -> 2; default -> 3;
+            case "OWNER" -> 0; case "CO_OWNER" -> 1; default -> 2;
         }).thenComparing(MemberEntry::characterName, String.CASE_INSENSITIVE_ORDER));
         return values.stream().limit(64).toList();
     }
@@ -254,7 +254,7 @@ public record SettlementSnapshot(
                 String tone = spouseStability + spouseTreasury + spouseMorale >= 0 ? "POSITIVE" : "NEGATIVE";
                 SettlementData.CharacterRecord spouseCharacter = data.getCharacter(marriage.spousePlayerId());
                 String spouseName = spouseCharacter != null && spouseCharacter.isCreated() ? spouseCharacter.getDisplayName() : "Player spouse";
-                details += " — derived from spouse traits";
+                details += " - derived from spouse traits";
                 values.add(new EffectEntry("Spouse: " + spouseName, "Marriage", "minecraft:rose_bush", tone, details, "While married"));
             }
         }
@@ -272,7 +272,7 @@ public record SettlementSnapshot(
             List<String> mechanical = new ArrayList<>();
             if (modifier.stabilityPerDay != 0) mechanical.add(signed(modifier.stabilityPerDay) + " daily stability");
             if (modifier.morale != 0) mechanical.add(signed(modifier.morale) + " recruit morale");
-            if (!mechanical.isEmpty()) detail = detail.isBlank() ? String.join(", ", mechanical) : detail + " — " + String.join(", ", mechanical);
+            if (!mechanical.isEmpty()) detail = detail.isBlank() ? String.join(", ", mechanical) : detail + " - " + String.join(", ", mechanical);
             values.add(new EffectEntry(modifier.name, modifier.source, modifier.iconItem, modifier.tone, detail, duration));
         }
         return values.stream().limit(32).toList();
@@ -318,13 +318,13 @@ public record SettlementSnapshot(
         writeList(buffer, unitTemplates, 16, UnitTemplateEntry::encode);
         buffer.writeVarInt(villagerCount); buffer.writeDouble(populationMultiplier); buffer.writeVarInt(civilianPopulation); buffer.writeVarInt(militaryPopulation); buffer.writeVarInt(totalPopulation);
         buffer.writeVarInt(housingCapacity); buffer.writeVarInt(freeHousing); buffer.writeVarInt(stability); buffer.writeVarInt(food); buffer.writeVarInt(treasury);
-        buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(taxRatePercent); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityPerDay);
+        buffer.writeUtf(taxPolicy, 16); buffer.writeVarInt(taxRatePercent); buffer.writeVarInt(projectedTaxIncome); buffer.writeVarInt(lastTaxIncome); buffer.writeInt(taxStabilityImpact);
         buffer.writeVarInt(maximumManpower); buffer.writeVarInt(availableManpower); buffer.writeVarInt(foreignManpower); buffer.writeVarInt(usedManpower); buffer.writeVarInt(levyReservedManpower); buffer.writeVarInt(supportedManpower);
         buffer.writeVarInt(professionals); buffer.writeVarInt(levymen); buffer.writeBoolean(immigrationEnabled); buffer.writeUtf(immigrationStatus, 128);
         buffer.writeBoolean(townSquareSet); buffer.writeBoolean(musterGroundSet); buffer.writeBoolean(barracksSet); buffer.writeBoolean(barracksChestSet); buffer.writeBoolean(upkeepChestSet);
         buffer.writeVarInt(barracksRadius); buffer.writeVarInt(barracksCapacity); buffer.writeVarInt(averageMorale); buffer.writeVarInt(mercenaries); buffer.writeVarInt(mercenaryWages); buffer.writeLong(mercenaryNextPaymentDay); buffer.writeUtf(mercenaryStatus, 24); levyStatus.encode(buffer);
         buffer.writeUtf(factionTeam, 64); buffer.writeBoolean(claimLinked); buffer.writeVarInt(claimCount); buffer.writeUtf(claimName, 180); buffer.writeUtf(notice, 160);
-        writeList(buffer, effects, 32, EffectEntry::encode); writeStrings(buffer, chronicle); writeStrings(buffer, contributions);
+        writeList(buffer, effects, 32, EffectEntry::encode); writeStrings(buffer, chronicle);
         writeList(buffer, members, 64, MemberEntry::encode); writeList(buffer, memberCandidates, 64, PlayerChoice::encode); buffer.writeUtf(message, 256);
     }
 
@@ -341,7 +341,7 @@ public record SettlementSnapshot(
                 buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(), buffer.readBoolean(),
                 buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readLong(), buffer.readUtf(24), LevyStatusEntry.decode(buffer),
                 buffer.readUtf(64), buffer.readBoolean(), buffer.readVarInt(), buffer.readUtf(180), buffer.readUtf(160),
-                readList(buffer, EffectEntry::decode, 32), readStrings(buffer), readStrings(buffer),
+                readList(buffer, EffectEntry::decode, 32), readStrings(buffer),
                 readList(buffer, MemberEntry::decode, 64), readList(buffer, PlayerChoice::decode, 64), buffer.readUtf(256)
         );
     }

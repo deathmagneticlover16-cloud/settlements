@@ -305,7 +305,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         drawCampaignFrame(graphics, left, top, W, H, 39);
         drawCampaignPanel(graphics, left + 12, top + 72, left + W - 12, top + H - 42);
         String polity = snapshot.ownFactionName().isBlank() ? "INDEPENDENT" : snapshot.ownFactionName().toUpperCase(Locale.ROOT);
-        graphics.drawCenteredString(font, "CAMPAIGN DIPLOMACY — " + polity, left + W / 2, top + 12, CAMPAIGN_TITLE);
+        graphics.drawCenteredString(font, "CAMPAIGN DIPLOMACY - " + polity, left + W / 2, top + 12, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, "Authority: [" + snapshot.viewerRank() + "]", left + W / 2, top + 25, snapshot.canManage() ? 0xFFA9D18E : 0xFFFFA080);
         switch (tab) {
             case RELATIONS -> renderRelations(graphics);
@@ -388,7 +388,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             DiplomacySnapshot.WarEntry war = snapshot.wars().get(i); int y = top + 125 + i * 43;
             String attackers = war.attackerSettlementName().isBlank() ? war.attackerFactionName() : war.attackerSettlementName();
             String defenders = war.targetSettlementName().isBlank() ? war.defenderFactionName() : war.targetSettlementName();
-            graphics.drawString(font, war.typeName() + " — " + attackers + " vs " + defenders, left + 20, y, 0xFFFFB0A0, false);
+            graphics.drawString(font, war.typeName() + " - " + attackers + " vs " + defenders, left + 20, y, 0xFFFFB0A0, false);
             graphics.drawString(font, "Casus Belli: " + war.goalName() + " · War score " + signed(war.warScore()), left + 20, y + 12, 0xFFAAAAAA, false);
             graphics.drawString(font, "Escalation: " + war.typeName(), left + 20, y + 23, 0xFF8FA8C8, false);
         }

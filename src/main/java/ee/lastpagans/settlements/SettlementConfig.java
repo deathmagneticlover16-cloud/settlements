@@ -23,9 +23,10 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue LEVY_EMERGENCY_RELIEF_PERCENT;
     public static final ForgeConfigSpec.BooleanValue BLOCK_LEVY_ARMOR_STAND_XP;
     public static final ForgeConfigSpec.IntValue PRAYER_DEVOTION_GAIN;
-    public static final ForgeConfigSpec.IntValue CURRENCY_DONATION_DEVOTION_GAIN;
-    public static final ForgeConfigSpec.IntValue CURRENCY_ITEM_TREASURY_VALUE;
-    public static final ForgeConfigSpec.IntValue CHARACTER_RENAME_CURRENCY_COST;
+    public static final ForgeConfigSpec.IntValue SILVER_DONATION_DEVOTION_GAIN;
+    public static final ForgeConfigSpec.IntValue SILVER_TREASURY_VALUE;
+    public static final ForgeConfigSpec.IntValue CHARACTER_RENAME_SILVER_COST;
+    public static final ForgeConfigSpec.IntValue SETTLEMENT_RENAME_SILVER_COST;
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_TARGET_DAYS;
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP;
     public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_COIN;
@@ -58,7 +59,6 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue TOWN_SQUARE_CAPTURE_RADIUS;
     public static final ForgeConfigSpec.IntValue TOWN_SQUARE_CAPTURE_HEIGHT;
     public static final ForgeConfigSpec.IntValue CAPTURE_ZONE_MIN_SPACING;
-    public static final ForgeConfigSpec.IntValue CAPTURE_SECONDARY_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_MAIN_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_MAIN_MAJOR_CITY_SECONDS;
     public static final ForgeConfigSpec.IntValue CAPTURE_MAX_SPEED_TROOPS;
@@ -116,15 +116,17 @@ public final class SettlementConfig {
         builder.push("religion");
         PRAYER_DEVOTION_GAIN = builder.comment("Devotion gained once per Minecraft day by visiting an eligible settlement Prayer Site.")
                 .defineInRange("prayerDevotionGain", 3, 0, 100);
-        CURRENCY_DONATION_DEVOTION_GAIN = builder.comment("Devotion gained when donating one item from #settlements:currency to the character's faith.")
-                .defineInRange("currencyDonationDevotionGain", 2, 0, 100);
+        SILVER_DONATION_DEVOTION_GAIN = builder.comment("Devotion gained when donating one Silver Coin to the character's faith.")
+                .defineInRange("silverDonationDevotionGain", 2, 0, 100);
         builder.pop();
 
         builder.push("economy");
-        CURRENCY_ITEM_TREASURY_VALUE = builder.comment("State Treasury value represented by one item in #settlements:currency when depositing or withdrawing physical currency.")
-                .defineInRange("currencyItemTreasuryValue", 10, 1, 100000);
-        CHARACTER_RENAME_CURRENCY_COST = builder.comment("Number of #settlements:currency items consumed when a created character changes their personal name. Main House edits remain free.")
-                .defineInRange("characterRenameCurrencyCost", 10, 0, 100000);
+        SILVER_TREASURY_VALUE = builder.comment("State Treasury value represented by one Silver Coin placed in an upkeep chest.")
+                .defineInRange("silverTreasuryValue", 10, 1, 100000);
+        CHARACTER_RENAME_SILVER_COST = builder.comment("Silver Coins consumed when a created character changes their personal name. Main House edits remain free.")
+                .defineInRange("characterRenameSilverCost", 10, 0, 100000);
+        SETTLEMENT_RENAME_SILVER_COST = builder.comment("Silver deducted from the State Treasury when a settlement is renamed.")
+                .defineInRange("settlementRenameSilverCost", 5000, 5000, 5000);
         UPKEEP_CHEST_TARGET_DAYS = builder.comment("Automatic city-upkeep chest tries to maintain this many days of Food for civilians and tracked soldiers.")
                 .defineInRange("upkeepChestTargetDays", 3, 1, 30);
         UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP = builder.comment("Maximum edible item count consumed from a city-upkeep chest per 30-second maintenance sweep.")
@@ -134,7 +136,7 @@ public final class SettlementConfig {
         builder.push("taxation");
         TAX_POPULATION_PER_COIN = builder.comment("Civilian population represented by one point of base daily State Treasury revenue before the tax rate is applied.")
                 .defineInRange("populationPerCoin", 10, 1, 1000);
-        FOREIGN_MANPOWER_SELL_VALUE = builder.comment("State Treasury currency minted when one Foreign Manpower is sold.")
+        FOREIGN_MANPOWER_SELL_VALUE = builder.comment("Silver added to the State Treasury when one Foreign Manpower is sold.")
                 .defineInRange("foreignManpowerSellValue", 10, 1, 1000000);
         builder.pop();
 
@@ -192,9 +194,7 @@ public final class SettlementConfig {
                 .defineInRange("townSquareMainHeight", 6, 3, 64);
         CAPTURE_ZONE_MIN_SPACING = builder.comment("Minimum horizontal distance between Capture Zone centres in the same settlement.")
                 .defineInRange("minimumSpacing", 24, 0, 512);
-        CAPTURE_SECONDARY_SECONDS = builder.comment("Base uncontested seconds required to capture a secondary objective.")
-                .defineInRange("secondaryCaptureSeconds", 120, 10, 3600);
-        CAPTURE_MAIN_SECONDS = builder.comment("Base uncontested seconds required to capture a normal Main objective after secondaries fall.")
+        CAPTURE_MAIN_SECONDS = builder.comment("Base uncontested seconds required to capture a normal Main objective.")
                 .defineInRange("mainCaptureSeconds", 180, 10, 7200);
         CAPTURE_MAIN_MAJOR_CITY_SECONDS = builder.comment("Base uncontested seconds required to capture a Major City's Main objective.")
                 .defineInRange("majorCityMainCaptureSeconds", 420, 10, 14400);

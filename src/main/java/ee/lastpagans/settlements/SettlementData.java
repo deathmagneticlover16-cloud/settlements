@@ -337,7 +337,6 @@ public final class SettlementData extends SavedData {
     public enum SettlementRole {
         OWNER,
         CO_OWNER,
-        CITIZEN,
         OUTSIDER;
 
         public boolean canManage() {
@@ -420,7 +419,6 @@ public final class SettlementData extends SavedData {
         private final Map<UUID, UUID> levyUnitToBatch = new HashMap<>();
         private final Map<UUID, LevyBatch> levyBatches = new HashMap<>();
         private final List<String> chronicle = new ArrayList<>();
-        private final List<String> contributions = new ArrayList<>();
 
         private SettlementRecord(SettlementData owner, String id, String name) {
             this.owner = owner;
@@ -506,9 +504,7 @@ public final class SettlementData extends SavedData {
                 if (!member.hasUUID("Player")) continue;
                 try {
                     members.put(member.getUUID("Player"), SettlementRole.valueOf(member.getString("Role")));
-                } catch (IllegalArgumentException ignored) {
-                    members.put(member.getUUID("Player"), SettlementRole.CITIZEN);
-                }
+                } catch (IllegalArgumentException ignored) { }
             }
             if (ownerId != null) members.put(ownerId, SettlementRole.OWNER);
 
@@ -518,7 +514,6 @@ public final class SettlementData extends SavedData {
                 batch.units.forEach(uuid -> levyUnitToBatch.put(uuid, batch.id));
             }
             readStringList(tag, "Chronicle", chronicle);
-            readStringList(tag, "Contributions", contributions);
         }
 
         private CompoundTag toNBT() {
@@ -605,7 +600,6 @@ public final class SettlementData extends SavedData {
             levyBatches.values().forEach(batch -> batchList.add(batch.toNBT()));
             tag.put("LevyBatches", batchList);
             writeStringList(tag, "Chronicle", chronicle);
-            writeStringList(tag, "Contributions", contributions);
             return tag;
         }
 
@@ -684,7 +678,6 @@ public final class SettlementData extends SavedData {
         public int getLivingLevymen() { return levyUnitToBatch.size(); }
         public int getLevyReservedManpower() { return levyBatches.values().stream().mapToInt(batch -> batch.manpowerSpent).sum(); }
         public List<String> getChronicle() { return List.copyOf(chronicle); }
-        public List<String> getContributions() { return List.copyOf(contributions); }
         public Map<UUID, SettlementRole> getMembers() { return Map.copyOf(members); }
         public java.util.Set<UUID> getProfessionalUnits() { return java.util.Set.copyOf(professionalUnits); }
         public java.util.Set<UUID> getMercenaryCompanyUnits() { return java.util.Set.copyOf(mercenaryCompanyUnits); }
@@ -985,13 +978,6 @@ public final class SettlementData extends SavedData {
             return false;
         }
 
-        public void addFood(int amount, String contributor) {
-            if (amount <= 0) return;
-            food += amount;
-            addContribution(contributor + " deposited " + amount + " food.");
-            dirty();
-        }
-
         public void addFoodStockpile(int amount) {
             if (amount <= 0) return;
             food += amount;
@@ -1261,11 +1247,6 @@ public final class SettlementData extends SavedData {
 
         public void addChronicle(String entry) {
             appendLimited(chronicle, entry, 32);
-            dirty();
-        }
-
-        public void addContribution(String entry) {
-            appendLimited(contributions, entry, 24);
             dirty();
         }
 

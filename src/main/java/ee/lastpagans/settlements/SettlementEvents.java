@@ -208,7 +208,6 @@ public final class SettlementEvents {
         PENDING_BODY_REASSERTIONS.remove(playerId);
         ClientActionLimiter.forget(playerId);
         CampaignSystemsManager.clearPlayerState(playerId);
-        SettlementManager.clearPlayerState(playerId);
     }
 
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
@@ -389,7 +388,6 @@ public final class SettlementEvents {
         PENDING_BODY_REASSERTIONS.clear();
         ClientActionLimiter.clear();
         CampaignSystemsManager.clearRuntimeState();
-        SettlementManager.clearRuntimeState();
         CampaignManager.clearRuntimeState();
     }
 }

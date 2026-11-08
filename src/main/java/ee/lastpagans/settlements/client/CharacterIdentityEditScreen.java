@@ -78,7 +78,7 @@ public final class CharacterIdentityEditScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Middle name", left + 28, top + 104, 0xFFDDDDDD, false);
         graphics.drawString(font, "Last name", left + 28, top + 130, 0xFFDDDDDD, false);
         graphics.drawWordWrap(font, Component.literal(
-                        "Changing the name costs " + snapshot.renameCurrencyCost() + " item(s) from #settlements:currency."),
+                        "Changing the name costs " + snapshot.renameSilverCost() + " Silver."),
                 left + 28, top + 151, W - 56, 0xFFFFC873);
 
         graphics.drawString(font, "Main house", left + 28, top + 184, 0xFFDDDDDD, false);

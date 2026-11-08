@@ -74,7 +74,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
 
     private void buildForcesWidgets() {
         List<SettlementSnapshot.UnitTemplateEntry> templates = professionalTemplates();
-        List<String> names = templates.stream().map(value -> value.displayName() + (value.configured() ? "" : " — fallback")).toList();
+        List<String> names = templates.stream().map(value -> value.displayName() + (value.configured() ? "" : " - fallback")).toList();
         if (!names.isEmpty()) {
             selectedUnit = Math.max(0, Math.min(selectedUnit, names.size() - 1));
             unitDropdown = addRenderableWidget(new DropdownWidget(left + 24, top + 178, 220, 20, names, selectedUnit, value -> {
@@ -113,8 +113,6 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
                 .bounds(left + 142, top + 274, 112, 20).build());
         addRenderableWidget(Button.builder(Component.literal("To Barracks"), button -> send(SettlementManager.SettlementAction.RETURN_TO_BARRACKS))
                 .bounds(left + 260, top + 274, 112, 20).build());
-        addRenderableWidget(Button.builder(Component.literal("Recover MP"), button -> send(SettlementManager.SettlementAction.RUN_CHECKER))
-                .bounds(left + 378, top + 274, 112, 20).build());
     }
 
     private void buildMercenaryWidgets() {
@@ -163,7 +161,7 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
         beginCampaignRender(graphics);
         drawCampaignFrame(graphics, left, top, W, H, 58);
         drawCampaignPanel(graphics, left + 14, top + 96, left + W - 14, top + 316);
-        graphics.drawCenteredString(font, "MILITARY — " + fitText(snapshot.settlementName().toUpperCase(Locale.ROOT), 420), left + W / 2, top + 13, CAMPAIGN_TITLE);
+        graphics.drawCenteredString(font, "MILITARY - " + fitText(snapshot.settlementName().toUpperCase(Locale.ROOT), 420), left + W / 2, top + 13, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, fitText(snapshot.factionName() + " · " + snapshot.rosterName(), 440), left + W / 2, top + 31, 0xFFB8B0A0);
 
         if (page == PAGE_FORCES) renderForces(graphics);

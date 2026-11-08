@@ -142,9 +142,9 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 teamColorIndex = clampIndex(teamColorIndex, dyeNames.size());
                 unitColorIndex = clampIndex(unitColorIndex, dyeNames.size());
                 teamColorDrop = addRenderableWidget(new DropdownWidget(left + 168, top + 164, 132, 20, dyeNames, teamColorIndex,
-                        value -> teamColorIndex = Math.max(0, dyeNames.indexOf(value))));
+                        value -> teamColorIndex = Math.max(0, dyeNames.indexOf(value)), FactionScreen::dyeColorPreview));
                 unitColorDrop = addRenderableWidget(new DropdownWidget(left + 316, top + 164, 132, 20, dyeNames, unitColorIndex,
-                        value -> unitColorIndex = Math.max(0, dyeNames.indexOf(value))));
+                        value -> unitColorIndex = Math.max(0, dyeNames.indexOf(value)), FactionScreen::dyeColorPreview));
 
                 List<String> governments = java.util.Arrays.stream(CampaignData.GovernmentType.values()).map(CampaignData.GovernmentType::displayName).toList();
                 governmentIndex = clampIndex(governmentIndex, governments.size());
@@ -152,7 +152,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
                         value -> governmentIndex = Math.max(0, governments.indexOf(value))));
 
                 List<String> capitals = snapshot.settlements().stream()
-                        .map(value -> value.name() + " — " + value.rank() + " · Pop " + value.population()).toList();
+                        .map(value -> value.name() + " - " + value.rank() + " · Pop " + value.population()).toList();
                 capitalIndex = clampIndex(capitalIndex, capitals.size());
                 if (!capitals.isEmpty()) capitalDrop = addRenderableWidget(new DropdownWidget(left + 168, top + 240, 280, 20, capitals, capitalIndex,
                         value -> capitalIndex = Math.max(0, capitals.indexOf(value))));
@@ -167,11 +167,11 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 bannerPatternColorIndex = clampIndex(bannerPatternColorIndex, dyes.size());
                 bannerPatternIndex = clampIndex(bannerPatternIndex, patterns.size());
                 bannerBaseDrop = addRenderableWidget(new DropdownWidget(left + 166, top + 132, 154, 20, dyes, bannerBaseColorIndex,
-                        value -> { bannerBaseColorIndex = Math.max(0, dyes.indexOf(value)); rebuildDesignedBanner(); }));
+                        value -> { bannerBaseColorIndex = Math.max(0, dyes.indexOf(value)); rebuildDesignedBanner(); }, FactionScreen::dyeColorPreview));
                 bannerPatternDrop = addRenderableWidget(new DropdownWidget(left + 166, top + 174, 216, 20, patterns, bannerPatternIndex,
-                        value -> bannerPatternIndex = Math.max(0, patterns.indexOf(value))));
+                        value -> { bannerPatternIndex = Math.max(0, patterns.indexOf(value)); rebuildDesignedBanner(); }));
                 bannerPatternColorDrop = addRenderableWidget(new DropdownWidget(left + 390, top + 174, 146, 20, dyes, bannerPatternColorIndex,
-                        value -> bannerPatternColorIndex = Math.max(0, dyes.indexOf(value))));
+                        value -> { bannerPatternColorIndex = Math.max(0, dyes.indexOf(value)); rebuildDesignedBanner(); }, FactionScreen::dyeColorPreview));
                 addRenderableWidget(Button.builder(Component.literal("Add Layer"), button -> addBannerLayer())
                         .bounds(left + 166, top + 210, 104, 20).build());
                 addRenderableWidget(Button.builder(Component.literal("Remove Last"), button -> removeBannerLayer())
@@ -226,7 +226,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
                     memberDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 316, 160, 20,
                             memberNames, memberIndex, value -> memberIndex = Math.max(0, memberNames.indexOf(value))));
                     List<String> ranks = snapshot.ranks().stream().filter(rank -> rank.tier() < 4)
-                            .map(rank -> "Tier " + rank.tier() + " — " + rank.title()).toList();
+                            .map(rank -> "Tier " + rank.tier() + " - " + rank.title()).toList();
                     rankIndex = Math.max(0, Math.min(rankIndex, Math.max(0, ranks.size() - 1)));
                     rankDrop = addRenderableWidget(new DropdownWidget(left + 188, top + 316, 120, 20,
                             ranks, rankIndex, value -> rankIndex = Math.max(0, ranks.indexOf(value))));
@@ -268,7 +268,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
         }
         if (tab == Tab.RANKS && snapshot.viewerLeader() && !snapshot.ranks().isEmpty()) {
             List<String> rankOptions = snapshot.ranks().stream()
-                    .map(rank -> "Tier " + rank.tier() + " — " + rank.title()).toList();
+                    .map(rank -> "Tier " + rank.tier() + " - " + rank.title()).toList();
             titleRankIndex = Math.max(0, Math.min(titleRankIndex, rankOptions.size() - 1));
             titleRankDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 336, 178, 20,
                     rankOptions, titleRankIndex, value -> {
@@ -302,7 +302,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
         CampaignData.GovernmentType[] governments = CampaignData.GovernmentType.values();
         CampaignData.GovernmentType government = governments[clampIndex(governmentIndex, governments.length)];
         FactionSnapshot.SettlementEntry capital = snapshot.settlements().get(clampIndex(capitalIndex, snapshot.settlements().size()));
-        ItemStack bannerItem = buildDesignedBanner();
+        ItemStack bannerItem = buildDesignedBanner(false);
         SettlementNetwork.CHANNEL.sendToServer(new FactionCreatePacket(name, team.getName(), unit.getName(), government.name(), capital.id(), bannerItem));
     }
 
@@ -385,8 +385,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 graphics.drawString(font, "Unit color", left + 316, top + 152, 0xFFE7D8B0, false);
                 graphics.drawString(font, "Government", left + 92, top + 208, 0xFFE7D8B0, false);
                 graphics.drawString(font, "Capital", left + 92, top + 246, 0xFFE7D8B0, false);
-                graphics.drawCenteredString(font, bannerLayers.isEmpty() ? "Banner: no pattern layers yet — use Banner Editor." : "Banner: " + bannerLayers.size() + " pattern layer(s) ready.",
-                        left + W / 2, top + 318, bannerLayers.isEmpty() ? 0xFFFFA69B : 0xFF9FE39F);
+                renderFoundingChecklist(graphics);
             } else if (createPage == CreatePage.BANNER) {
                 graphics.drawString(font, "Base dye", left + 92, top + 138, 0xFFE7D8B0, false);
                 graphics.drawString(font, "Pattern", left + 92, top + 180, 0xFFE7D8B0, false);
@@ -394,9 +393,9 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 graphics.drawString(font, "Layers " + bannerLayers.size() + "/6", left + 166, top + 244, 0xFFCCCCCC, false);
                 for (int i = 0; i < bannerLayers.size(); i++) {
                     BannerLayerChoice layer = bannerLayers.get(i);
-                    graphics.drawString(font, (i + 1) + ". " + layer.displayName() + " · " + displayDye(layer.dye()), left + 166, top + 260 + i * 13, 0xFFAAAAAA, false);
+                    graphics.drawString(font, (i + 1) + ". " + layer.displayName() + " | " + displayDye(layer.dye()), left + 92, top + 260 + i * 13, 0xFFAAAAAA, false);
                 }
-                if (designedBannerRenderer != null) designedBannerRenderer.renderBanner(graphics, left + 466, top + 116, 28, 56, CAMPAIGN_BANNER_SCALE);
+                if (designedBannerRenderer != null) designedBannerRenderer.renderBanner(graphics, left + 344, top + 238, 64, 128, 28);
             }
             if (createPage == CreatePage.JOIN) {
                 graphics.drawCenteredString(font, "JOIN AN EXISTING FACTION", left + W / 2, top + 122, 0xFFE7D8B0);
@@ -487,7 +486,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
             FactionSnapshot.SettlementEntry settlement = snapshot.settlements().get(i);
             int y = top + 128 + i * 16;
             String capital = settlement.capital() ? " ◆ CAPITAL" : "";
-            graphics.drawString(font, fitText(settlement.name() + " — " + settlement.rank() + capital, 250), left + 24, y, CAMPAIGN_TEXT, false);
+            graphics.drawString(font, fitText(settlement.name() + " - " + settlement.rank() + capital, 250), left + 24, y, CAMPAIGN_TEXT, false);
             graphics.drawString(font, "Pop " + settlement.population() + " · Stability " + settlement.stability()
                     + "% · Tax income " + settlement.taxIncome() + "/day", left + 300, y, 0xFFAAAAAA, false);
         }
@@ -499,7 +498,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
         for (int i = 0; i < snapshot.ranks().size(); i++) {
             FactionSnapshot.RankEntry rank = snapshot.ranks().get(i);
             int y = top + 130 + i * 25;
-            graphics.drawString(font, "Tier " + rank.tier() + " — [" + rank.title() + "]", left + 24, y, 0xFFFFFFFF, false);
+            graphics.drawString(font, "Tier " + rank.tier() + " - [" + rank.title() + "]", left + 24, y, 0xFFFFFFFF, false);
             String permission = switch (rank.tier()) {
                 case 4 -> "Faction leader: complete authority";
                 case 3 -> "Senior administration and diplomacy";
@@ -523,6 +522,13 @@ public final class FactionScreen extends ScaledCampaignScreen {
 
     private static List<String> dyeDisplayNames() {
         return java.util.Arrays.stream(DyeColor.values()).map(FactionScreen::displayDye).toList();
+    }
+
+    private static int dyeColorPreview(String displayName) {
+        for (DyeColor dye : DyeColor.values()) {
+            if (displayDye(dye).equals(displayName)) return 0xFF000000 | FactionColorUtil.rgb(dye);
+        }
+        return 0xFFFFFFFF;
     }
 
     private static String displayDye(DyeColor color) {
@@ -565,7 +571,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
         rebuildDesignedBanner();
     }
 
-    private ItemStack buildDesignedBanner() {
+    private ItemStack buildDesignedBanner(boolean includeDraft) {
         DyeColor[] dyes = DyeColor.values();
         DyeColor base = dyes[clampIndex(bannerBaseColorIndex, dyes.length)];
         ItemStack stack = new ItemStack(BannerBlock.byColor(base).asItem());
@@ -576,6 +582,16 @@ public final class FactionScreen extends ScaledCampaignScreen {
             tag.putInt("Color", layer.dye().getId());
             patterns.add(tag);
         }
+        if (includeDraft && bannerLayers.size() < 6) {
+            List<BannerPatternChoice> available = bannerPatterns();
+            if (!available.isEmpty()) {
+                BannerPatternChoice pattern = available.get(clampIndex(bannerPatternIndex, available.size()));
+                CompoundTag tag = new CompoundTag();
+                tag.putString("Pattern", pattern.hash());
+                tag.putInt("Color", dyes[clampIndex(bannerPatternColorIndex, dyes.length)].getId());
+                patterns.add(tag);
+            }
+        }
         if (!patterns.isEmpty()) {
             CompoundTag blockEntity = new CompoundTag();
             blockEntity.put("Patterns", patterns);
@@ -585,11 +601,34 @@ public final class FactionScreen extends ScaledCampaignScreen {
     }
 
     private void rebuildDesignedBanner() {
-        ItemStack stack = buildDesignedBanner();
+        ItemStack stack = buildDesignedBanner(true);
         try {
             if (designedBannerRenderer == null) designedBannerRenderer = new BannerRenderer(new RecruitsFaction("settlements_preview", "Preview", new CompoundTag()));
             designedBannerRenderer.setBannerItem(stack);
         } catch (RuntimeException ignored) { designedBannerRenderer = null; }
+    }
+
+    private void renderFoundingChecklist(GuiGraphics graphics) {
+        graphics.drawString(font, "REQUIREMENTS", left + 92, top + 318, 0xFFE7D8B0, false);
+        if (snapshot.settlements().isEmpty()) {
+            graphics.drawString(font, "No independent settlement", left + 92, top + 338, 0xFFFF8E82, false);
+            return;
+        }
+        FactionSnapshot.SettlementEntry capital = snapshot.settlements().get(clampIndex(capitalIndex, snapshot.settlements().size()));
+        boolean town = !snapshot.foundingRequiresTown() || !"Village".equalsIgnoreCase(capital.rank());
+        requirement(graphics, (town ? capital.rank() : "Village") + " / Town", town, 92, 338);
+        requirement(graphics, capital.population() + "/" + snapshot.foundingPopulation() + " population",
+                capital.population() >= snapshot.foundingPopulation(), 286, 338);
+        requirement(graphics, capital.stability() + "/" + snapshot.foundingStability() + " stability",
+                capital.stability() >= snapshot.foundingStability(), 92, 356);
+        requirement(graphics, capital.treasury() + "/" + snapshot.foundingSilver() + " Silver",
+                capital.treasury() >= snapshot.foundingSilver(), 286, 356);
+        requirement(graphics, bannerLayers.size() + "/1 banner pattern", !bannerLayers.isEmpty(), 92, 374);
+        if (!snapshot.foundingEnabled()) graphics.drawString(font, "Faction founding disabled", left + 286, top + 374, 0xFFFF8E82, false);
+    }
+
+    private void requirement(GuiGraphics graphics, String text, boolean met, int x, int y) {
+        graphics.drawString(font, (met ? "✓ " : "✕ ") + text, left + x, top + y, met ? 0xFF83D68A : 0xFFFF8E82, false);
     }
 
     @Override public boolean isPauseScreen() { return false; }

@@ -8,21 +8,29 @@ import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.ToIntFunction;
 
 /** A real expandable, scrollable selection widget used by campaign screens. */
 public final class DropdownWidget extends AbstractWidget {
     private final List<String> options;
     private final Consumer<String> listener;
+    private final ToIntFunction<String> colorProvider;
     private int selectedIndex;
     private boolean expanded;
     private int scroll;
     private final int visibleRows;
 
     public DropdownWidget(int x, int y, int width, int height, List<String> options, int selectedIndex, Consumer<String> listener) {
+        this(x, y, width, height, options, selectedIndex, listener, null);
+    }
+
+    public DropdownWidget(int x, int y, int width, int height, List<String> options, int selectedIndex,
+                          Consumer<String> listener, ToIntFunction<String> colorProvider) {
         super(x, y, width, height, Component.empty());
         this.options = List.copyOf(options);
         this.selectedIndex = options.isEmpty() ? -1 : Math.max(0, Math.min(selectedIndex, options.size() - 1));
         this.listener = listener;
+        this.colorProvider = colorProvider;
         this.visibleRows = 6;
         updateMessage();
     }
@@ -38,7 +46,7 @@ public final class DropdownWidget extends AbstractWidget {
         int border = active ? 0xFFB8A16D : 0xFF555555;
         graphics.fill(getX(), getY(), getX() + width, getY() + height, border);
         graphics.fill(getX() + 1, getY() + 1, getX() + width - 1, getY() + height - 1, 0xFF2B2925);
-        graphics.drawString(Minecraft.getInstance().font, getMessage(), getX() + 6, getY() + 6, active ? 0xFFFFFFFF : 0xFF888888, false);
+        drawOption(graphics, value(), getMessage(), getX(), getY(), active ? 0xFFFFFFFF : 0xFF888888);
         if (!expanded) return;
         // Expanded dropdowns are overlays, not ordinary widgets. Give the list a high Z value so
         // buttons/text rendered later by the screen cannot paint over it. This is deliberately
@@ -54,9 +62,21 @@ public final class DropdownWidget extends AbstractWidget {
             boolean hover = mouseX >= getX() && mouseX < getX() + width && mouseY >= y && mouseY < y + height;
             graphics.fill(getX() + 1, y + 1, getX() + width - 1, y + height - 1,
                     index == selectedIndex ? 0xFF564A34 : hover ? 0xFF45413A : 0xFF242424);
-            graphics.drawString(Minecraft.getInstance().font, options.get(index), getX() + 6, y + 6, 0xFFFFFFFF, false);
+            String option = options.get(index);
+            drawOption(graphics, option, Component.literal(option), getX(), y, 0xFFFFFFFF);
         }
         graphics.pose().popPose();
+    }
+
+    private void drawOption(GuiGraphics graphics, String option, Component text, int x, int y, int textColor) {
+        int textX = x + 6;
+        if (colorProvider != null && option != null && !option.isBlank()) {
+            int color = colorProvider.applyAsInt(option);
+            graphics.fill(x + 5, y + 4, x + 17, y + 16, 0xFFB8A16D);
+            graphics.fill(x + 6, y + 5, x + 16, y + 15, color);
+            textX = x + 22;
+        }
+        graphics.drawString(Minecraft.getInstance().font, text, textX, y + 6, textColor, false);
     }
 
     @Override

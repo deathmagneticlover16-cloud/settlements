@@ -15,7 +15,7 @@ public record CharacterSnapshot(
         String firstName,
         String middleName,
         String lastName,
-        int renameCurrencyCost,
+        int renameSilverCost,
         String titleLine,
         String faith,
         int devotion,
@@ -35,7 +35,7 @@ public record CharacterSnapshot(
     public static CharacterSnapshot from(SettlementData data, ServerPlayer player) {
         SettlementData.CharacterRecord character = data.getCharacter(player.getUUID());
         if (character == null) {
-            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", "", SettlementConfig.CHARACTER_RENAME_CURRENCY_COST.get(), "", "", 0, "Uncommitted", false, 0, "Independent", "", "",
+            return new CharacterSnapshot(player.getGameProfile().getName(), "", "", "", "", SettlementConfig.CHARACTER_RENAME_SILVER_COST.get(), "", "", 0, "Uncommitted", false, 0, "Independent", "", "",
                     "Independent", "", "", "", List.of(), List.of());
         }
 
@@ -104,7 +104,7 @@ public record CharacterSnapshot(
                 character.getFirstName(),
                 character.getMiddleName(),
                 character.getLastName(),
-                SettlementConfig.CHARACTER_RENAME_CURRENCY_COST.get(),
+                SettlementConfig.CHARACTER_RENAME_SILVER_COST.get(),
                 titleLine,
                 character.getFaith(),
                 devotion,
@@ -129,7 +129,7 @@ public record CharacterSnapshot(
         buffer.writeUtf(firstName, 24);
         buffer.writeUtf(middleName, 24);
         buffer.writeUtf(lastName, 24);
-        buffer.writeVarInt(Math.max(0, renameCurrencyCost));
+        buffer.writeVarInt(Math.max(0, renameSilverCost));
         buffer.writeUtf(titleLine, 96);
         buffer.writeUtf(faith, 48);
         buffer.writeInt(devotion);
@@ -153,7 +153,7 @@ public record CharacterSnapshot(
         String firstName = buffer.readUtf(24);
         String middleName = buffer.readUtf(24);
         String lastName = buffer.readUtf(24);
-        int renameCurrencyCost = buffer.readVarInt();
+        int renameSilverCost = buffer.readVarInt();
         String titleLine = buffer.readUtf(96);
         String faith = buffer.readUtf(48);
         int devotion = buffer.readInt();
@@ -173,7 +173,7 @@ public record CharacterSnapshot(
         int traitCount = PacketValidation.readCount(buffer, 32, "character trait");
         List<TraitEntry> traits = new ArrayList<>(traitCount);
         for (int i = 0; i < traitCount; i++) traits.add(TraitEntry.decode(buffer));
-        return new CharacterSnapshot(accountName, displayName, firstName, middleName, lastName, renameCurrencyCost, titleLine, faith, devotion, devotionTier, reliabilityTracked, reliability, reliabilityTier, address, house,
+        return new CharacterSnapshot(accountName, displayName, firstName, middleName, lastName, renameSilverCost, titleLine, faith, devotion, devotionTier, reliabilityTracked, reliability, reliabilityTier, address, house,
                 faction, factionRank, primarySeat, spouse, holdings, traits);
     }
 
@@ -186,7 +186,7 @@ public record CharacterSnapshot(
     }
 
     public record HoldingEntry(String settlementId, String settlementName, String rank) {
-        public String display() { return settlementName + " — " + rank; }
+        public String display() { return settlementName + " - " + rank; }
         private void encode(FriendlyByteBuf buffer) {
             buffer.writeUtf(settlementId, 64);
             buffer.writeUtf(settlementName, 64);

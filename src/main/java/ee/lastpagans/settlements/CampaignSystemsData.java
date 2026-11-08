@@ -36,8 +36,9 @@ public final class CampaignSystemsData extends SavedData {
     private final Map<UUID, Long> lastPrayerDay = new HashMap<>();
     private final Map<UUID, Integer> divorceCount = new HashMap<>();
     private final Map<UUID, Long> lastSettlementFoundingGameTime = new HashMap<>();
-    /** Settlement tax policy and daily collection history. */
+    /** Settlement tax policy, applied stability offset, and daily collection history. */
     private final Map<String, Integer> taxPolicies = new HashMap<>();
+    private final Map<String, Integer> taxStabilityOffsets = new HashMap<>();
     private final Map<String, Long> lastTaxDay = new HashMap<>();
     private final Map<String, Integer> lastTaxIncome = new HashMap<>();
     /** Temporary manpower awarded by peace terms. It is recruitable, but never raises a settlement's native MP ceiling. */
@@ -83,6 +84,7 @@ public final class CampaignSystemsData extends SavedData {
         readUuidIntMap(tag, "DivorceCount", data.divorceCount);
         readUuidLongMap(tag, "LastSettlementFoundingGameTime", data.lastSettlementFoundingGameTime);
         readStringIntMap(tag, "TaxPolicies", data.taxPolicies);
+        readStringIntMap(tag, "TaxStabilityOffsets", data.taxStabilityOffsets);
         readStringLongMap(tag, "LastTaxDay", data.lastTaxDay);
         readStringIntMap(tag, "LastTaxIncome", data.lastTaxIncome);
         readStringIntMap(tag, "ForeignManpower", data.foreignManpower);
@@ -183,6 +185,7 @@ public final class CampaignSystemsData extends SavedData {
         writeUuidIntMap(tag, "DivorceCount", divorceCount);
         writeUuidLongMap(tag, "LastSettlementFoundingGameTime", lastSettlementFoundingGameTime);
         writeStringIntMap(tag, "TaxPolicies", taxPolicies);
+        writeStringIntMap(tag, "TaxStabilityOffsets", taxStabilityOffsets);
         writeStringLongMap(tag, "LastTaxDay", lastTaxDay);
         writeStringIntMap(tag, "LastTaxIncome", lastTaxIncome);
         writeStringIntMap(tag, "ForeignManpower", foreignManpower);
@@ -246,30 +249,54 @@ public final class CampaignSystemsData extends SavedData {
     public void markSettlementFounded(UUID player, long gameTime) { if (player != null) { lastSettlementFoundingGameTime.put(player, Math.max(0L, gameTime)); setDirty(); } }
     public int incrementDivorceCount(UUID player) { if (player == null) return 0; int value = divorceCount(player) + 1; divorceCount.put(player, value); setDirty(); return value; }
 
-    /** Continuous taxation policy from 50% (low) through 100% (normal) to 150% (high). */
+    /** Five server-authoritative taxation tiers. */
     public int taxRatePercent(String settlement) {
         String id = SettlementData.normalizeId(settlement);
-        return clamp(taxPolicies.getOrDefault(id, 100), 50, 150);
+        return nearestTaxRate(clamp(taxPolicies.getOrDefault(id, 100), 50, 150));
     }
     public void setTaxRatePercent(String settlement, int percent) {
         String id = SettlementData.normalizeId(settlement);
         if (id.isBlank()) return;
-        int safe = clamp(percent, 50, 150);
+        int safe = nearestTaxRate(percent);
         if (safe == 100) taxPolicies.remove(id); else taxPolicies.put(id, safe);
         setDirty();
     }
     public String taxDisplayName(String settlement) {
-        int rate = taxRatePercent(settlement);
-        if (rate <= 75) return "Low";
-        if (rate >= 125) return "High";
-        return "Normal";
+        return switch (taxRatePercent(settlement)) {
+            case 50 -> "Very Low";
+            case 75 -> "Low";
+            case 125 -> "High";
+            case 150 -> "Very High";
+            default -> "Normal";
+        };
     }
-    public int taxStabilityPerDay(String settlement) {
-        int rate = taxRatePercent(settlement);
-        if (rate <= 70) return 1;
-        if (rate >= 140) return -2;
-        if (rate >= 120) return -1;
-        return 0;
+    public int taxStabilityImpact(String settlement) {
+        return switch (taxRatePercent(settlement)) {
+            case 50 -> 4;
+            case 75 -> 2;
+            case 125 -> -5;
+            case 150 -> -10;
+            default -> -1;
+        };
+    }
+    public int reconcileTaxStabilityOffset(String settlement) {
+        String id = SettlementData.normalizeId(settlement);
+        if (id.isBlank()) return 0;
+        int desired = taxStabilityImpact(id);
+        int previous = taxStabilityOffsets.getOrDefault(id, 0);
+        if (desired == previous) return 0;
+        taxStabilityOffsets.put(id, desired);
+        setDirty();
+        return desired - previous;
+    }
+    public static boolean isTaxRate(int rate) {
+        return rate == 50 || rate == 75 || rate == 100 || rate == 125 || rate == 150;
+    }
+    private static int nearestTaxRate(int rate) {
+        int[] rates = {50, 75, 100, 125, 150};
+        int nearest = rates[0];
+        for (int candidate : rates) if (Math.abs(candidate - rate) < Math.abs(nearest - rate)) nearest = candidate;
+        return nearest;
     }
     public boolean beginTaxDay(String settlement, long day) {
         String id = SettlementData.normalizeId(settlement);

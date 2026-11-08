@@ -224,7 +224,7 @@ public record DiplomacySnapshot(
             for (int i = 0; i < count; i++) claims.add(new ClaimTarget(buffer.readUUID(), buffer.readUtf(64)));
             return new SettlementTarget(id, name, faction, factionName, rank, capital, manageable, List.copyOf(claims));
         }
-        public String display() { return settlementName + " — " + rank + (capital ? " · Capital" : "") + (factionId.isBlank() ? " · Independent" : " · " + factionName); }
+        public String display() { return settlementName + " - " + rank + (capital ? " · Capital" : "") + (factionId.isBlank() ? " · Independent" : " · " + factionName); }
     }
     public record ClaimTarget(UUID id, String name) {
         public String display() { return name == null || name.isBlank() ? id.toString() : name; }

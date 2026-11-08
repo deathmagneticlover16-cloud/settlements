@@ -1403,7 +1403,7 @@ public final class CampaignManager {
         changeRelationship(player.getServer(), data, own, target, -20);
         changeReliability(player.serverLevel(), data, own, -15);
         syncRelation(player.serverLevel(), own, target, CampaignData.TreatyState.NEUTRAL);
-        CampaignToastSender.relationChanged(player.getServer(), own, target, "Neutral — treaty broken");
+        CampaignToastSender.relationChanged(player.getServer(), own, target, "Neutral - treaty broken");
         data.addNews(CampaignData.NewsCategory.DIPLOMACY, CampaignData.NewsImportance.NORMAL,
                 "Treaty broken", factionName(own) + " broke its treaty with " + factionName(target) + ".",
                 day, own, "", CampaignData.NewsVisibility.PUBLIC);
@@ -1550,10 +1550,10 @@ public final class CampaignManager {
         ItemStack held = player.getMainHandItem();
         if (character == null || !character.isCreated()) result = "Create a character before making a religious donation.";
         else if (extra.devotion(player.getUUID()) >= 100) result = "Your Devotion is already at its maximum.";
-        else if (held.isEmpty() || !held.is(SettlementManager.CURRENCY)) result = "Hold one item from #settlements:currency to donate it to your faith.";
+        else if (held.isEmpty() || !held.is(ee.lastpagans.settlements.item.ModItems.SILVER_COIN.get())) result = "Hold one Silver Coin to donate it to your faith.";
         else {
             held.shrink(1);
-            int gain = SettlementConfig.CURRENCY_DONATION_DEVOTION_GAIN.get();
+            int gain = SettlementConfig.SILVER_DONATION_DEVOTION_GAIN.get();
             extra.changeDevotion(player.getUUID(), gain);
             result = "Religious donation made: +" + gain + " Devotion (" + extra.devotion(player.getUUID()) + "/100).";
         }
@@ -1675,7 +1675,7 @@ public final class CampaignManager {
 
         if (banner == null || !(banner.getItem() instanceof BannerItem)) return "Faction creation failed: design a banner first.";
         banner = FactionBannerUtil.sanitize(banner);
-        if (banner.isEmpty()) return "Faction creation failed: choose 1–6 registered banner patterns with valid dye colors.";
+        if (banner.isEmpty()) return "Faction creation failed: choose 1-6 registered banner patterns with valid dye colors.";
         if (FactionEvents.recruitsFactionManager.isDisplayNameInUse(displayName)) return "Faction creation failed: that faction display name is already in use.";
         if (FactionEvents.recruitsFactionManager.isBannerInUse(banner.serializeNBT())) return "Faction creation failed: that banner is already used by another faction.";
         String baseId = SettlementData.normalizeId(displayName);

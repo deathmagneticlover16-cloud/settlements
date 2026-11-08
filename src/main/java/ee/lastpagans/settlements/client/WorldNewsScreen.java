@@ -66,7 +66,7 @@ public final class WorldNewsScreen extends ScaledCampaignScreen {
         beginCampaignRender(graphics);
         drawCampaignFrame(graphics, left, top, W, H, 40);
         drawCampaignPanel(graphics, left + 12, top + 76, left + W - 12, top + 274);
-        graphics.drawCenteredString(font, "WORLD NEWS — DAY " + snapshot.currentDay(), left + W / 2, top + 14, CAMPAIGN_TITLE);
+        graphics.drawCenteredString(font, "WORLD NEWS - DAY " + snapshot.currentDay(), left + W / 2, top + 14, CAMPAIGN_TITLE);
         graphics.drawString(font, "Filter", left + 18, top + 40, 0xFFCCCCCC, false);
         List<WorldNewsSnapshot.Entry> values = filtered();
         graphics.drawString(font, values.size() + " shown · " + snapshot.entries().size() + " total", left + 205, top + 55, 0xFF888888, false);

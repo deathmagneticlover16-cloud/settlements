@@ -84,10 +84,10 @@ public final class ResearchScreen extends ScaledCampaignScreen {
         int ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
         drawCampaignFrame(graphics, left, top, W, H, 56);
-        graphics.drawCenteredString(font, "RESEARCH — " + snapshot.polityName(), left + W / 2, top + 13, 0xFFFFE2A3);
+        graphics.drawCenteredString(font, "RESEARCH - " + snapshot.polityName(), left + W / 2, top + 13, 0xFFFFE2A3);
         graphics.drawCenteredString(font, snapshot.historyStagesInstalled()
                         ? "History Stages · " + tierName(snapshot.researchTier()) + " (Tier " + roman(snapshot.researchTier()) + ") · " + snapshot.speedPercent() + "% speed"
-                        : "History Stages not installed — research unavailable",
+                        : "History Stages not installed - research unavailable",
                 left + W / 2, top + 33, snapshot.historyStagesInstalled() ? 0xFFA8E39D : 0xFFFFA27A);
 
         renderActiveProject(graphics);

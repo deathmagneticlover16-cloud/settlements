@@ -28,9 +28,7 @@ public final class ClientCampaignEvents {
         SettlementsWildfirePreviewSession.onClientTick();
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.screen != null) return;
-        while (ClientKeyMappings.MAIN.consumeClick()) request(OpenCampaignRequestPacket.ScreenTarget.MAIN);
-        while (ClientKeyMappings.CHARACTER.consumeClick()) request(OpenCampaignRequestPacket.ScreenTarget.CHARACTER);
-        while (ClientKeyMappings.SETTLEMENT.consumeClick()) request(OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT);
+        while (ClientKeyMappings.MENU.consumeClick()) request(OpenCampaignRequestPacket.ScreenTarget.SETTLEMENT);
     }
 
     public static void onScreenOpening(ScreenEvent.Opening event) {
@@ -114,7 +112,7 @@ public final class ClientCampaignEvents {
         if (hovered != null) {
             graphics.renderTooltip(Minecraft.getInstance().font, List.of(
                     net.minecraft.network.chat.Component.literal(hovered.name()),
-                    net.minecraft.network.chat.Component.literal(pretty(hovered.rank()) + (hovered.capital() ? " · Capital" : "") + " — " + hovered.factionName()),
+                    net.minecraft.network.chat.Component.literal(pretty(hovered.rank()) + (hovered.capital() ? " · Capital" : "") + " - " + hovered.factionName()),
                     net.minecraft.network.chat.Component.literal("Population " + hovered.population() + " · Stability " + hovered.stability() + "%")
             ), java.util.Optional.empty(), mouseX, mouseY);
         }

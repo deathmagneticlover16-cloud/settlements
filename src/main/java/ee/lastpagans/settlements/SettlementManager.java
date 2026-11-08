@@ -18,9 +18,6 @@ import ee.lastpagans.settlements.network.HousingAreasPacket;
 import ee.lastpagans.settlements.network.SnapshotPacket;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Holder;
-import net.minecraft.core.HolderSet;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
@@ -28,8 +25,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.TagKey;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -58,7 +53,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.Set;
 
@@ -82,22 +76,7 @@ public final class SettlementManager {
     public static final String TAG_UNIT_TYPE = "SettlementsUnitType";
     public static final int MERCENARY_DESERTION_MISSES = 3;
 
-    public static final TagKey<Item> CURRENCY = TagKey.create(
-            Registries.ITEM,
-            new ResourceLocation(Settlements.MOD_ID, "currency")
-    );
-    private static final Map<UUID, PendingSettlementDeletion> PENDING_SETTLEMENT_DELETIONS = new HashMap<>();
-    private static final long SETTLEMENT_DELETE_CONFIRM_MILLIS = 30_000L;
-
     private SettlementManager() {
-    }
-
-    public static void clearPlayerState(UUID playerId) {
-        if (playerId != null) PENDING_SETTLEMENT_DELETIONS.remove(playerId);
-    }
-
-    public static void clearRuntimeState() {
-        PENDING_SETTLEMENT_DELETIONS.clear();
     }
 
     public static void open(ServerPlayer player) {
@@ -119,7 +98,7 @@ public final class SettlementManager {
             return false;
         }
         data.selectSettlement(player.getUUID(), settlement.getId());
-        sendSnapshot(player, settlement, true, "Settlement ready.");
+        sendSnapshot(player, settlement, true, "");
         return true;
     }
 
@@ -149,10 +128,7 @@ public final class SettlementManager {
     }
 
     public static boolean canContribute(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        if (player.createCommandSourceStack().hasPermission(2)) return true;
-        if (!canView(player, settlement)) return false;
-        SettlementData.SettlementRole role = settlement.getRole(player.getUUID());
-        return role.canManage() || role == SettlementData.SettlementRole.CITIZEN;
+        return canManage(player, settlement);
     }
 
     public static void handleAction(ServerPlayer player, String settlementId, SettlementAction action) {
@@ -179,20 +155,6 @@ public final class SettlementManager {
             cycleSettlement(player, data, settlement, action == SettlementAction.SELECT_NEXT, "MILITARY".equalsIgnoreCase(argument));
             return;
         }
-        if (action == SettlementAction.DELETE_SETTLEMENT) {
-            String result;
-            if (!canView(player, settlement)) result = "You cannot access this settlement.";
-            else if (!player.getUUID().equals(settlement.getOwnerId())) result = "Only the settlement's actual owner may permanently delete it. Administrators should use the explicit admin reset command instead.";
-            else result = deleteSettlement(player, settlement, argument);
-            if (data.getSettlement(settlement.getId()) == null) {
-                player.sendSystemMessage(Component.literal(result));
-                CampaignManager.openMain(player);
-                return;
-            }
-            sendSnapshot(player, settlement, false, result);
-            return;
-        }
-
         String result;
         if (!canView(player, settlement)) result = "You cannot access this settlement.";
         else result = switch (action) {
@@ -208,14 +170,6 @@ public final class SettlementManager {
             case SELL_FOREIGN_MP -> requireManager(player, settlement, () -> sellForeignManpower(player, settlement, amount));
             case SELL_ALL_FOREIGN_MP -> requireManager(player, settlement, () -> sellForeignManpower(player, settlement,
                     CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId())));
-            case RUN_CHECKER -> requireManager(player, settlement, () -> {
-                int recovered = settlement.runManpowerChecker();
-                return recovered > 0 ? "Recovered " + recovered + " available MP." : "No manpower recovered.";
-            });
-            case DEPOSIT_FOOD -> requireContributor(player, settlement, () -> depositFood(player, settlement));
-            case DEPOSIT_CURRENCY -> requireContributor(player, settlement, () -> depositCurrency(player, settlement));
-            case WITHDRAW_CURRENCY_ONE -> requireManager(player, settlement, () -> withdrawCurrency(player, settlement, 1));
-            case WITHDRAW_CURRENCY_TEN -> requireManager(player, settlement, () -> withdrawCurrency(player, settlement, 10));
             case SET_TAX_POLICY -> requireManager(player, settlement, () -> setTaxPolicy(player, settlement, argument));
             case TOGGLE_IMMIGRATION -> requireManager(player, settlement, () -> {
                 settlement.setImmigrationEnabled(!settlement.isImmigrationEnabled());
@@ -223,28 +177,23 @@ public final class SettlementManager {
             });
             case SET_CUSTOM_BANNER -> requireManager(player, settlement, () -> setSettlementBanner(player, settlement));
             case USE_FACTION_BANNER -> requireManager(player, settlement, () -> useFactionBanner(player, settlement));
-            case CLEAR_BANNER -> requireManager(player, settlement, () -> clearSettlementBanner(player, settlement));
             case LINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> linkCurrentClaim(player, settlement));
             case UNLINK_CURRENT_CLAIM -> requireManager(player, settlement, () -> unlinkCurrentClaim(player, settlement));
             case CLEAR_CLAIMS -> requireManager(player, settlement, () -> clearClaims(player, settlement));
             case RENAME_SETTLEMENT -> requireManager(player, settlement, () -> renameSettlement(player, settlement, argument));
             case TRANSFER_SETTLEMENT -> requireOwner(player, settlement, () -> transferSettlement(player, settlement, argument));
-            case ADD_MEMBER_CITIZEN -> requireManager(player, settlement, () -> setSettlementMember(player, settlement, argument, SettlementData.SettlementRole.CITIZEN));
             case ADD_MEMBER_COOWNER -> requireManager(player, settlement, () -> setSettlementMember(player, settlement, argument, SettlementData.SettlementRole.CO_OWNER));
-            case REMOVE_MEMBER -> requireManager(player, settlement, () -> removeSettlementMember(player, settlement, argument));
             case SET_TOWN_SQUARE -> requireManager(player, settlement, () -> setTownSquareHere(player, settlement));
             case SET_UPKEEP_CHEST -> requireManager(player, settlement, () -> setUpkeepChest(player, settlement));
             case CLEAR_UPKEEP_CHEST -> requireManager(player, settlement, () -> { settlement.setUpkeepChest("", null); return "City Upkeep Chest cleared."; });
-            case REMOVE_CAPTURE_ZONE -> requireManager(player, settlement, () -> CaptureZoneManager.removeNearest(player, settlement));
             case RECALCULATE_HOUSING -> requireManager(player, settlement, () -> "Housing recalculated: " + CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement) + " bed(s).");
-            case DELETE_SETTLEMENT -> "Deletion handled separately.";
             case OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT -> "Screen opened.";
-            case REFRESH -> "Stats refreshed.";
+            case REFRESH -> "";
         };
         sendSnapshot(player, settlement, false, result);
         if (switch (action) {
             case RECRUIT_UNIT, RAISE_LEVY, RETURN_LEVY, SET_CUSTOM_BANNER,
-                    USE_FACTION_BANNER, CLEAR_BANNER, RENAME_SETTLEMENT, SET_TOWN_SQUARE -> true;
+                    USE_FACTION_BANNER, RENAME_SETTLEMENT, SET_TOWN_SQUARE -> true;
             default -> false;
         }) CampaignManager.broadcastMapMarkers(player.getServer());
     }
@@ -280,7 +229,7 @@ public final class SettlementManager {
 
     private static String applyAreaSelection(ServerPlayer player, SettlementData.SettlementRecord settlement, AreaSelection.Type type,
                                              AreaSelection.Shape shape, BlockPos first, BlockPos second, int areaIndex) {
-        if (type != AreaSelection.Type.CAPTURE_SECONDARY) shape = AreaSelection.Shape.BOX;
+        shape = AreaSelection.Shape.BOX;
         if (type.horizontalOnly()) second = new BlockPos(second.getX(), first.getY(), second.getZ());
         BlockPos min = AreaSelection.min(first, second), max = AreaSelection.max(first, second);
         int width = max.getX() - min.getX() + 1, height = max.getY() - min.getY() + 1, depth = max.getZ() - min.getZ() + 1;
@@ -314,7 +263,6 @@ public final class SettlementManager {
                 settlement.setBarracksArea(dimension, min, max, shape);
                 yield shape.label() + " Barracks registered with a " + settlement.getBarracksRadius() + " block radius.";
             }
-            case CAPTURE_SECONDARY -> CaptureZoneManager.setArea(player, settlement, CaptureZoneData.ZoneType.SECONDARY, min, max, shape);
         };
     }
 
@@ -339,10 +287,6 @@ public final class SettlementManager {
 
     private static String requireManager(ServerPlayer player, SettlementData.SettlementRecord settlement, ActionSupplier action) {
         return canManage(player, settlement) ? action.get() : "Only the owner, a co-owner, or an administrator may do that.";
-    }
-
-    private static String requireContributor(ServerPlayer player, SettlementData.SettlementRecord settlement, ActionSupplier action) {
-        return canContribute(player, settlement) ? action.get() : "Only settlement members may do that.";
     }
 
     private static String requireOwner(ServerPlayer player, SettlementData.SettlementRecord settlement, ActionSupplier action) {
@@ -586,12 +530,6 @@ public final class SettlementManager {
         return "Settlement now uses its faction banner.";
     }
 
-    private static String clearSettlementBanner(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        CampaignData campaign = CampaignData.get(player.serverLevel());
-        campaign.visualFor(settlement.getId()).clearCustomBanner(); campaign.setDirty();
-        return "Settlement banner cleared.";
-    }
-
     public static void scheduleFirstSettlers(ServerPlayer founder, SettlementData.SettlementRecord settlement) {
         if (founder == null || settlement == null || !SettlementConfig.SPAWN_FIRST_SETTLERS.get()) return;
         int count = Math.max(0, SettlementConfig.FIRST_SETTLER_COUNT.get());
@@ -723,70 +661,24 @@ public final class SettlementManager {
         settlement.registerVillager(villager.getUUID());
     }
 
-    private static String depositFood(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        ItemStack held = player.getItemInHand(InteractionHand.MAIN_HAND);
-        if (held.isEmpty() || !held.isEdible()) return "Hold edible food in your main hand.";
-        FoodProperties properties = held.getFoodProperties(player);
-        if (properties == null) return "That item has no food value.";
-        int count = held.getCount();
-        int points = Math.max(1, properties.getNutrition()) * count;
-        held.shrink(count);
-        settlement.addFood(points, characterOrAccountName(player));
-        return "Deposited " + points + " food points.";
-    }
-
-    private static String depositCurrency(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        ItemStack held = player.getItemInHand(InteractionHand.MAIN_HAND);
-        if (held.isEmpty() || !held.is(CURRENCY)) {
-            return "Hold an item in the #settlements:currency tag.";
-        }
-        int coins = held.getCount();
-        int value = coins * SettlementConfig.CURRENCY_ITEM_TREASURY_VALUE.get();
-        held.shrink(coins);
-        StateTreasury.change(player.serverLevel(), settlement, value);
-        settlement.addContribution(characterOrAccountName(player) + " deposited " + coins + " currency into the State Treasury.");
-        return "Deposited " + coins + " currency into the State Treasury (+" + value + ").";
-    }
-
-    private static String withdrawCurrency(ServerPlayer player, SettlementData.SettlementRecord settlement, int coins) {
-        int cost = coins * SettlementConfig.CURRENCY_ITEM_TREASURY_VALUE.get();
-        if (!StateTreasury.spend(player.serverLevel(), settlement, cost)) return "Not enough State Treasury funds. Required: " + cost + ".";
-        Item item = getCurrencyItem();
-        ItemStack stack = new ItemStack(item, coins);
-        if (!player.getInventory().add(stack)) player.drop(stack, false);
-        settlement.addContribution(characterOrAccountName(player) + " withdrew " + coins + " currency.");
-        return "Withdrew " + coins + " currency from the State Treasury for " + cost + ".";
-    }
-
-    public static Item getCurrencyItem() {
-        Item defaultCoin = ModItems.SILVER_COIN.get();
-        Optional<HolderSet.Named<Item>> tag = BuiltInRegistries.ITEM.getTag(CURRENCY);
-        if (tag.isEmpty()) return defaultCoin;
-
-        // Prefer the bundled coin when the default tag is in use. If a server/datapack replaces
-        // #settlements:currency, choose a deterministic tagged item instead of hardcoding silver.
-        if (tag.get().stream().anyMatch(holder -> holder.value() == defaultCoin)) return defaultCoin;
-        return tag.get().stream()
-                .map(Holder::value)
-                .sorted(Comparator.comparing(item -> BuiltInRegistries.ITEM.getKey(item).toString()))
-                .findFirst()
-                .orElse(defaultCoin);
+    public static Item getSilverItem() {
+        return ModItems.SILVER_COIN.get();
     }
 
     private static String setTaxPolicy(ServerPlayer player, SettlementData.SettlementRecord settlement, String rawPolicy) {
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
         int rate;
         try { rate = Integer.parseInt(rawPolicy == null ? "100" : rawPolicy.trim()); }
-        catch (NumberFormatException exception) { return "Taxation must be a percentage from 50 to 150."; }
-        rate = Math.max(50, Math.min(150, rate));
+        catch (NumberFormatException exception) { return "Choose a valid taxation tier."; }
+        if (!CampaignSystemsData.isTaxRate(rate)) return "Choose Very Low, Low, Normal, High, or Very High taxation.";
         int previous = extra.taxRatePercent(settlement.getId());
-        if (previous == rate) return "Taxation is already set to " + rate + "%.";
+        if (previous == rate) return "Taxation is already " + extra.taxDisplayName(settlement.getId()) + ".";
         extra.setTaxRatePercent(settlement.getId(), rate);
         CampaignSystemsManager.refreshTaxPolicyModifier(settlement, extra);
-        settlement.addChronicle("Taxation changed from " + previous + "% to " + rate + "%.");
+        settlement.addChronicle("Taxation changed to " + extra.taxDisplayName(settlement.getId()) + ".");
         int projected = CampaignSystemsManager.projectedTaxIncome(settlement, extra);
-        return "Taxation set to " + rate + "% (" + extra.taxDisplayName(settlement.getId()) + "). Projected State Treasury revenue: "
-                + projected + "/day; stability " + signed(extra.taxStabilityPerDay(settlement.getId())) + "/day.";
+        return "Taxation set to " + extra.taxDisplayName(settlement.getId()) + ". Projected Silver: "
+                + projected + "/day. Stability impact: " + signed(extra.taxStabilityImpact(settlement.getId())) + ".";
     }
 
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
@@ -908,9 +800,9 @@ public final class SettlementManager {
                 openCharacterSheet(player, returnToMain);
                 return;
             }
-            int cost = Math.max(0, SettlementConfig.CHARACTER_RENAME_CURRENCY_COST.get());
-            if (!consumeCurrencyItems(player, cost)) {
-                player.sendSystemMessage(Component.literal("Renaming costs " + cost + " item(s) from #settlements:currency."));
+            int cost = Math.max(0, SettlementConfig.CHARACTER_RENAME_SILVER_COST.get());
+            if (!consumeSilver(player, cost)) {
+                player.sendSystemMessage(Component.literal("Renaming costs " + cost + " Silver."));
                 openCharacterSheet(player, returnToMain);
                 return;
             }
@@ -929,19 +821,19 @@ public final class SettlementManager {
         openCharacterSheet(player, returnToMain);
     }
 
-    private static boolean consumeCurrencyItems(ServerPlayer player, int amount) {
+    private static boolean consumeSilver(ServerPlayer player, int amount) {
         int required = Math.max(0, amount);
         if (required == 0) return true;
         int available = 0;
         for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
             ItemStack stack = player.getInventory().getItem(slot);
-            if (!stack.isEmpty() && stack.is(CURRENCY)) available += stack.getCount();
+            if (!stack.isEmpty() && stack.is(ModItems.SILVER_COIN.get())) available += stack.getCount();
         }
         if (available < required) return false;
         int remaining = required;
         for (int slot = 0; slot < player.getInventory().getContainerSize() && remaining > 0; slot++) {
             ItemStack stack = player.getInventory().getItem(slot);
-            if (stack.isEmpty() || !stack.is(CURRENCY)) continue;
+            if (stack.isEmpty() || !stack.is(ModItems.SILVER_COIN.get())) continue;
             int take = Math.min(remaining, stack.getCount());
             player.getInventory().removeItem(slot, take);
             remaining -= take;
@@ -1318,7 +1210,7 @@ public final class SettlementManager {
         BlockPos pos = hit.getBlockPos();
         if (!(level.getBlockEntity(pos) instanceof Container)) return "That block is not a supported inventory container.";
         settlement.setUpkeepChest(level.dimension().location().toString(), pos);
-        return "City Upkeep Chest linked. Edible items placed inside will automatically maintain the settlement Food stockpile.";
+        return "Upkeep Chest linked.";
     }
 
     public static void processUpkeepChests(MinecraftServer server) {
@@ -1328,6 +1220,19 @@ public final class SettlementManager {
             if (pos == null || settlement.getUpkeepChestDimension().isBlank()) continue;
             ServerLevel level = resolveLevel(server, settlement.getUpkeepChestDimension());
             if (level == null || !level.isLoaded(pos) || !(level.getBlockEntity(pos) instanceof Container container)) continue;
+            int silver = 0;
+            for (int slot = 0; slot < container.getContainerSize(); slot++) {
+                ItemStack stack = container.getItem(slot);
+                if (stack.isEmpty() || !stack.is(ModItems.SILVER_COIN.get())) continue;
+                silver += stack.getCount();
+                container.setItem(slot, ItemStack.EMPTY);
+            }
+            if (silver > 0) {
+                int value = (int)Math.min(Integer.MAX_VALUE,
+                        (long)silver * SettlementConfig.SILVER_TREASURY_VALUE.get());
+                StateTreasury.change(level, settlement, value);
+                container.setChanged();
+            }
             int mouths = settlement.getVillagerCount() + settlement.getProfessionalCount() + settlement.getMercenaryCompanyCount();
             if (mouths <= 0) continue;
             int target = Math.max(SettlementConfig.IMMIGRATION_FOOD_RESERVE.get(), mouths * SettlementConfig.UPKEEP_CHEST_TARGET_DAYS.get());
@@ -1358,10 +1263,15 @@ public final class SettlementManager {
     }
 
     private static String renameSettlement(ServerPlayer player, SettlementData.SettlementRecord settlement, String value) {
-        String clean = SettlementData.cleanText(value, settlement.getName(), 64);
+        String clean = SettlementData.cleanText(value, "", 64);
         if (clean.isBlank()) return "Settlement name cannot be blank.";
+        if (clean.equals(settlement.getName())) return "That is already the settlement name.";
+        int cost = SettlementConfig.SETTLEMENT_RENAME_SILVER_COST.get();
+        if (!StateTreasury.spend(player.serverLevel(), settlement, cost)) {
+            return "Renaming costs " + cost + " Silver. State Treasury: " + StateTreasury.balance(player.serverLevel(), settlement) + ".";
+        }
         settlement.rename(clean);
-        return "Settlement renamed to " + settlement.getName() + ".";
+        return "Settlement renamed to " + settlement.getName() + " for " + cost + " Silver.";
     }
 
     private static String setSettlementMember(ServerPlayer actor, SettlementData.SettlementRecord settlement, String rawPlayerId, SettlementData.SettlementRole role) {
@@ -1369,7 +1279,7 @@ public final class SettlementManager {
         try { targetId = UUID.fromString(rawPlayerId == null ? "" : rawPlayerId.trim()); }
         catch (IllegalArgumentException exception) { return "Select an online player first."; }
         if (targetId.equals(settlement.getOwnerId())) return "The settlement owner already has full authority.";
-        if (role != SettlementData.SettlementRole.CITIZEN && role != SettlementData.SettlementRole.CO_OWNER) return "Invalid settlement role.";
+        if (role != SettlementData.SettlementRole.CO_OWNER) return "Invalid settlement role.";
         ServerPlayer target = actor.getServer() == null ? null : actor.getServer().getPlayerList().getPlayer(targetId);
         if (target == null) return "That player must be online to receive a settlement role.";
         boolean admin = actor.createCommandSourceStack().hasPermission(2);
@@ -1383,22 +1293,8 @@ public final class SettlementManager {
             }
         }
         settlement.setRole(targetId, role);
-        settlement.addChronicle(target.getGameProfile().getName() + " became " + (role == SettlementData.SettlementRole.CO_OWNER ? "a co-owner" : "a citizen") + ".");
-        return target.getGameProfile().getName() + " is now " + (role == SettlementData.SettlementRole.CO_OWNER ? "a co-owner" : "a citizen") + ".";
-    }
-
-    private static String removeSettlementMember(ServerPlayer actor, SettlementData.SettlementRecord settlement, String rawPlayerId) {
-        UUID targetId;
-        try { targetId = UUID.fromString(rawPlayerId == null ? "" : rawPlayerId.trim()); }
-        catch (IllegalArgumentException exception) { return "Select a settlement member first."; }
-        if (targetId.equals(settlement.getOwnerId())) return "The owner cannot be removed. Transfer ownership first.";
-        SettlementData.SettlementRole existing = settlement.getRole(targetId);
-        if (existing == SettlementData.SettlementRole.OUTSIDER) return "That player is not a settlement member.";
-        settlement.setRole(targetId, SettlementData.SettlementRole.OUTSIDER);
-        ServerPlayer online = actor.getServer() == null ? null : actor.getServer().getPlayerList().getPlayer(targetId);
-        String name = online == null ? targetId.toString().substring(0, 8) : online.getGameProfile().getName();
-        settlement.addChronicle(name + " was removed from the settlement membership.");
-        return name + " was removed from the settlement.";
+        settlement.addChronicle(target.getGameProfile().getName() + " became a settlement manager.");
+        return target.getGameProfile().getName() + " is now a settlement manager.";
     }
 
     private static String transferSettlement(ServerPlayer player, SettlementData.SettlementRecord settlement, String accountName) {
@@ -1420,78 +1316,6 @@ public final class SettlementManager {
         data.selectSettlement(target.getUUID(), settlement.getId());
         settlement.addChronicle("Ownership transferred to " + target.getGameProfile().getName() + ".");
         return "Ownership transferred to " + target.getGameProfile().getName() + ".";
-    }
-
-    private static String deleteSettlement(ServerPlayer player, SettlementData.SettlementRecord settlement, String argument) {
-        if (player.getServer() == null) return "Server unavailable.";
-        CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
-        if (extra.settlementProtected(settlement.getId()) || extra.factionProtected(settlement.getFactionTeam())) {
-            return "Protected admin settlements cannot be deleted through normal settlement management.";
-        }
-
-        long now = System.currentTimeMillis();
-        PendingSettlementDeletion pending = PENDING_SETTLEMENT_DELETIONS.get(player.getUUID());
-        if (!"CONFIRM".equalsIgnoreCase(argument)) {
-            PENDING_SETTLEMENT_DELETIONS.put(player.getUUID(), new PendingSettlementDeletion(settlement.getId(), now + SETTLEMENT_DELETE_CONFIRM_MILLIS));
-            return "DANGER: deleting this settlement is permanent. Its stats, food, residents, linked claims, modifiers, housing, military tracking and contracts will be erased. The shared State Treasury is not a settlement stockpile. Press CONFIRM DELETE within 30 seconds.";
-        }
-        if (pending == null || pending.expiresAtMillis() < now || !settlement.getId().equals(pending.settlementId())) {
-            PENDING_SETTLEMENT_DELETIONS.remove(player.getUUID());
-            return "Deletion confirmation expired or belongs to a different settlement. Arm deletion again first.";
-        }
-
-        CampaignData campaign = CampaignData.get(player.serverLevel());
-        boolean activeWar = campaign.getWars().stream()
-                .anyMatch(war -> war.status() == CampaignData.WarStatus.ACTIVE
-                        && (settlement.getId().equals(war.attackerSettlement()) || settlement.getId().equals(war.defenderSettlement())));
-        if (activeWar) {
-            PENDING_SETTLEMENT_DELETIONS.remove(player.getUUID());
-            return "This settlement is part of an active war. End the war before permanently deleting the settlement.";
-        }
-        if (settlement.getClaimCount() > 0 && ClaimEvents.recruitsClaimManager == null) {
-            PENDING_SETTLEMENT_DELETIONS.remove(player.getUUID());
-            return "Recruits claim data is not ready. The settlement was NOT deleted because its linked claims could not be removed safely.";
-        }
-
-        String settlementId = settlement.getId();
-        String settlementName = settlement.getName();
-        String backingFaction = settlement.getBackingFactionTeam();
-
-        MercenaryRosterManager.clearSettlementContracts(player.getServer(), settlementId);
-        clearLoadedSettlementEntityData(player.getServer(), settlement);
-        if (ClaimEvents.recruitsClaimManager != null) {
-            for (SettlementData.ClaimLink link : List.copyOf(settlement.getClaimLinks())) {
-                if (link.id() == null) continue;
-                ServerLevel level = resolveLevel(player.getServer(), link.dimension());
-                if (level == null) level = player.getServer().overworld();
-                try { ClaimEvents.recruitsClaimManager.removeClaim(level, link.id()); }
-                catch (RuntimeException ignored) { }
-            }
-            ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(player.getServer().overworld());
-        }
-
-        extra.clearSettlementData(settlementId);
-        campaign.clearSettlementVisual(settlementId);
-        CaptureZoneData.get(player.serverLevel()).removeSettlement(settlementId);
-        SettlementData.get(player.serverLevel()).deleteSettlement(settlementId);
-        BackingFactionManager.retireIfUnused(player.getServer(), backingFaction);
-        PENDING_SETTLEMENT_DELETIONS.remove(player.getUUID());
-        broadcastProfiles(player.getServer());
-        CampaignManager.broadcastMapMarkers(player.getServer());
-        return "Settlement " + settlementName + " was permanently deleted. This action cannot be undone.";
-    }
-
-    private static void clearLoadedSettlementEntityData(MinecraftServer server, SettlementData.SettlementRecord settlement) {
-        Set<UUID> ids = new HashSet<>(settlement.getVillagerIds());
-        ids.addAll(settlement.getAllMilitaryUnits());
-        for (UUID id : ids) {
-            for (ServerLevel level : server.getAllLevels()) {
-                Entity entity = level.getEntity(id);
-                if (entity == null) continue;
-                clearOrphanedSettlementTags(entity);
-                break;
-            }
-        }
     }
 
     public static void clearOrphanedSettlementTags(Entity entity) {
@@ -1531,15 +1355,12 @@ public final class SettlementManager {
 
     public enum SettlementAction {
         RECRUIT_UNIT, SELL_FOREIGN_MP, SELL_ALL_FOREIGN_MP,
-        RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, RUN_CHECKER, DEPOSIT_FOOD, DEPOSIT_CURRENCY,
-        WITHDRAW_CURRENCY_ONE, WITHDRAW_CURRENCY_TEN, SET_TAX_POLICY, TOGGLE_IMMIGRATION,
-        SET_CUSTOM_BANNER, USE_FACTION_BANNER, CLEAR_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
-        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, DELETE_SETTLEMENT, ADD_MEMBER_CITIZEN, ADD_MEMBER_COOWNER, REMOVE_MEMBER,
-        SET_TOWN_SQUARE, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST, REMOVE_CAPTURE_ZONE,
+        RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, SET_TAX_POLICY, TOGGLE_IMMIGRATION,
+        SET_CUSTOM_BANNER, USE_FACTION_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
+        RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, ADD_MEMBER_COOWNER,
+        SET_TOWN_SQUARE, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST,
         RECALCULATE_HOUSING, OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT, REFRESH
     }
-
-    private record PendingSettlementDeletion(String settlementId, long expiresAtMillis) { }
 
     @FunctionalInterface
     private interface ActionSupplier {

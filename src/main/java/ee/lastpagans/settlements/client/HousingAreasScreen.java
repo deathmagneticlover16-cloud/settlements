@@ -83,7 +83,7 @@ public final class HousingAreasScreen extends ScaledCampaignScreen {
         int ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
         beginCampaignRender(graphics);
         drawCampaignFrame(graphics, left, top, W, H, 44);
-        graphics.drawCenteredString(font, "HOUSING AREAS — " + snapshot.settlementName(), left + W / 2, top + 13, CAMPAIGN_TITLE);
+        graphics.drawCenteredString(font, "HOUSING AREAS - " + snapshot.settlementName(), left + W / 2, top + 13, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, snapshot.areas().size() + " area(s) · box selection only", left + W / 2, top + 29, 0xFFB9AD8E);
         drawCampaignPanel(graphics, left + 20, top + 58, left + 480, top + 274);
         List<HousingAreasSnapshot.Entry> areas = snapshot.areas();

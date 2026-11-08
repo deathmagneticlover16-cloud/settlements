@@ -4,6 +4,8 @@ import com.mojang.blaze3d.platform.InputConstants;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import ee.lastpagans.settlements.SettlementConfig;
+import ee.lastpagans.settlements.CaptureZoneManager;
+import ee.lastpagans.settlements.SettlementData;
 import ee.lastpagans.settlements.SettlementManager;
 import ee.lastpagans.settlements.network.SettlementActionPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
@@ -23,12 +25,15 @@ import org.lwjgl.glfw.GLFW;
 /** In-world preview and explicit confirmation for the Town Square/Main objective pair. */
 public final class TownSquareRelocationEditor {
     private static String settlementId;
+    private static SettlementData.SettlementRank settlementRank = SettlementData.SettlementRank.VILLAGE;
     private static boolean consumePauseScreen;
     private TownSquareRelocationEditor() {}
 
-    public static void begin(String id) {
+    public static void begin(String id, String rank) {
         if (Minecraft.getInstance().player == null) return;
         settlementId = id;
+        try { settlementRank = SettlementData.SettlementRank.valueOf(rank.toUpperCase(java.util.Locale.ROOT)); }
+        catch (IllegalArgumentException | NullPointerException ignored) { settlementRank = SettlementData.SettlementRank.VILLAGE; }
         Minecraft.getInstance().setScreen(null);
         TransientAlertOverlay.show("Move to the desired Town Square centre, then press Enter to confirm.");
     }
@@ -47,7 +52,7 @@ public final class TownSquareRelocationEditor {
     public static void onRenderLevel(RenderLevelStageEvent event) {
         Minecraft minecraft = Minecraft.getInstance();
         if (settlementId == null || minecraft.player == null || event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES) return;
-        int radius = Math.max(3, SettlementConfig.TOWN_SQUARE_CAPTURE_RADIUS.get());
+        int radius = CaptureZoneManager.mainRadius(settlementRank);
         int height = Math.max(3, SettlementConfig.TOWN_SQUARE_CAPTURE_HEIGHT.get());
         BlockPos center = minecraft.player.blockPosition();
         AABB bounds = new AABB(center.offset(-radius, 0, -radius), center.offset(radius + 1, height, radius + 1));
@@ -71,5 +76,5 @@ public final class TownSquareRelocationEditor {
     }
 
     public static boolean consumePauseScreen() { boolean value = consumePauseScreen; consumePauseScreen = false; return value; }
-    public static void cancel() { settlementId = null; consumePauseScreen = false; }
+    public static void cancel() { settlementId = null; settlementRank = SettlementData.SettlementRank.VILLAGE; consumePauseScreen = false; }
 }

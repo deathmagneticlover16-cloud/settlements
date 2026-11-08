@@ -10,8 +10,7 @@ public final class AreaSelection {
         HOUSING("Housing Area", false),
         MUSTER("Muster Ground", true),
         PRAYER("Prayer Site", false),
-        BARRACKS("Barracks", true),
-        CAPTURE_SECONDARY("Secondary Capture Zone", true);
+        BARRACKS("Barracks", true);
 
         private final String label;
         private final boolean horizontalOnly;

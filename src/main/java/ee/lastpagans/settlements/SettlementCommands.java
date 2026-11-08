@@ -132,21 +132,11 @@ public final class SettlementCommands {
                                                 StringArgumentType.getString(context, "id"),
                                                 StringArgumentType.getString(context, "text")
                                         )))))
-                .then(Commands.literal("member")
+                .then(Commands.literal("manager")
                         .then(Commands.literal("add")
                                 .then(Commands.argument("id", StringArgumentType.word())
                                         .then(Commands.argument("player", EntityArgument.player())
-                                                .then(Commands.argument("role", StringArgumentType.word())
-                                                        .executes(context -> setMember(
-                                                                context.getSource(),
-                                                                StringArgumentType.getString(context, "id"),
-                                                                EntityArgument.getPlayer(context, "player"),
-                                                                StringArgumentType.getString(context, "role")
-                                                        ))))))
-                        .then(Commands.literal("remove")
-                                .then(Commands.argument("id", StringArgumentType.word())
-                                        .then(Commands.argument("player", EntityArgument.player())
-                                                .executes(context -> removeMember(
+                                                .executes(context -> addManager(
                                                         context.getSource(),
                                                         StringArgumentType.getString(context, "id"),
                                                         EntityArgument.getPlayer(context, "player")
@@ -196,10 +186,7 @@ public final class SettlementCommands {
                                         .executes(context -> setBannerFromHand(context.getSource(), StringArgumentType.getString(context, "settlement")))))
                         .then(Commands.literal("faction")
                                 .then(Commands.argument("settlement", StringArgumentType.word())
-                                        .executes(context -> setBannerMode(context.getSource(), StringArgumentType.getString(context, "settlement"), CampaignData.BannerMode.FACTION))))
-                        .then(Commands.literal("clear")
-                                .then(Commands.argument("settlement", StringArgumentType.word())
-                                        .executes(context -> setBannerMode(context.getSource(), StringArgumentType.getString(context, "settlement"), CampaignData.BannerMode.NONE)))))
+                                        .executes(context -> setBannerMode(context.getSource(), StringArgumentType.getString(context, "settlement"), CampaignData.BannerMode.FACTION)))))
                 .then(Commands.literal("admin").requires(source -> source.hasPermission(2))
                         .then(Commands.literal("stats")
                                 .then(Commands.literal("set")
@@ -416,9 +403,9 @@ public final class SettlementCommands {
                 .then(Commands.literal("diplomacy").executes(context -> openDiplomacy(context.getSource())))
                 .then(Commands.literal("news").executes(context -> openWorldNews(context.getSource()))));
 
-        dispatcher.register(Commands.literal("settlementtestcurrency").requires(source -> source.hasPermission(2))
+        dispatcher.register(Commands.literal("settlementtestsilver").requires(source -> source.hasPermission(2))
                 .then(Commands.argument("amount", IntegerArgumentType.integer(1, 64))
-                        .executes(context -> giveCurrency(context.getSource(), IntegerArgumentType.getInteger(context, "amount")))));
+                        .executes(context -> giveSilver(context.getSource(), IntegerArgumentType.getInteger(context, "amount")))));
     }
 
     private static ServerPlayer player(CommandSourceStack source) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
@@ -706,32 +693,12 @@ public final class SettlementCommands {
         return 1;
     }
 
-    private static int setMember(CommandSourceStack source, String id, ServerPlayer target, String rawRole) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private static int addManager(CommandSourceStack source, String id, ServerPlayer target) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
         SettlementData.SettlementRecord settlement = requireOwnerOrAdmin(player, id);
         if (settlement == null) return 0;
-        SettlementData.SettlementRole role;
-        try {
-            role = SettlementData.SettlementRole.valueOf(rawRole.toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException exception) {
-            source.sendFailure(Component.literal("Use co_owner or citizen."));
-            return 0;
-        }
-        if (role != SettlementData.SettlementRole.CO_OWNER && role != SettlementData.SettlementRole.CITIZEN) {
-            source.sendFailure(Component.literal("Use co_owner or citizen."));
-            return 0;
-        }
-        settlement.setRole(target.getUUID(), role);
-        source.sendSuccess(() -> Component.literal(target.getGameProfile().getName() + " is now " + role.name().toLowerCase(Locale.ROOT) + "."), true);
-        return 1;
-    }
-
-    private static int removeMember(CommandSourceStack source, String id, ServerPlayer target) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
-        ServerPlayer player = player(source);
-        SettlementData.SettlementRecord settlement = requireOwnerOrAdmin(player, id);
-        if (settlement == null) return 0;
-        settlement.setRole(target.getUUID(), SettlementData.SettlementRole.OUTSIDER);
-        source.sendSuccess(() -> Component.literal("Member removed."), true);
+        settlement.setRole(target.getUUID(), SettlementData.SettlementRole.CO_OWNER);
+        source.sendSuccess(() -> Component.literal(target.getGameProfile().getName() + " is now a settlement manager."), true);
         return 1;
     }
 
@@ -1071,9 +1038,9 @@ public final class SettlementCommands {
         return created ? 1 : 0;
     }
 
-    private static int giveCurrency(CommandSourceStack source, int amount) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+    private static int giveSilver(CommandSourceStack source, int amount) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source);
-        ItemStack stack = new ItemStack(SettlementManager.getCurrencyItem(), amount);
+        ItemStack stack = new ItemStack(SettlementManager.getSilverItem(), amount);
         if (!player.getInventory().add(stack)) player.drop(stack, false);
         return 1;
     }

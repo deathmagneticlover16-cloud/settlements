@@ -48,17 +48,6 @@ public final class AreaSelectionEditor {
         if (session == null || event.getAction() != InputConstants.PRESS) return;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen != null) return;
-        if (event.getButton() == GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
-            if (!shapeToggleAllowed(session.type())) {
-                message("Only Capture Zones support cylinder selection.");
-                event.setCanceled(true);
-                return;
-            }
-            session = session.withShape(session.shape().next());
-            message("Selection shape: " + session.shape().label());
-            event.setCanceled(true);
-            return;
-        }
         if (event.getButton() != GLFW.GLFW_MOUSE_BUTTON_LEFT) return;
         BlockPos target = target(minecraft);
         if (target == null) {
@@ -91,9 +80,14 @@ public final class AreaSelectionEditor {
         } else if (event.getKey() == GLFW.GLFW_KEY_R) {
             session = session.withCorners(null, null);
             message("Selection cleared. Left click to set the first corner.");
-        } else if (event.getKey() == GLFW.GLFW_KEY_BACKSPACE && session.second() != null) {
-            session = session.withSecond(null);
-            message("Opposite corner cleared. Left click to set it again.");
+        } else if (event.getKey() == GLFW.GLFW_KEY_BACKSPACE) {
+            if (session.second() != null) {
+                session = session.withSecond(null);
+                message("Opposite corner cleared. Left click to set it again.");
+            } else if (session.first() != null) {
+                session = session.withFirst(null);
+                message("First corner cleared. Left click to start again.");
+            }
         } else if ((event.getKey() == GLFW.GLFW_KEY_ENTER || event.getKey() == GLFW.GLFW_KEY_KP_ENTER)
                 && session.first() != null && session.second() != null) {
             SettlementNetwork.CHANNEL.sendToServer(new AreaSelectionPacket(session.settlementId(), session.type(), session.shape(),
@@ -146,12 +140,10 @@ public final class AreaSelectionEditor {
         Minecraft minecraft = Minecraft.getInstance();
         GuiGraphics graphics = event.getGuiGraphics();
         int width = event.getWindow().getGuiScaledWidth();
-        String title = session.type().label() + " · " + session.shape().label()
-                + (session.type().horizontalOnly() ? " · Horizontal" : " · Volume");
+        String title = session.type().label() + (session.type().horizontalOnly() ? " | Horizontal" : " | Volume");
         String step = session.first() == null ? "Left click: first corner"
                 : session.second() == null ? "Left click: finish geometry" : dimensions(session.first(), session.second()) + "   Enter: confirm";
-        String controls = (shapeToggleAllowed(session.type()) ? "Right click: switch shape   " : "Box selection   ")
-                + "R: redo   Backspace: undo corner   Esc: cancel";
+        String controls = "R: redo   Backspace: undo corner   Esc: cancel";
         int panelWidth = Math.max(minecraft.font.width(title), Math.max(minecraft.font.width(step), minecraft.font.width(controls))) + 18;
         int x = (width - panelWidth) / 2;
         graphics.fill(x, 8, x + panelWidth, 52, 0xB010141B);
@@ -180,14 +172,9 @@ public final class AreaSelectionEditor {
     private static float[] color(AreaSelection.Type type) {
         return switch (type) {
             case MUSTER, BARRACKS -> new float[]{0.95F, 0.63F, 0.22F};
-            case CAPTURE_SECONDARY -> new float[]{0.95F, 0.25F, 0.25F};
             case PRAYER -> new float[]{0.72F, 0.46F, 1.0F};
             case HOUSING -> new float[]{0.25F, 0.85F, 0.55F};
         };
-    }
-
-    private static boolean shapeToggleAllowed(AreaSelection.Type type) {
-        return type == AreaSelection.Type.CAPTURE_SECONDARY;
     }
 
     private static String dimensions(BlockPos first, BlockPos second) {

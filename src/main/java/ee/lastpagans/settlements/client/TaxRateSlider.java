@@ -4,33 +4,31 @@ import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Mth;
 
 import java.util.function.IntConsumer;
 
-/** 50–150% continuous taxation control. Network commit happens on release, not every drag pixel. */
+/** Five-stop taxation control. Network commit happens on release. */
 public final class TaxRateSlider extends AbstractSliderButton {
+    private static final int[] RATES = {50, 75, 100, 125, 150};
+    private static final String[] LABELS = {"Very Low", "Low", "Normal", "High", "Very High"};
     private final IntConsumer commit;
     private int lastCommitted;
 
     public TaxRateSlider(int x, int y, int width, int height, int percent, IntConsumer commit) {
-        super(x, y, width, height, Component.empty(), (Mth.clamp(percent, 50, 150) - 50) / 100.0D);
+        super(x, y, width, height, Component.empty(), indexOf(percent) / 4.0D);
         this.commit = commit;
         this.lastCommitted = percent();
         updateMessage();
     }
 
-    public int percent() { return Mth.clamp(50 + (int)Math.round(value * 100.0D), 50, 150); }
+    public int percent() { return RATES[index()]; }
 
     private String band() {
-        int value = percent();
-        if (value <= 75) return "Low";
-        if (value >= 125) return "High";
-        return "Normal";
+        return LABELS[index()];
     }
 
-    @Override protected void updateMessage() { setMessage(Component.literal("Taxation: " + percent() + "% — " + band())); }
-    @Override protected void applyValue() { updateMessage(); }
+    @Override protected void updateMessage() { setMessage(Component.literal(band())); }
+    @Override protected void applyValue() { value = index() / 4.0D; updateMessage(); }
 
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
@@ -60,5 +58,12 @@ public final class TaxRateSlider extends AbstractSliderButton {
         if (current == lastCommitted) return;
         lastCommitted = current;
         if (commit != null) commit.accept(current);
+    }
+
+    private int index() { return Math.max(0, Math.min(4, (int)Math.round(value * 4.0D))); }
+    private static int indexOf(int percent) {
+        int nearest = 0;
+        for (int i = 1; i < RATES.length; i++) if (Math.abs(RATES[i] - percent) < Math.abs(RATES[nearest] - percent)) nearest = i;
+        return nearest;
     }
 }

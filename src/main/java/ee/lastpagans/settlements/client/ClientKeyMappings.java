@@ -8,9 +8,7 @@ import org.lwjgl.glfw.GLFW;
 
 public final class ClientKeyMappings {
     public static final String CATEGORY = "key.categories." + Settlements.MOD_ID;
-    public static final KeyMapping MAIN = new KeyMapping("key.settlements.campaign", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_M, CATEGORY);
-    public static final KeyMapping CHARACTER = new KeyMapping("key.settlements.character", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_J, CATEGORY);
-    public static final KeyMapping SETTLEMENT = new KeyMapping("key.settlements.settlement", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N, CATEGORY);
+    public static final KeyMapping MENU = new KeyMapping("key.settlements.menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N, CATEGORY);
     private ClientKeyMappings() {}
-    public static void register(RegisterKeyMappingsEvent event) { event.register(MAIN); event.register(CHARACTER); event.register(SETTLEMENT); }
+    public static void register(RegisterKeyMappingsEvent event) { event.register(MENU); }
 }

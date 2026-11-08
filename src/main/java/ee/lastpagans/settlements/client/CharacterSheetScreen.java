@@ -42,7 +42,7 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
 
         addRenderableWidget(Button.builder(Component.literal("Donate to Faith"), button -> minecraft.setScreen(new ConfirmActionScreen(this,
                 Component.literal("Donate to " + snapshot.faith() + "?"),
-                Component.literal("Consumes one held Settlements currency item and grants the server-configured Devotion reward."),
+                Component.literal("Consumes one held Silver Coin and grants the server-configured Devotion reward."),
                 () -> SettlementNetwork.CHANNEL.sendToServer(new DevotionDonationPacket()))))
                 .bounds(left + 18, top + 376, 135, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Identity"), button ->
@@ -91,9 +91,9 @@ public final class CharacterSheetScreen extends ScaledCampaignScreen {
         int x = left + 186;
         int y = top + 68;
         line(graphics, "Faith", snapshot.faith(), x, y);
-        line(graphics, "Devotion", snapshot.devotion() + "/100 — " + snapshot.devotionTier(), x, y + 16);
+        line(graphics, "Devotion", snapshot.devotion() + "/100 - " + snapshot.devotionTier(), x, y + 16);
         String reliability = snapshot.reliabilityTracked()
-                ? signed(snapshot.reliability()) + " — " + snapshot.reliabilityTier()
+                ? signed(snapshot.reliability()) + " - " + snapshot.reliabilityTier()
                 : "Independent";
         line(graphics, "Reliability", reliability, x, y + 32);
         line(graphics, "Faction", snapshot.faction(), x, y + 48);

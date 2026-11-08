@@ -165,4 +165,13 @@ public abstract class ScaledCampaignScreen extends Screen {
         }
         return super.mouseScrolled(uiX, uiY, delta);
     }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (ClientKeyMappings.MENU.matches(keyCode, scanCode)) {
+            if (minecraft != null) minecraft.setScreen(null);
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
 }
