@@ -3,7 +3,8 @@ package ee.lastpagans.settlements.mixin;
 import ee.lastpagans.settlements.client.ScaledCampaignScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.AbstractButton;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -11,14 +12,20 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /** Gives every Settlements campaign action one coherent, asset-independent visual language. */
-@Mixin(AbstractButton.class)
+@Mixin(AbstractWidget.class)
 public abstract class CampaignButtonMixin {
-    @Inject(method = "renderWidget", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = {
+                    "render(Lnet/minecraft/client/gui/GuiGraphics;IIF)V",
+                    "m_88315_(Lnet/minecraft/client/gui/GuiGraphics;IIF)V"
+            },
+            at = @At("TAIL"),
+            remap = false
+    )
     private void settlements$renderCampaignButton(GuiGraphics graphics, int mouseX, int mouseY,
                                                    float partialTick, CallbackInfo callback) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (!(minecraft.screen instanceof ScaledCampaignScreen)) return;
-        AbstractButton button = (AbstractButton) (Object) this;
+        if (!(minecraft.screen instanceof ScaledCampaignScreen) || !((Object) this instanceof Button button)) return;
         int x = button.getX(), y = button.getY(), width = button.getWidth(), height = button.getHeight();
         boolean highlighted = button.active && button.isHoveredOrFocused();
         int border = button.active ? (highlighted ? 0xFFF0D18A : 0xFF9C8355) : 0xFF4B4740;
@@ -35,6 +42,5 @@ public abstract class CampaignButtonMixin {
         }
         graphics.drawCenteredString(minecraft.font, Component.literal(label), x + width / 2,
                 y + Math.max(2, (height - 8) / 2), textColor);
-        callback.cancel();
     }
 }
