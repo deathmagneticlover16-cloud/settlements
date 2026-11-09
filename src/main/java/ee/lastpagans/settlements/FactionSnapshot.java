@@ -56,7 +56,7 @@ public record FactionSnapshot(
         if (faction == null) {
             return new FactionSnapshot(factionId, factionId, new CompoundTag(), "Unknown", false, 0, "Commoner",
                     "None", "Monarchy", "white", "white", 0, 0, 0, 0,
-                    foundingEnabled(), foundingRequiresTown(), foundingPopulation(), foundingStability(), foundingSilver(),
+                    configuredFoundingEnabled(), configuredFoundingRequiresTown(), configuredFoundingPopulation(), configuredFoundingStability(), configuredFoundingSilver(),
                     List.of(), List.of(), List.of(), List.of(), defaultRanks(), List.of(), List.of(), List.of(), List.of(),
                     message == null ? "" : message);
         }
@@ -138,7 +138,7 @@ public record FactionSnapshot(
                 owned.isEmpty() ? campaignSystems.treasuryBalance(factionId) : StateTreasury.balance(player.serverLevel(), owned.get(0)),
                 owned.stream().mapToInt(SettlementData.SettlementRecord::getDisplayedPopulation).sum(),
                 campaign.activeWarsFor(factionId).size(),
-                foundingEnabled(), foundingRequiresTown(), foundingPopulation(), foundingStability(), foundingSilver(),
+                configuredFoundingEnabled(), configuredFoundingRequiresTown(), configuredFoundingPopulation(), configuredFoundingStability(), configuredFoundingSilver(),
                 members,
                 settlements,
                 allies,
@@ -199,7 +199,7 @@ public record FactionSnapshot(
         return new FactionSnapshot("", "Independent", new CompoundTag(), "None", false, 0, "Independent",
                 "None", "Independent", "white", "white", 0, 0,
                 ownedSettlements.stream().mapToInt(SettlementEntry::population).sum(), 0,
-                foundingEnabled(), foundingRequiresTown(), foundingPopulation(), foundingStability(), foundingSilver(),
+                configuredFoundingEnabled(), configuredFoundingRequiresTown(), configuredFoundingPopulation(), configuredFoundingStability(), configuredFoundingSilver(),
                 List.of(), ownedSettlements, List.of(), List.of(),
                 defaultRanks(), factions, List.of(), invitations, List.of(), message == null ? "" : message);
     }
@@ -210,11 +210,11 @@ public record FactionSnapshot(
         return values;
     }
 
-    private static boolean foundingEnabled() { return SettlementConfig.FACTION_FOUNDING_ENABLED.get(); }
-    private static boolean foundingRequiresTown() { return SettlementConfig.FACTION_FOUNDING_REQUIRE_TOWN.get(); }
-    private static int foundingPopulation() { return SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get(); }
-    private static int foundingStability() { return SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get(); }
-    private static int foundingSilver() { return SettlementConfig.FACTION_FOUNDING_TREASURY_COST.get(); }
+    private static boolean configuredFoundingEnabled() { return SettlementConfig.FACTION_FOUNDING_ENABLED.get(); }
+    private static boolean configuredFoundingRequiresTown() { return SettlementConfig.FACTION_FOUNDING_REQUIRE_TOWN.get(); }
+    private static int configuredFoundingPopulation() { return SettlementConfig.FACTION_FOUNDING_MIN_POPULATION.get(); }
+    private static int configuredFoundingStability() { return SettlementConfig.FACTION_FOUNDING_MIN_STABILITY.get(); }
+    private static int configuredFoundingSilver() { return SettlementConfig.FACTION_FOUNDING_TREASURY_COST.get(); }
 
     public void encode(FriendlyByteBuf buffer) {
         buffer.writeUtf(factionId, 64);

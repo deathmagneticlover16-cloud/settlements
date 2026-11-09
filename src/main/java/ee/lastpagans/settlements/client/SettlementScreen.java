@@ -535,6 +535,11 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(), getX() + width / 2,
                     getY() + (height - 8) / 2, active ? 0xFFFFE8E5 : 0xFF8D7775);
         }
+
+        @Override protected void updateWidgetNarration(
+                net.minecraft.client.gui.narration.NarrationElementOutput output) {
+            defaultButtonNarrationText(output);
+        }
     }
 
     private enum Tab { OVERVIEW, RESIDENTS, TREASURY, EFFECTS, MANAGEMENT }
