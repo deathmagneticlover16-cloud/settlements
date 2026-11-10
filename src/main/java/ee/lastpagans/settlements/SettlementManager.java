@@ -74,6 +74,8 @@ public final class SettlementManager {
     public static final String TAG_MERCENARY_MISSED_PAYMENTS = "SettlementsMercenaryMissedPayments";
     public static final String TAG_MERCENARY_COMPANY = "SettlementsMercenaryCompany";
     public static final String TAG_UNIT_TYPE = "SettlementsUnitType";
+    public static final String TAG_BARRACKS_ROTATION = "SettlementsBarracksRotation";
+    public static final String TAG_BARRACKS_UNDERSTAFFED = "SettlementsBarracksUnderstaffed";
     public static final int MERCENARY_DESERTION_MISSES = 3;
 
     private SettlementManager() {
@@ -113,12 +115,8 @@ public final class SettlementManager {
         if (player.createCommandSourceStack().hasPermission(2)) return true;
         CampaignSystemsData extra = CampaignSystemsData.get(player.serverLevel());
         if (extra.settlementProtected(settlement.getId()) || extra.factionProtected(settlement.getFactionTeam())) return false;
-
-        String factionId = settlement.getFactionTeam();
-        if (factionId != null && !factionId.isBlank()) {
-            return factionId.equals(CampaignManager.factionId(player));
-        }
-
+        // Faction membership is not settlement membership. Only explicitly assigned managers and
+        // the owner may open private settlement state or cycle to it.
         return settlement.getRole(player.getUUID()) != SettlementData.SettlementRole.OUTSIDER;
     }
 
@@ -155,9 +153,11 @@ public final class SettlementManager {
             cycleSettlement(player, data, settlement, action == SettlementAction.SELECT_NEXT, "MILITARY".equalsIgnoreCase(argument));
             return;
         }
-        String result;
-        if (!canView(player, settlement)) result = "You cannot access this settlement.";
-        else result = switch (action) {
+        if (!canView(player, settlement)) {
+            player.sendSystemMessage(Component.literal("You cannot access this settlement."));
+            return;
+        }
+        String result = switch (action) {
             case RECRUIT_UNIT -> requireManager(player, settlement, () -> {
                 CampaignData.UnitType type = CampaignData.UnitType.parse(argument);
                 if (type == null || type == CampaignData.UnitType.LEVY) return "Choose a professional unit type.";
@@ -203,6 +203,7 @@ public final class SettlementManager {
                 || packet.first() == null || packet.second() == null) return;
         SettlementData.SettlementRecord settlement = SettlementData.get(player.serverLevel()).getSettlement(packet.settlementId());
         if (settlement == null) { player.sendSystemMessage(Component.literal("That settlement no longer exists.")); return; }
+        if (!canView(player, settlement)) { player.sendSystemMessage(Component.literal("You cannot access this settlement.")); return; }
         String result;
         if (!canManage(player, settlement)) result = "You cannot manage this settlement.";
         else result = applyAreaSelection(player, settlement, packet.type(), packet.shape(), packet.first(), packet.second(), packet.areaIndex());
@@ -213,6 +214,7 @@ public final class SettlementManager {
         if (player == null || packet == null || packet.action() == null) return;
         SettlementData.SettlementRecord settlement = SettlementData.get(player.serverLevel()).getSettlement(packet.settlementId());
         if (settlement == null) { player.sendSystemMessage(Component.literal("That settlement no longer exists.")); return; }
+        if (!canView(player, settlement)) { player.sendSystemMessage(Component.literal("You cannot access this settlement.")); return; }
         boolean manager = canManage(player, settlement);
         String message = "";
         if (packet.action() == HousingAreaActionPacket.Action.DELETE) {
@@ -605,16 +607,16 @@ public final class SettlementManager {
         return null;
     }
 
-    public static void processImmigration(MinecraftServer server, long gameTime, long day, CampaignData campaign) {
+    public static void processImmigration(MinecraftServer server, long gameTime, long day) {
         if (server == null || !SettlementConfig.IMMIGRATION_ENABLED.get()) return;
         for (SettlementData.SettlementRecord settlement : SettlementData.get(server.overworld()).getSettlements()) {
+            if (!settlement.isImmigrationEligible()) continue;
+            settlement.ensureImmigrationScheduled(gameTime, server.overworld().getRandom());
             if (!settlement.isImmigrationReady(gameTime)) continue;
             ServerLevel level = resolveTownSquareLevel(server, settlement);
             if (level == null || !level.hasChunkAt(settlement.getTownSquare())) continue;
             if (spawnFirstSettler(level, settlement, settlement.getVillagerCount())) {
-                settlement.recordImmigration(gameTime, day, campaign);
-                CampaignToastSender.settlementManagers(server, settlement.getId(), "NEW IMMIGRANT",
-                        "A new resident arrived in " + settlement.getName() + ".");
+                settlement.recordImmigration(gameTime, day, server.overworld().getRandom());
             }
         }
     }
@@ -966,7 +968,7 @@ public final class SettlementManager {
             if (!(entity instanceof AbstractRecruitEntity recruit)) continue;
             recruit.setMovePos(target);
             recruit.setShouldMovePos(true);
-            recruit.setShouldRest(true);
+            recruit.setShouldRest(false);
             BlockPos upkeep = settlement.getBarracksChest() != null ? settlement.getBarracksChest() : target;
             recruit.setUpkeepPos(upkeep);
             ordered++;
@@ -1004,11 +1006,15 @@ public final class SettlementManager {
         MercenaryRosterManager.process(server, day);
         processPlagueEvents(server, settlements, campaign, day);
         for (SettlementData.SettlementRecord settlement : settlements.getSettlements()) {
+            List<AbstractRecruitEntity> loaded = new ArrayList<>();
             for (UUID uuid : Set.copyOf(settlement.getAllMilitaryUnits())) {
                 AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
-                if (recruit == null) continue;
+                if (recruit != null) loaded.add(recruit);
+            }
+            updateBarracksRotation(settlement, loaded, day);
+            for (AbstractRecruitEntity recruit : loaded) {
                 maintainBarracksLink(recruit, settlement);
-                syncMercenaryEntityFromContract(recruit, CampaignSystemsData.get(server.overworld()).mercenaryContract(uuid));
+                syncMercenaryEntityFromContract(recruit, CampaignSystemsData.get(server.overworld()).mercenaryContract(recruit.getUUID()));
                 applySettlementMorale(recruit, settlement, settlements, campaign);
             }
         }
@@ -1143,6 +1149,34 @@ public final class SettlementManager {
         if (upkeep != null && !upkeep.equals(recruit.getUpkeepPos())) recruit.setUpkeepPos(upkeep);
     }
 
+    private static void updateBarracksRotation(SettlementData.SettlementRecord settlement,
+                                               List<AbstractRecruitEntity> loaded, long day) {
+        List<AbstractRecruitEntity> garrison = settlement.hasBarracks() ? loaded.stream()
+                .filter(recruit -> settlement.containsBarracks(
+                        recruit.level().dimension().location().toString(), recruit.blockPosition()))
+                .sorted(Comparator.comparing(AbstractRecruitEntity::getUUID)).toList() : List.of();
+        Set<UUID> garrisonIds = garrison.stream().map(AbstractRecruitEntity::getUUID).collect(java.util.stream.Collectors.toSet());
+        boolean hasReserve = garrison.size() >= 2;
+        int resting = hasReserve ? garrison.size() / 2 : 0;
+        int offset = garrison.isEmpty() ? 0 : Math.floorMod((int)day, garrison.size());
+        Set<UUID> restingIds = new HashSet<>();
+        for (int i = 0; i < resting; i++) restingIds.add(garrison.get((offset + i) % garrison.size()).getUUID());
+
+        for (AbstractRecruitEntity recruit : loaded) {
+            CompoundTag data = recruit.getPersistentData();
+            boolean inside = garrisonIds.contains(recruit.getUUID());
+            if (inside) {
+                data.putBoolean(TAG_BARRACKS_ROTATION, true);
+                data.putBoolean(TAG_BARRACKS_UNDERSTAFFED, !hasReserve);
+                recruit.setShouldRest(restingIds.contains(recruit.getUUID()));
+            } else if (data.getBoolean(TAG_BARRACKS_ROTATION)) {
+                data.remove(TAG_BARRACKS_ROTATION);
+                data.remove(TAG_BARRACKS_UNDERSTAFFED);
+                recruit.setShouldRest(false);
+            }
+        }
+    }
+
     private static void desertMercenary(AbstractRecruitEntity recruit, SettlementData.SettlementRecord settlement,
                                          CampaignData campaign, long day) {
         CompoundTag data = recruit.getPersistentData();
@@ -1180,11 +1214,9 @@ public final class SettlementManager {
         if (marriage != null && (settlement.isCapital() || (settlement.getFactionTeam().isBlank() && settlement.getRank().ordinal() >= SettlementData.SettlementRank.CITY.ordinal()))) {
             target += marriage.effectiveMoraleBonus(settlements);
         }
-        if (settlement.hasBarracks() && recruit.level().dimension().location().toString().equals(settlement.getBarracksDimension())) {
-            int radius = settlement.getBarracksRadius();
-            BlockPos center = settlement.getBarracks();
-            BlockPos min = center.offset(-radius, 0, -radius), max = center.offset(radius, 0, radius);
-            if (AreaSelection.contains(settlement.getBarracksShape(), min, max, recruit.blockPosition(), false)) target += 8;
+        if (settlement.containsBarracks(recruit.level().dimension().location().toString(), recruit.blockPosition())) {
+            target += recruit.getPersistentData().getBoolean(TAG_BARRACKS_UNDERSTAFFED) ? -8 : 8;
+            if (recruit.getShouldRest()) target += 4;
         }
         CampaignSystemsData extra = CampaignSystemsData.get((ServerLevel) recruit.level());
         for (CampaignSystemsData.ModifierRecord modifier : extra.modifiers(settlement.getId())) target += modifier.morale;

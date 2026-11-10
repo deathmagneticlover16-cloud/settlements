@@ -38,6 +38,8 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     private EditBox renameBox, transferBox;
     private DropdownWidget memberCandidateDropdown;
     private TaxRateSlider taxSlider;
+    private int previewTaxRate;
+    private Component hoverTooltip;
     private final java.util.Map<String, String> candidateIdsByLabel = new java.util.LinkedHashMap<>();
     private String transientMessage = "";
     private long transientMessageUntil;
@@ -45,6 +47,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     public SettlementScreen(SettlementSnapshot snapshot) {
         super(Component.literal("Settlement"));
         this.snapshot = snapshot;
+        this.previewTaxRate = snapshot.taxRatePercent();
         setTransientMessage(snapshot.message());
         rebuildBanners();
     }
@@ -103,6 +106,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         taxSlider = null;
         if (snapshot.canManage()) {
             taxSlider = addRenderableWidget(new TaxRateSlider(left + 20, top + 224, 140, 18, snapshot.taxRatePercent(),
+                    rate -> previewTaxRate = rate,
                     rate -> send(SettlementManager.SettlementAction.SET_TAX_POLICY, Integer.toString(rate))));
         }
         if (snapshot.canManage()) {
@@ -231,6 +235,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
     public void updateSnapshot(SettlementSnapshot value) {
         snapshot = value;
+        previewTaxRate = value.taxRatePercent();
         setTransientMessage(value.message());
         rebuildBanners();
         buildWidgets();
@@ -264,9 +269,9 @@ public final class SettlementScreen extends ScaledCampaignScreen {
 
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         double ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY);
-        if (tab == Tab.EFFECTS && snapshot.effects().size() > 7
+        if (tab == Tab.EFFECTS && snapshot.effects().size() > 6
                 && ux >= left + 20 && ux <= left + W - 20 && uy >= top + 100 && uy <= top + 280) {
-            int maximumScroll = snapshot.effects().size() - 7;
+            int maximumScroll = snapshot.effects().size() - 6;
             effectScroll = Math.max(0, Math.min(maximumScroll, effectScroll + (delta < 0 ? 1 : -1)));
             return true;
         }
@@ -277,6 +282,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         renderBackground(graphics);
         int uiMouseX = campaignMouseX(mouseX);
         int uiMouseY = campaignMouseY(mouseY);
+        hoverTooltip = null;
         beginCampaignRender(graphics);
         drawCampaignFrame(graphics, left, top, W, H, 62);
         drawCampaignPanel(graphics, left + 12, top + 96, left + W - 12, top + 290);
@@ -302,6 +308,7 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         if (!transientMessage.isBlank() && System.currentTimeMillis() < transientMessageUntil)
             graphics.drawCenteredString(font, fitText(transientMessage, W - 36), left + W / 2, top + 284, CAMPAIGN_MESSAGE);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        if (hoverTooltip != null) graphics.renderTooltip(font, hoverTooltip, uiMouseX, uiMouseY);
         endCampaignRender(graphics);
     }
 
@@ -342,9 +349,8 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         stat(graphics, "Free housing", snapshot.freeHousing(), 290, 110);
         graphics.drawString(font, "Immigration: " + (snapshot.immigrationEnabled() ? "Enabled" : "Paused"), left + 290, top + 132,
                 snapshot.immigrationEnabled() ? 0xFF92D18B : CAMPAIGN_MUTED, false);
-        graphics.drawString(font, fitText("Attraction: " + snapshot.immigrationStatus(), 220), left + 290, top + 154, CAMPAIGN_TITLE, false);
         if (mouseX >= left + 20 && mouseX <= left + 235 && mouseY >= top + 126 && mouseY <= top + 146) {
-            graphics.renderTooltip(font, Component.literal("Registered villagers are multiplied into civilian population. The multiplier rises as an established settlement grows."), mouseX, mouseY);
+            hoverTooltip = Component.literal("Registered villagers are multiplied into civilian population. The multiplier rises as an established settlement grows.");
         }
     }
 
@@ -356,17 +362,19 @@ public final class SettlementScreen extends ScaledCampaignScreen {
         graphics.drawString(font, "Upkeep chest: " + (snapshot.upkeepChestSet() ? "linked" : "missing"), left + 356, top + 246, snapshot.upkeepChestSet() ? 0xFFA9D18E : 0xFFAAAAAA, false);
 
         graphics.drawString(font, "TAXATION", left + 22, top + 194, 0xFFE7D8B0, false);
-        String taxEffects = "Projected +" + snapshot.projectedTaxIncome() + " Silver/day | Last +" + snapshot.lastTaxIncome()
-                + " | Stability " + signed(snapshot.taxStabilityImpact());
-        graphics.drawString(font, fitText(snapshot.taxPolicy() + ": " + taxEffects, 480), left + 22, top + 206, CAMPAIGN_MUTED, false);
+        int currentRate = Math.max(1, snapshot.taxRatePercent());
+        int projected = (int)Math.round(snapshot.projectedTaxIncome() * (previewTaxRate / (double)currentRate));
+        String taxEffects = "Projected +" + projected + " Silver/day | Last +" + snapshot.lastTaxIncome()
+                + " | Stability " + signed(taxStabilityImpact(previewTaxRate));
+        graphics.drawString(font, fitText(taxPolicyName(previewTaxRate) + ": " + taxEffects, 480), left + 22, top + 206, CAMPAIGN_MUTED, false);
     }
 
     private void renderEffects(GuiGraphics graphics, int mouseX, int mouseY) {
         if (isLimitedView()) { renderPrivateTabNotice(graphics, "Settlement effects"); return; }
         graphics.drawString(font, "ACTIVE BONUSES AND PENALTIES", left + 22, top + 108, 0xFFE7D8B0, false);
-        int maximumScroll = Math.max(0, snapshot.effects().size() - 7);
+        int maximumScroll = Math.max(0, snapshot.effects().size() - 6);
         effectScroll = Math.max(0, Math.min(effectScroll, maximumScroll));
-        int shown = Math.min(7, snapshot.effects().size() - effectScroll);
+        int shown = Math.min(6, snapshot.effects().size() - effectScroll);
         for (int i = 0; i < shown; i++) {
             SettlementSnapshot.EffectEntry effect = snapshot.effects().get(effectScroll + i);
             int y = top + 130 + i * 21;
@@ -383,11 +391,11 @@ public final class SettlementScreen extends ScaledCampaignScreen {
             graphics.drawString(font, fitText(effect.name(), 190), left + 44, y, tone, false);
             graphics.drawString(font, fitText(effect.source() + " | " + effect.duration(), 250), left + 264, y, 0xFF999999, false);
             if (mouseX >= left + 18 && mouseX <= left + W - 18 && mouseY >= y - 6 && mouseY <= y + 14) {
-                graphics.renderTooltip(font, Component.literal(effect.detail()), mouseX, mouseY);
+                hoverTooltip = Component.literal(effect.detail());
             }
         }
         if (snapshot.effects().isEmpty()) graphics.drawString(font, "No active settlement modifiers.", left + 22, top + 134, 0xFFAAAAAA, false);
-        String effectFooter = snapshot.effects().size() > 7
+        String effectFooter = snapshot.effects().size() > 6
                 ? "Scroll to view all effects | " + (effectScroll + 1) + "-" + (effectScroll + shown) + " / " + snapshot.effects().size()
                 : "Hover an entry for the exact mechanical effect.";
         graphics.drawString(font, effectFooter, left + 22, top + 252, 0xFFAA9D7F, false);
@@ -486,6 +494,26 @@ public final class SettlementScreen extends ScaledCampaignScreen {
     }
 
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
+
+    private static String taxPolicyName(int rate) {
+        return switch (rate) {
+            case 50 -> "Very Low";
+            case 75 -> "Low";
+            case 125 -> "High";
+            case 150 -> "Very High";
+            default -> "Normal";
+        };
+    }
+
+    private static int taxStabilityImpact(int rate) {
+        return switch (rate) {
+            case 50 -> 4;
+            case 75 -> 2;
+            case 125 -> -5;
+            case 150 -> -10;
+            default -> -1;
+        };
+    }
 
     private void status(GuiGraphics graphics, String label, boolean set, int x, int y) {
         graphics.drawString(font, label + ": " + (set ? "set" : "missing"), left + x, top + y,

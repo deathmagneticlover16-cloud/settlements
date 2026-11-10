@@ -12,7 +12,7 @@ public record WorldNewsSnapshot(long currentDay, List<Entry> entries) {
     public static WorldNewsSnapshot from(ServerPlayer player) {
         CampaignData campaign = CampaignData.get(player.serverLevel());
         SettlementData settlements = SettlementData.get(player.serverLevel());
-        String factionId = CampaignManager.factionId(player);
+        String factionId = CampaignManager.diplomaticPolityId(player);
         boolean admin = player.createCommandSourceStack().hasPermission(2);
         List<Entry> entries = campaign.newsFor(factionId, admin).stream().map(news -> {
             SettlementData.SettlementRecord settlement = settlements.getSettlement(news.settlementId());

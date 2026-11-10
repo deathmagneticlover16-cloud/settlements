@@ -460,7 +460,7 @@ public final class CampaignManager {
     public static void handleDiplomacyAction(ServerPlayer player, String actionRaw, String targetFaction,
                                              UUID proposalId, UUID warId, String extra) {
         String action = actionRaw == null ? "" : actionRaw.toUpperCase(Locale.ROOT);
-        String own = factionId(player);
+        String own = diplomaticPolityId(player);
         CampaignData data = CampaignData.get(player.serverLevel());
         long day = player.serverLevel().getDayTime() / 24000L;
         if ("DECLARE_WAR".equals(action) && extra != null && extra.toUpperCase(Locale.ROOT).startsWith("SETTLEMENT_WAR|")) {
@@ -476,7 +476,7 @@ public final class CampaignManager {
             return;
         }
         if (own.isBlank()) {
-            openDiplomacy(player, "Independent rulers may declare Settlement Wars from a settlement they manage; faction treaties require a faction.");
+            openDiplomacy(player, "Found a settlement before using diplomacy.");
             return;
         }
         String result = switch (action) {
@@ -554,7 +554,7 @@ public final class CampaignManager {
         boolean needsSettlement = type == CampaignData.WarType.RAID || type == CampaignData.WarType.SKIRMISH;
         if (needsSettlement && targetSettlement == null) return "This conflict tier requires a valid target settlement.";
         if (targetSettlement != null) {
-            if (!target.equals(targetSettlement.getFactionTeam())) {
+            if (!target.equals(targetSettlement.getEffectiveRecruitsTeam())) {
                 return "The chosen settlement does not belong to the target faction.";
             }
         }
@@ -815,7 +815,7 @@ public final class CampaignManager {
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "That war is not active.";
         SettlementData settlements = SettlementData.get(player.serverLevel());
-        String ownFaction = factionId(player);
+        String ownFaction = diplomaticPolityId(player);
         SettlementData.SettlementRecord attackerSettlementRecord = settlements.getSettlement(war.attackerSettlement());
         SettlementData.SettlementRecord defenderSettlementRecord = settlements.getSettlement(war.defenderSettlement());
         boolean managesAttackerSettlement = attackerSettlementRecord != null && canRepresentSettlement(player, attackerSettlementRecord);
@@ -872,7 +872,7 @@ public final class CampaignManager {
         if (offer == null) return "That peace offer is no longer available.";
         CampaignData.WarRecord war = offer.warId() == null ? null : data.getWar(offer.warId());
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) { extra.removePeaceOffer(offerId); return "That war has already ended."; }
-        String own = factionId(player);
+        String own = diplomaticPolityId(player);
         SettlementData.SettlementRecord targetSettlement = SettlementData.get(player.serverLevel()).getSettlement(offer.targetSettlement());
         boolean offerTargetsAttacker = peacePartyIsSide(war, offer.targetFaction(), offer.targetSettlement(), true);
         boolean offerTargetsDefender = peacePartyIsSide(war, offer.targetFaction(), offer.targetSettlement(), false);
@@ -1583,10 +1583,10 @@ public final class CampaignManager {
         String politicalFaction = factionId(player);
         if (!politicalFaction.isBlank()) settlement.setFactionTeam(politicalFaction);
         else settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
-        if (!SettlementCommands.linkClaimAtPlayer(player, settlement, false)
+        if (!SettlementCommands.createOrLinkFoundingClaim(player, settlement)
                 || !CaptureZoneManager.syncTownSquareMainZone(player.serverLevel(), settlement)) {
             data.deleteSettlement(settlement.getId());
-            return "Settlement creation failed: stand well inside an unlinked claim large enough to contain the Town Square objective.";
+            return "Settlement creation failed because its automatic founding claim could not be created.";
         }
         SettlementManager.scheduleFirstSettlers(player, settlement);
         data.selectSettlement(player.getUUID(), settlement.getId());
@@ -1801,6 +1801,30 @@ public final class CampaignManager {
     public static String factionId(ServerPlayer player) {
         String raw = BackingFactionManager.rawTeam(player);
         return BackingFactionManager.isBackingFaction(raw) ? "" : raw;
+    }
+
+    /** Returns the Recruits polity used for diplomacy, including an independent ruler's hidden backing faction. */
+    public static String diplomaticPolityId(ServerPlayer player) {
+        if (player == null) return "";
+        String political = factionId(player);
+        if (!political.isBlank()) return political;
+        String raw = BackingFactionManager.rawTeam(player);
+        if (BackingFactionManager.isBackingFaction(raw)) return raw;
+        return SettlementData.get(player.serverLevel()).getOwnedSettlements(player.getUUID()).stream()
+                .filter(value -> value.getFactionTeam().isBlank())
+                .map(SettlementData.SettlementRecord::getEffectiveRecruitsTeam)
+                .filter(BackingFactionManager::isBackingFaction)
+                .findFirst().orElse("");
+    }
+
+    public static String diplomaticPolityName(ServerLevel level, String id) {
+        if (!BackingFactionManager.isBackingFaction(id)) return factionName(id);
+        if (level == null) return "Independent";
+        return SettlementData.get(level).getSettlements().stream()
+                .filter(value -> id.equals(value.getEffectiveRecruitsTeam()))
+                .map(SettlementData.SettlementRecord::getName)
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .findFirst().map(value -> value + " (Independent)").orElse("Independent");
     }
 
     private static String factionFaith(ServerLevel level, String factionId) {

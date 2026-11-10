@@ -287,6 +287,7 @@ public final class SettlementEvents {
             nextSecondTick = gameTime + 20L;
             server.getPlayerList().getPlayers().forEach(SettlementsWildfireAuthority::reassert);
             SettlementManager.processFirstSettlerArrivals(server);
+            SettlementManager.processImmigration(server, gameTime, server.overworld().getDayTime() / 24000L);
             ResearchManager.processResearch(server);
             CaptureZoneManager.process(server);
         }
@@ -306,7 +307,6 @@ public final class SettlementEvents {
         data.getSettlements().forEach(settlement -> {
             settlement.processDaily(server.overworld(), day, campaign);
         });
-        SettlementManager.processImmigration(server, gameTime, day, campaign);
         data.runAllCheckers();
         SettlementManager.processMilitarySystems(server, day);
         CampaignSystemsManager.processCampaignSystems(server, day);

@@ -72,7 +72,6 @@ public final class DropdownWidget extends AbstractWidget {
         int textX = x + 6;
         if (colorProvider != null && option != null && !option.isBlank()) {
             int color = colorProvider.applyAsInt(option);
-            graphics.fill(x + 5, y + 4, x + 17, y + 16, 0xFFB8A16D);
             graphics.fill(x + 6, y + 5, x + 16, y + 15, color);
             textX = x + 22;
         }

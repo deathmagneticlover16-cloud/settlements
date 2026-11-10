@@ -387,6 +387,9 @@ public final class SettlementData extends SavedData {
         private long lastFoodDay = Long.MIN_VALUE;
         private long lastPlagueCheckDay = Long.MIN_VALUE;
         private long lastImmigrationGameTime = Long.MIN_VALUE;
+        private long nextImmigrationGameTime = Long.MIN_VALUE;
+        private long immigrationReportDay = Long.MIN_VALUE;
+        private int immigrationArrivals;
         private String notice = "";
 
         private String townSquareDimension = "";
@@ -395,6 +398,8 @@ public final class SettlementData extends SavedData {
         private BlockPos musterGround;
         private String barracksDimension = "";
         private BlockPos barracks;
+        private BlockPos barracksMin;
+        private BlockPos barracksMax;
         private BlockPos barracksChest;
         private String upkeepChestDimension = "";
         private BlockPos upkeepChest;
@@ -453,6 +458,11 @@ public final class SettlementData extends SavedData {
             lastPlagueCheckDay = tag.contains("LastPlagueCheckDay") ? tag.getLong("LastPlagueCheckDay") : Long.MIN_VALUE;
             lastImmigrationGameTime = tag.contains("LastImmigrationGameTime", Tag.TAG_LONG)
                     ? tag.getLong("LastImmigrationGameTime") : Long.MIN_VALUE;
+            nextImmigrationGameTime = tag.contains("NextImmigrationGameTime", Tag.TAG_LONG)
+                    ? tag.getLong("NextImmigrationGameTime") : Long.MIN_VALUE;
+            immigrationReportDay = tag.contains("ImmigrationReportDay", Tag.TAG_LONG)
+                    ? tag.getLong("ImmigrationReportDay") : Long.MIN_VALUE;
+            immigrationArrivals = Math.max(0, tag.getInt("ImmigrationArrivals"));
             notice = cleanText(tag.getString("Notice"), "", 160);
             factionTeam = tag.getString("FactionTeam");
             backingFactionTeam = tag.getString("BackingFactionTeam");
@@ -491,6 +501,10 @@ public final class SettlementData extends SavedData {
                 barracksRadius = point.contains("Radius", Tag.TAG_INT) ? Math.max(2, point.getInt("Radius")) : 12;
                 barracksCapacity = point.contains("Capacity", Tag.TAG_INT) ? Math.max(1, point.getInt("Capacity")) : 64;
                 barracksShape = AreaSelection.Shape.BOX;
+                barracksMin = point.contains("Min", Tag.TAG_LONG) ? BlockPos.of(point.getLong("Min"))
+                        : barracks.offset(-barracksRadius, 0, -barracksRadius);
+                barracksMax = point.contains("Max", Tag.TAG_LONG) ? BlockPos.of(point.getLong("Max"))
+                        : barracks.offset(barracksRadius, 3, barracksRadius);
             }
 
             readUuidSet(tag, "Villagers", villagerResidents);
@@ -540,6 +554,9 @@ public final class SettlementData extends SavedData {
             tag.putLong("LastFoodDay", lastFoodDay);
             tag.putLong("LastPlagueCheckDay", lastPlagueCheckDay);
             if (lastImmigrationGameTime != Long.MIN_VALUE) tag.putLong("LastImmigrationGameTime", lastImmigrationGameTime);
+            if (nextImmigrationGameTime != Long.MIN_VALUE) tag.putLong("NextImmigrationGameTime", nextImmigrationGameTime);
+            if (immigrationReportDay != Long.MIN_VALUE) tag.putLong("ImmigrationReportDay", immigrationReportDay);
+            if (immigrationArrivals > 0) tag.putInt("ImmigrationArrivals", immigrationArrivals);
             tag.putString("Notice", notice);
             tag.putString("FactionTeam", factionTeam);
             tag.putString("BackingFactionTeam", backingFactionTeam);
@@ -576,6 +593,8 @@ public final class SettlementData extends SavedData {
                 CompoundTag point = new CompoundTag();
                 point.putString("Dimension", barracksDimension);
                 point.putLong("Pos", barracks.asLong());
+                if (barracksMin != null) point.putLong("Min", barracksMin.asLong());
+                if (barracksMax != null) point.putLong("Max", barracksMax.asLong());
                 if (barracksChest != null) point.putLong("Chest", barracksChest.asLong());
                 point.putInt("Radius", barracksRadius);
                 point.putInt("Capacity", barracksCapacity);
@@ -629,6 +648,8 @@ public final class SettlementData extends SavedData {
         public BlockPos getMusterGround() { return musterGround; }
         public String getBarracksDimension() { return barracksDimension; }
         public BlockPos getBarracks() { return barracks; }
+        public BlockPos getBarracksMin() { return barracksMin; }
+        public BlockPos getBarracksMax() { return barracksMax; }
         public BlockPos getBarracksChest() { return barracksChest; }
         public String getUpkeepChestDimension() { return upkeepChestDimension; }
         public BlockPos getUpkeepChest() { return upkeepChest; }
@@ -864,7 +885,14 @@ public final class SettlementData extends SavedData {
         public void setBarracks(String dimension, BlockPos position) {
             barracksDimension = dimension == null ? "" : dimension;
             barracks = position == null ? null : position.immutable();
-            if (position == null) barracksChest = null;
+            if (position == null) {
+                barracksChest = null;
+                barracksMin = null;
+                barracksMax = null;
+            } else {
+                barracksMin = position.offset(-barracksRadius, 0, -barracksRadius);
+                barracksMax = position.offset(barracksRadius, 3, barracksRadius);
+            }
             addChronicle(position == null ? "Barracks cleared." : "Barracks established.");
             dirty();
         }
@@ -884,18 +912,32 @@ public final class SettlementData extends SavedData {
         public void setBarracksSettings(int radius, int capacity) {
             barracksRadius = Math.max(2, Math.min(64, radius));
             barracksCapacity = Math.max(1, Math.min(512, capacity));
+            if (barracks != null) {
+                int minY = barracksMin == null ? barracks.getY() : barracksMin.getY();
+                int maxY = barracksMax == null ? barracks.getY() + 3 : barracksMax.getY();
+                barracksMin = new BlockPos(barracks.getX() - barracksRadius, minY, barracks.getZ() - barracksRadius);
+                barracksMax = new BlockPos(barracks.getX() + barracksRadius, maxY, barracks.getZ() + barracksRadius);
+            }
             dirty();
         }
 
         public void setBarracksArea(String dimension, BlockPos first, BlockPos second, AreaSelection.Shape shape) {
             BlockPos min = AreaSelection.min(first, second);
             BlockPos max = AreaSelection.max(first, second);
-            BlockPos center = new BlockPos((min.getX() + max.getX()) / 2, min.getY(), (min.getZ() + max.getZ()) / 2);
+            BlockPos center = new BlockPos((min.getX() + max.getX()) / 2, (min.getY() + max.getY()) / 2, (min.getZ() + max.getZ()) / 2);
             int radius = Math.max(2, Math.min(64, Math.max(max.getX() - min.getX() + 1, max.getZ() - min.getZ() + 1) / 2));
             setBarracks(dimension, center);
+            barracksMin = min;
+            barracksMax = max;
             barracksRadius = radius;
             barracksShape = AreaSelection.Shape.BOX;
             dirty();
+        }
+
+        public boolean containsBarracks(String dimension, BlockPos position) {
+            return hasBarracks() && position != null && barracksMin != null && barracksMax != null
+                    && barracksDimension.equals(dimension)
+                    && AreaSelection.contains(AreaSelection.Shape.BOX, barracksMin, barracksMax, position, true);
         }
 
         public boolean linkClaim(String dimension, UUID id, String name) {
@@ -1128,6 +1170,7 @@ public final class SettlementData extends SavedData {
 
 
         public void processDaily(ServerLevel level, long day, CampaignData campaign) {
+            flushImmigrationReport(day, campaign);
             if (lastFoodDay == day) return;
             lastFoodDay = day;
 
@@ -1169,69 +1212,51 @@ public final class SettlementData extends SavedData {
         }
 
         /** Immigration uses active server time so day-length mods do not distort population growth. */
-        public boolean isImmigrationReady(long gameTime) {
+        public boolean isImmigrationEligible() {
             if (!SettlementConfig.IMMIGRATION_ENABLED.get() || !immigrationEnabled) return false;
             int minimumStability = SettlementConfig.IMMIGRATION_MIN_STABILITY.get();
             int requiredFood = Math.max(SettlementConfig.IMMIGRATION_FOOD_RESERVE.get(), SettlementConfig.IMMIGRATION_FOOD_COST.get());
-            if (!hasTownSquare() || hasPendingFirstSettlers()
-                    || getVillagerCount() >= SettlementConfig.IMMIGRATION_MAX_PHYSICAL_RESIDENTS.get()
-                    || getFreeHousing() <= 0 || stability < minimumStability || food < requiredFood) return false;
-            return lastImmigrationGameTime == Long.MIN_VALUE
-                    || gameTime - lastImmigrationGameTime >= immigrationIntervalTicks();
+            return hasTownSquare() && !hasPendingFirstSettlers()
+                    && getVillagerCount() < SettlementConfig.IMMIGRATION_MAX_PHYSICAL_RESIDENTS.get()
+                    && getFreeHousing() > 0 && stability >= minimumStability && food >= requiredFood;
         }
 
-        public void recordImmigration(long gameTime, long day, CampaignData campaign) {
-            food = Math.max(0, food - SettlementConfig.IMMIGRATION_FOOD_COST.get());
-            lastImmigrationGameTime = Math.max(0L, gameTime);
-            addChronicle("A new immigrant arrived.");
-            if (campaign != null) {
-                campaign.addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MINOR,
-                        "New arrival", "An immigrant settled in " + name + ".", day,
-                        factionTeam, id, CampaignData.NewsVisibility.FACTION);
-            }
+        public boolean isImmigrationReady(long gameTime) {
+            return isImmigrationEligible() && nextImmigrationGameTime != Long.MIN_VALUE && gameTime >= nextImmigrationGameTime;
+        }
+
+        public void ensureImmigrationScheduled(long gameTime, net.minecraft.util.RandomSource random) {
+            if (nextImmigrationGameTime != Long.MIN_VALUE || random == null) return;
+            int minimum = Math.max(1, SettlementConfig.IMMIGRATION_MIN_DELAY_SECONDS.get());
+            int maximum = Math.max(minimum, SettlementConfig.IMMIGRATION_MAX_DELAY_SECONDS.get());
+            int seconds = minimum + (maximum > minimum ? random.nextInt(maximum - minimum + 1) : 0);
+            nextImmigrationGameTime = Math.max(0L, gameTime) + seconds * 20L;
             dirty();
         }
 
-        public String getImmigrationStatus(long gameTime) {
-            int minimumStability = SettlementConfig.IMMIGRATION_MIN_STABILITY.get();
-            int reserve = SettlementConfig.IMMIGRATION_FOOD_RESERVE.get();
-            int cost = SettlementConfig.IMMIGRATION_FOOD_COST.get();
-            int requiredFood = Math.max(reserve, cost);
-            if (!SettlementConfig.IMMIGRATION_ENABLED.get()) return "Disabled by server configuration.";
-            if (!immigrationEnabled) return "Paused by settlement management.";
-            if (!hasTownSquare()) return "Blocked: no Town Square.";
-            if (hasPendingFirstSettlers()) return "Waiting for the founding settlers to arrive.";
-            if (getVillagerCount() >= SettlementConfig.IMMIGRATION_MAX_PHYSICAL_RESIDENTS.get()) return "Blocked: physical resident cap reached.";
-            if (getFreeHousing() <= 0) return "Blocked: no free housing.";
-            if (stability < minimumStability) return "Blocked: Stability " + stability + "/" + minimumStability + ".";
-            if (food < requiredFood) return "Blocked: Food " + food + "/" + requiredFood + ".";
-            int attraction = immigrationAttractionPercent();
-            if (lastImmigrationGameTime == Long.MIN_VALUE) return "Immigration ready · attraction " + attraction + "% · costs " + cost + " Food.";
-            long intervalTicks = immigrationIntervalTicks();
-            long remainingTicks = Math.max(0L, intervalTicks - Math.max(0L, gameTime - lastImmigrationGameTime));
-            if (remainingTicks <= 0L) return "Eligible now · attraction " + attraction + "% · costs " + cost + " Food.";
-            long seconds = (remainingTicks + 19L) / 20L;
-            long minutes = seconds / 60L;
-            long remainder = seconds % 60L;
-            return "Next immigrant in " + (minutes > 0 ? minutes + "m " : "") + remainder + "s · attraction " + attraction + "% · costs " + cost + " Food.";
+        public void recordImmigration(long gameTime, long day, net.minecraft.util.RandomSource random) {
+            food = Math.max(0, food - SettlementConfig.IMMIGRATION_FOOD_COST.get());
+            lastImmigrationGameTime = Math.max(0L, gameTime);
+            nextImmigrationGameTime = Long.MIN_VALUE;
+            if (immigrationReportDay != day) {
+                immigrationReportDay = day;
+                immigrationArrivals = 0;
+            }
+            immigrationArrivals++;
+            ensureImmigrationScheduled(gameTime, random);
+            dirty();
         }
 
-        private int immigrationAttractionPercent() {
-            int minimumStability = SettlementConfig.IMMIGRATION_MIN_STABILITY.get();
-            int requiredFood = Math.max(SettlementConfig.IMMIGRATION_FOOD_RESERVE.get(), SettlementConfig.IMMIGRATION_FOOD_COST.get());
-            double stabilityQuality = 0.15D + 0.85D * clamp01((stability - minimumStability) / (double)Math.max(1, 100 - minimumStability));
-            double housingQuality = 0.15D + 0.85D * clamp01(getFreeHousing() / (double)Math.max(1, housingCapacity));
-            int mouths = Math.max(1, getVillagerCount() + getProfessionalCount() + getMercenaryCompanyCount());
-            double foodQuality = 0.15D + 0.85D * clamp01(food / (double)Math.max(requiredFood, requiredFood + mouths * 4));
-            return (int)Math.round(100.0D * stabilityQuality * housingQuality * foodQuality);
-        }
-
-        private long immigrationIntervalTicks() {
-            int fastest = Math.max(1, SettlementConfig.IMMIGRATION_FASTEST_MINUTES.get());
-            int slowest = Math.max(fastest, SettlementConfig.IMMIGRATION_SLOWEST_MINUTES.get());
-            double attraction = clamp01(immigrationAttractionPercent() / 100.0D);
-            double minutes = slowest - (slowest - fastest) * attraction;
-            return Math.max(20L, Math.round(minutes * 60.0D * 20.0D));
+        private void flushImmigrationReport(long day, CampaignData campaign) {
+            if (immigrationArrivals <= 0 || immigrationReportDay == Long.MIN_VALUE || day <= immigrationReportDay) return;
+            String report = immigrationArrivals + " new settler" + (immigrationArrivals == 1 ? "" : "s")
+                    + " arrived at " + name + ".";
+            addChronicle(report);
+            if (campaign != null) campaign.addNews(CampaignData.NewsCategory.SETTLEMENTS, CampaignData.NewsImportance.MINOR,
+                    "Daily settlement report", report, immigrationReportDay, factionTeam, id, CampaignData.NewsVisibility.PUBLIC);
+            immigrationArrivals = 0;
+            immigrationReportDay = day;
+            dirty();
         }
 
         private static String validFaith(String value) {

@@ -42,8 +42,8 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MIN_DELAY_SECONDS;
     public static final ForgeConfigSpec.IntValue FIRST_SETTLER_MAX_DELAY_SECONDS;
     public static final ForgeConfigSpec.BooleanValue IMMIGRATION_ENABLED;
-    public static final ForgeConfigSpec.IntValue IMMIGRATION_FASTEST_MINUTES;
-    public static final ForgeConfigSpec.IntValue IMMIGRATION_SLOWEST_MINUTES;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_MIN_DELAY_SECONDS;
+    public static final ForgeConfigSpec.IntValue IMMIGRATION_MAX_DELAY_SECONDS;
     public static final ForgeConfigSpec.IntValue IMMIGRATION_MIN_STABILITY;
     public static final ForgeConfigSpec.IntValue IMMIGRATION_FOOD_RESERVE;
     public static final ForgeConfigSpec.IntValue IMMIGRATION_FOOD_COST;
@@ -161,10 +161,10 @@ public final class SettlementConfig {
                 .defineInRange("firstSettlerMaxDelaySeconds", 60, 0, 600);
         IMMIGRATION_ENABLED = builder.comment("Global switch for automatic settlement immigration. Individual settlements also have an owner-controlled toggle.")
                 .define("automaticImmigration", true);
-        IMMIGRATION_FASTEST_MINUTES = builder.comment("Fastest possible immigration interval when Stability, free Housing and Food are excellent.")
-                .defineInRange("immigrationFastestMinutes", 2, 1, 1440);
-        IMMIGRATION_SLOWEST_MINUTES = builder.comment("Slowest eligible immigration interval when a settlement barely meets the requirements.")
-                .defineInRange("immigrationSlowestMinutes", 12, 1, 1440);
+        IMMIGRATION_MIN_DELAY_SECONDS = builder.comment("Shortest randomized delay between immigrant arrivals. The timer is never shown to players.")
+                .defineInRange("immigrationMinDelaySeconds", 15, 1, 86400);
+        IMMIGRATION_MAX_DELAY_SECONDS = builder.comment("Longest randomized delay between immigrant arrivals. The timer is never shown to players.")
+                .defineInRange("immigrationMaxDelaySeconds", 600, 1, 86400);
         IMMIGRATION_MIN_STABILITY = builder.comment("Minimum settlement Stability required for immigration.")
                 .defineInRange("immigrationMinimumStability", 60, 0, 100);
         IMMIGRATION_FOOD_RESERVE = builder.comment("Minimum Food stockpile required before an immigrant can arrive.")

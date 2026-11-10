@@ -12,12 +12,16 @@ public final class TaxRateSlider extends AbstractSliderButton {
     private static final int[] RATES = {50, 75, 100, 125, 150};
     private static final String[] LABELS = {"Very Low", "Low", "Normal", "High", "Very High"};
     private final IntConsumer commit;
+    private final IntConsumer preview;
     private int lastCommitted;
+    private int lastPreviewed;
 
-    public TaxRateSlider(int x, int y, int width, int height, int percent, IntConsumer commit) {
+    public TaxRateSlider(int x, int y, int width, int height, int percent, IntConsumer preview, IntConsumer commit) {
         super(x, y, width, height, Component.empty(), indexOf(percent) / 4.0D);
+        this.preview = preview;
         this.commit = commit;
         this.lastCommitted = percent();
+        this.lastPreviewed = this.lastCommitted;
         updateMessage();
     }
 
@@ -28,7 +32,15 @@ public final class TaxRateSlider extends AbstractSliderButton {
     }
 
     @Override protected void updateMessage() { setMessage(Component.literal(band())); }
-    @Override protected void applyValue() { value = index() / 4.0D; updateMessage(); }
+    @Override protected void applyValue() {
+        value = index() / 4.0D;
+        updateMessage();
+        int current = percent();
+        if (current != lastPreviewed) {
+            lastPreviewed = current;
+            if (preview != null) preview.accept(current);
+        }
+    }
 
     @Override
     public void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
@@ -36,6 +48,10 @@ public final class TaxRateSlider extends AbstractSliderButton {
         graphics.fill(getX(), getY(), getX() + width, getY() + height, active ? 0xFF9C8355 : 0xFF4B4740);
         graphics.fill(getX() + 1, getY() + 1, getX() + width - 1, getY() + height - 1, 0xFF24211C);
         graphics.fill(getX() + 7, trackY, getX() + width - 7, trackY + 2, 0xFF111111);
+        for (int i = 0; i < RATES.length; i++) {
+            int markerX = getX() + 7 + (int)Math.round((width - 14) * (i / 4.0D));
+            graphics.fill(markerX, trackY - 2, markerX + 1, trackY + 5, 0xFFFFFFFF);
+        }
         int handleX = getX() + 7 + (int)Math.round((width - 14) * value);
         int handleColor = active && isHoveredOrFocused() ? 0xFFFFE2A3 : 0xFFB89A5E;
         graphics.fill(handleX - 2, trackY - 3, handleX + 3, trackY + 5, handleColor);

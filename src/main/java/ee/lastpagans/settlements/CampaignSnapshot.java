@@ -33,9 +33,8 @@ public record CampaignSnapshot(
         CampaignData campaign = CampaignData.get(player.serverLevel());
         SettlementData.CharacterRecord character = data.getCharacter(player.getUUID());
         String factionId = CampaignManager.factionId(player);
-        List<SettlementData.SettlementRecord> holdings = factionId.isBlank()
-                ? data.getOwnedSettlements(player.getUUID())
-                : data.getSettlements().stream().filter(settlement -> factionId.equals(settlement.getFactionTeam())).toList();
+        List<SettlementData.SettlementRecord> holdings = data.getSettlements().stream()
+                .filter(settlement -> SettlementManager.canView(player, settlement)).toList();
 
         String factionName = factionId.isBlank() ? "Independent" : factionId;
         CompoundTag banner = new CompoundTag();
@@ -59,6 +58,7 @@ public record CampaignSnapshot(
                 : (int) Math.round(holdings.stream().mapToInt(SettlementData.SettlementRecord::getStability).average().orElse(0));
 
         SettlementData.SettlementRecord selected = data.getSelectedSettlement(player.getUUID());
+        if (selected != null && !SettlementManager.canView(player, selected)) selected = null;
         String displayName = character != null && character.isCreated()
                 ? character.getDisplayName()
                 : player.getGameProfile().getName();

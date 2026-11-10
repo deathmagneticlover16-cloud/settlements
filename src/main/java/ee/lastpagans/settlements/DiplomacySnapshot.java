@@ -26,22 +26,22 @@ public record DiplomacySnapshot(
         String message
 ) {
     public static DiplomacySnapshot from(ServerPlayer player, String message) {
-        String own = CampaignManager.factionId(player);
-        String ownName = CampaignManager.factionName(own);
+        String own = CampaignManager.diplomaticPolityId(player);
+        String ownName = CampaignManager.diplomaticPolityName(player.serverLevel(), own);
         CampaignData campaign = CampaignData.get(player.serverLevel());
         CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
         SettlementData settlementStore = SettlementData.get(player.serverLevel());
         RecruitsFaction ownFaction = own.isBlank() || FactionEvents.recruitsFactionManager == null ? null
                 : FactionEvents.recruitsFactionManager.getFactionByStringID(own);
         boolean leader = ownFaction != null && player.getUUID().equals(ownFaction.getTeamLeaderUUID());
-        String rank = own.isBlank() ? "Independent" : campaign.factionRankTitle(own, player.getUUID(), leader);
+        String rank = BackingFactionManager.isBackingFaction(own) ? "Independent Ruler"
+                : own.isBlank() ? "Independent" : campaign.factionRankTitle(own, player.getUUID(), leader);
         boolean canManage = leader || (!own.isBlank() && campaign.factionRankTier(own, player.getUUID(), false) >= 3);
 
         List<RelationEntry> relations = new ArrayList<>();
         if (FactionEvents.recruitsFactionManager != null) {
             for (RecruitsFaction faction : FactionEvents.recruitsFactionManager.getFactions()) {
                 if (faction == null || faction.getStringID() == null || faction.getStringID().equals(own)) continue;
-                if (BackingFactionManager.isBackingFaction(faction.getStringID())) continue;
                 // Protected admin polities belong in admin/recovery tools, never in ordinary diplomacy.
                 // This also avoids showing operators buttons that the server will correctly reject.
                 if (campaignSystems.factionProtected(faction.getStringID())) continue;
@@ -55,11 +55,11 @@ public record DiplomacySnapshot(
                 CampaignData.VassalageRecord vassalage = campaign.vassalageBetween(own, faction.getStringID());
                 String vassalId = vassalage == null ? "" : vassalage.vassal();
                 int projectedGross = vassalage == null ? 0 : settlementStore.getSettlements().stream()
-                        .filter(settlement -> vassalId.equals(settlement.getFactionTeam()))
+                        .filter(settlement -> vassalId.equals(settlement.getEffectiveRecruitsTeam()))
                         .mapToInt(settlement -> CampaignSystemsManager.projectedTaxIncome(settlement, campaignSystems)).sum();
                 int projectedTribute = vassalage == null ? 0 : (int)((long)projectedGross * vassalage.tributeRate() / 100L);
                 relations.add(new RelationEntry(
-                        faction.getStringID(), faction.getTeamDisplayName(), faction.getBanner() == null ? new CompoundTag() : faction.getBanner().copy(),
+                        faction.getStringID(), CampaignManager.diplomaticPolityName(player.serverLevel(), faction.getStringID()), faction.getBanner() == null ? new CompoundTag() : faction.getBanner().copy(),
                         political, relation == null ? CampaignData.TreatyState.NEUTRAL.name() : relation.state().name(),
                         faithModifier, campaign.getFactionReliability(faction.getStringID()),
                         SettlementConfig.RELATION_NAP_MINIMUM.get(), SettlementConfig.RELATION_DEFENSIVE_ALLIANCE_MINIMUM.get(),
@@ -74,9 +74,9 @@ public record DiplomacySnapshot(
         SettlementData settlementsData = settlementStore;
         List<SettlementTarget> settlements = settlementsData.getSettlements().stream()
                 .filter(value -> !campaignSystems.settlementProtected(value.getId())
-                        && !campaignSystems.factionProtected(value.getFactionTeam()))
-                .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getFactionTeam(),
-                        CampaignManager.factionName(value.getFactionTeam()), value.getRank().displayName(), value.isCapital(),
+                        && !campaignSystems.factionProtected(value.getEffectiveRecruitsTeam()))
+                .map(value -> new SettlementTarget(value.getId(), value.getName(), value.getEffectiveRecruitsTeam(),
+                        CampaignManager.diplomaticPolityName(player.serverLevel(), value.getEffectiveRecruitsTeam()), value.getRank().displayName(), value.isCapital(),
                         CampaignManager.canRepresentSettlement(player, value), value.getClaimLinks().stream()
                         .limit(64).map(claim -> new ClaimTarget(claim.id(), claim.name())).toList()))
                 .sorted(Comparator.comparing(SettlementTarget::factionName, String.CASE_INSENSITIVE_ORDER)
@@ -85,7 +85,8 @@ public record DiplomacySnapshot(
 
         List<ProposalEntry> proposals = new ArrayList<>();
         if (!own.isBlank()) proposals.addAll(campaign.proposalsFor(own).stream()
-                .map(value -> new ProposalEntry(value.id(), value.type().name(), value.fromFaction(), CampaignManager.factionName(value.fromFaction()), value.linkedWar(), "", true, false))
+                .map(value -> new ProposalEntry(value.id(), value.type().name(), value.fromFaction(),
+                        CampaignManager.diplomaticPolityName(player.serverLevel(), value.fromFaction()), value.linkedWar(), "", true, false))
                 .toList());
         for (CampaignSystemsData.PeaceOfferRecord offer : campaignSystems.peaceOffers()) {
             CampaignData.WarRecord war = offer.warId() == null ? null : campaign.getWar(offer.warId());
@@ -95,7 +96,7 @@ public record DiplomacySnapshot(
                     && settlementsData.getSettlement(offer.targetSettlement()) != null
                     && CampaignManager.canRepresentSettlement(player, settlementsData.getSettlement(offer.targetSettlement()));
             if (!targetFaction && !targetSettlement) continue;
-            String fromName = !offer.proposerFaction().isBlank() ? CampaignManager.factionName(offer.proposerFaction())
+            String fromName = !offer.proposerFaction().isBlank() ? CampaignManager.diplomaticPolityName(player.serverLevel(), offer.proposerFaction())
                     : (settlementsData.getSettlement(offer.proposerSettlement()) == null ? "Independent settlement" : settlementsData.getSettlement(offer.proposerSettlement()).getName());
             int score = campaignSystems.warScore(war.id());
             boolean proposerAttacker = CampaignManager.peacePartyIsSide(war, offer.proposerFaction(), offer.proposerSettlement(), true);
@@ -126,8 +127,8 @@ public record DiplomacySnapshot(
             boolean attackerParent = !sharedParent && !own.isBlank() && own.equals(value.attackerFaction());
             boolean defenderParent = !sharedParent && !own.isBlank() && own.equals(value.defenderFaction());
             return new WarEntry(value.id(), value.type().name(), value.escalationName(), value.goal().name(), value.casusBelliName(),
-                    value.attackerFaction(), CampaignManager.factionName(value.attackerFaction()),
-                    value.defenderFaction(), CampaignManager.factionName(value.defenderFaction()),
+                    value.attackerFaction(), CampaignManager.diplomaticPolityName(player.serverLevel(), value.attackerFaction()),
+                    value.defenderFaction(), CampaignManager.diplomaticPolityName(player.serverLevel(), value.defenderFaction()),
                     value.attackerSettlement(), attackerSettlement == null ? "" : attackerSettlement.getName(),
                     value.targetSettlement(), target == null ? "" : target.getName(), value.startedDay(),
                     value.supportingAttackers().stream().map(CampaignManager::factionName).toList(),

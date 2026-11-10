@@ -19,6 +19,7 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen implements 
     private static final int W = 570, H = 330;
     private final CharacterCreationDraftSession session;
     private List<String> choices = List.of();
+    private Component hoverTooltip;
     private int left, top;
 
     public TraitSelectionScreen(CharacterCreationDraftSession session) {
@@ -104,8 +105,11 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen implements 
                 ? "Waiting for server confirmation…" : session.completeTraits() ? "Three traits selected"
                 : "Choice " + (session.round() + 1) + " of 3 · choose one of the three cards", left + W / 2, top + 29, 0xFFC9B989);
 
-        for (int i = 0; i < choices.size(); i++) renderCard(graphics, choices.get(i), left + 22 + i * 180, top + 62, uiMouseX, uiMouseY);
-        if (!session.selectedTraits().isEmpty()) {
+        hoverTooltip = null;
+        List<String> displayedTraits = session.completeTraits() ? session.selectedTraits() : choices;
+        for (int i = 0; i < displayedTraits.size(); i++)
+            renderCard(graphics, displayedTraits.get(i), left + 22 + i * 180, top + 62, uiMouseX, uiMouseY);
+        if (!session.completeTraits() && !session.selectedTraits().isEmpty()) {
             String names = session.selectedTraits().stream().map(CampaignDefinitions::trait).filter(java.util.Objects::nonNull)
                     .map(CampaignDefinitions.TraitDefinition::name).reduce((a,b) -> a + " · " + b).orElse("");
             graphics.drawCenteredString(font, "Chosen: " + names, left + W / 2, top + 284, 0xFFAAAAAA);
@@ -113,6 +117,7 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen implements 
         if (!session.error().isBlank())
             graphics.drawWordWrap(font, Component.literal(session.error()), left + 22, top + 62, W - 44, 0xFFFFC86B);
         super.render(graphics, uiMouseX, uiMouseY, partialTick);
+        if (hoverTooltip != null) graphics.renderTooltip(font, hoverTooltip, uiMouseX, uiMouseY);
         endCampaignRender(graphics);
     }
 
@@ -130,7 +135,7 @@ public final class TraitSelectionScreen extends ScaledCampaignScreen implements 
         graphics.drawString(font, "Effects", x + 10, y + 112, 0xFFE7D8B0, false);
         graphics.drawWordWrap(font, Component.literal(trait.effectsText()), x + 10, y + 127, 146, 0xFFAAAAAA);
         if (mouseX >= x && mouseX <= x + 166 && mouseY >= y && mouseY <= y + 184)
-            graphics.renderTooltip(font, Component.literal(trait.effectsText()), mouseX, mouseY);
+            hoverTooltip = Component.literal(trait.effectsText());
     }
 
     private int tone(CampaignDefinitions.TraitTone tone) {

@@ -8,6 +8,7 @@ import com.talhanation.recruits.ClaimEvents;
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.world.RecruitsClaim;
+import com.talhanation.recruits.world.RecruitsFaction;
 import ee.lastpagans.settlements.item.ModItems;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -450,10 +451,10 @@ public final class SettlementCommands {
         String politicalFaction = CampaignManager.factionId(player);
         if (!politicalFaction.isBlank()) settlement.setFactionTeam(politicalFaction);
         else settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
-        if (!linkClaimAtPlayer(player, settlement, false)
+        if (!createOrLinkFoundingClaim(player, settlement)
                 || !CaptureZoneManager.syncTownSquareMainZone(player.serverLevel(), settlement)) {
             data.deleteSettlement(settlement.getId());
-            source.sendFailure(Component.literal("Stand well inside an unlinked claim large enough to contain the Town Square objective."));
+            source.sendFailure(Component.literal("Settlement creation failed because its automatic founding claim could not be created."));
             return 0;
         }
         SettlementManager.scheduleFirstSettlers(player, settlement);
@@ -609,6 +610,36 @@ public final class SettlementCommands {
         if (notify) player.sendSystemMessage(Component.literal((added ? "Linked claim " : "Claim was already linked: ")
                 + claim.getName() + ". Total claims: " + settlement.getClaimCount() + "."));
         return true;
+    }
+
+    static boolean createOrLinkFoundingClaim(ServerPlayer player, SettlementData.SettlementRecord settlement) {
+        if (player == null || settlement == null || ClaimEvents.recruitsClaimManager == null
+                || FactionEvents.recruitsFactionManager == null) return false;
+        ChunkPos center = new ChunkPos(player.blockPosition());
+        RecruitsClaim existing = ClaimEvents.recruitsClaimManager.getClaim(center);
+        if (existing != null) return linkClaimAtPlayer(player, settlement, false);
+
+        String ownerId = settlement.getEffectiveRecruitsTeam();
+        if (ownerId.isBlank() && settlement.getFactionTeam().isBlank()) {
+            settlement.setBackingFactionTeam(BackingFactionManager.ensureForIndependent(player));
+            ownerId = settlement.getEffectiveRecruitsTeam();
+        }
+        RecruitsFaction owner = ownerId.isBlank() ? null
+                : FactionEvents.recruitsFactionManager.getFactionByStringID(ownerId);
+        if (owner == null) return false;
+
+        RecruitsClaim claim = new RecruitsClaim(settlement.getName() + " Territory", owner);
+        claim.setCenter(center);
+        for (int x = center.x - 1; x <= center.x + 1; x++) {
+            for (int z = center.z - 1; z <= center.z + 1; z++) {
+                ChunkPos chunk = new ChunkPos(x, z);
+                if (ClaimEvents.recruitsClaimManager.getClaim(chunk) == null) claim.addChunk(chunk);
+            }
+        }
+        if (!claim.containsChunk(center)) return false;
+        ClaimEvents.recruitsClaimManager.addOrUpdateClaim(player.serverLevel(), claim);
+        ClaimEvents.recruitsClaimManager.broadcastClaimsToAll(player.serverLevel());
+        return settlement.linkClaim(player.serverLevel().dimension().location().toString(), claim.getUUID(), claim.getName());
     }
 
     private static int unlinkClaim(CommandSourceStack source, String id) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
