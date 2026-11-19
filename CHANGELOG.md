@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.2.1
+
+- Fixed scaled mouse-coordinate handling in the Military screen click and scroll handlers.
+
 ## 4.2.0
 
 ### Recruitment and mustering

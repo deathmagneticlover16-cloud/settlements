@@ -119,16 +119,16 @@ public final class MilitaryScreen extends ScaledCampaignScreen {
     }
 
     @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        int x = campaignMouseX(mouseX), y = campaignMouseY(mouseY);
+        double x = campaignMouseX(mouseX), y = campaignMouseY(mouseY);
         if (button == 0 && (page == TRAIN || page == MUSTER) && x >= left + 20 && x <= left + 376) {
-            int firstY = top + 137, row = (y - firstY) / 28;
+            int firstY = top + 137, row = (int)Math.floor((y - firstY) / 28D);
             if (y >= firstY && row >= 0 && row < snapshot.units().size()) { selected = row; clampQuantities(); rebuildWidgets(); return true; }
         }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        int x = campaignMouseX(mouseX), y = campaignMouseY(mouseY);
+        double x = campaignMouseX(mouseX), y = campaignMouseY(mouseY);
         if (page == TRAIN && x >= left + 400 && x <= left + 682 && y >= top + 132 && y <= top + 372 && snapshot.training().size() > 6) {
             queueScroll = Math.max(0, Math.min(snapshot.training().size() - 6, queueScroll + (delta < 0 ? 1 : -1))); rebuildWidgets(); return true;
         }

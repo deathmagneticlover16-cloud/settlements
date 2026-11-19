@@ -15,6 +15,6 @@ Every political state uses one State Treasury. Development depends on population
 
 The campaign shell links Realm Overview, Character (including Marriage), Settlements, Military, Realm/Faction, Diplomacy, Research, and Chronicle. Diplomacy uses one bilateral relationship score. Player factions can form real vassalage contracts with 5/10/25/50% tribute taken once from actual post-stability tax receipts.
 
-Use `gradlew.bat build` on Windows or `./gradlew build` elsewhere when a build is needed. The output is `build/libs/settlements-4.2.0.jar`.
+Use `gradlew.bat build` on Windows or `./gradlew build` elsewhere when a build is needed. The output is `build/libs/settlements-4.2.1.jar`.
 
-Version 4.2.0 uses network protocol 47 and targets fresh worlds. Removed-system data is discarded rather than migrated.
+Version 4.2.1 uses network protocol 47 and targets fresh worlds. Removed-system data is discarded rather than migrated.
