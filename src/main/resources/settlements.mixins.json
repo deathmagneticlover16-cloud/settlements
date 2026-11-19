@@ -4,6 +4,8 @@
   "package": "ee.lastpagans.settlements.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
+    "RecruitPlayerUnitSaveDataMixin",
+    "RecruitsPlayerUnitManagerMixin",
     "RecruitsDiplomacyPacketMixin",
     "RecruitEventsDiplomacyMixin",
     "LevyArmorStandTrainingMixin",

@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.2.2
+
+- Prevented Recruits' per-player soldier registry from accepting null owner UUIDs.
+- Removed legacy null-owner count entries before world serialization and added caller stack traces for rejected ownership operations.
+
 ## 4.2.1
 
 - Fixed scaled mouse-coordinate handling in the Military screen click and scroll handlers.
