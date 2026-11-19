@@ -2,6 +2,7 @@ package ee.lastpagans.settlements;
 
 import com.talhanation.recruits.FactionEvents;
 import com.talhanation.recruits.ClaimEvents;
+import com.talhanation.recruits.RecruitEvents;
 import com.talhanation.recruits.world.RecruitsClaim;
 import com.talhanation.recruits.entities.AbstractRecruitEntity;
 import com.talhanation.recruits.init.ModEntityTypes;
@@ -74,8 +75,7 @@ public final class SettlementManager {
     public static final String TAG_MERCENARY_MISSED_PAYMENTS = "SettlementsMercenaryMissedPayments";
     public static final String TAG_MERCENARY_COMPANY = "SettlementsMercenaryCompany";
     public static final String TAG_UNIT_TYPE = "SettlementsUnitType";
-    public static final String TAG_BARRACKS_ROTATION = "SettlementsBarracksRotation";
-    public static final String TAG_BARRACKS_UNDERSTAFFED = "SettlementsBarracksUnderstaffed";
+    public static final String TAG_FOREIGN_ORIGIN = "SettlementsForeignOrigin";
     public static final int MERCENARY_DESERTION_MISSES = 3;
 
     private SettlementManager() {
@@ -157,19 +157,26 @@ public final class SettlementManager {
             player.sendSystemMessage(Component.literal("You cannot access this settlement."));
             return;
         }
-        String result = switch (action) {
-            case RECRUIT_UNIT -> requireManager(player, settlement, () -> {
-                CampaignData.UnitType type = CampaignData.UnitType.parse(argument);
-                if (type == null || type == CampaignData.UnitType.LEVY) return "Choose a professional unit type.";
-                if (amount != 1 && amount != 5 && amount != 10 && amount != 25) return "Recruitment amount must be 1, 5, 10, or 25.";
-                return recruitProfessionals(player, settlement, type, amount);
+        if (switch (action) {
+            case TRAIN_TROOPS, CANCEL_TRAINING, MUSTER_TROOPS, RANSOM_FOREIGN_MP, INTEGRATE_FOREIGN_MP, REFRESH_MILITARY -> true;
+            default -> false;
+        }) {
+            String result = requireManager(player, settlement, () -> switch (action) {
+                case TRAIN_TROOPS -> MilitaryManager.train(player, settlement, CampaignData.UnitType.parse(argument), amount);
+                case CANCEL_TRAINING -> {
+                    try { yield MilitaryManager.cancelTraining(player, settlement, UUID.fromString(argument)); }
+                    catch (IllegalArgumentException exception) { yield "That training order is invalid."; }
+                }
+                case MUSTER_TROOPS -> MilitaryManager.muster(player, settlement, CampaignData.UnitType.parse(argument), amount);
+                case RANSOM_FOREIGN_MP -> MilitaryManager.ransomForeign(player, settlement, amount);
+                case INTEGRATE_FOREIGN_MP -> MilitaryManager.integrateForeign(player, settlement);
+                case REFRESH_MILITARY -> "";
+                default -> "Unknown military action.";
             });
-            case RAISE_LEVY -> requireManager(player, settlement, () -> CampaignSystemsManager.raiseLevy(player, settlement));
-            case RETURN_LEVY -> requireManager(player, settlement, () -> CampaignSystemsManager.returnLevy(player, settlement));
-            case RETURN_TO_BARRACKS -> requireManager(player, settlement, () -> returnToBarracks(player, settlement));
-            case SELL_FOREIGN_MP -> requireManager(player, settlement, () -> sellForeignManpower(player, settlement, amount));
-            case SELL_ALL_FOREIGN_MP -> requireManager(player, settlement, () -> sellForeignManpower(player, settlement,
-                    CampaignSystemsData.get(player.serverLevel()).foreignManpower(settlement.getId())));
+            MilitaryManager.send(player, settlement, false, result);
+            return;
+        }
+        String result = switch (action) {
             case SET_TAX_POLICY -> requireManager(player, settlement, () -> setTaxPolicy(player, settlement, argument));
             case TOGGLE_IMMIGRATION -> requireManager(player, settlement, () -> {
                 settlement.setImmigrationEnabled(!settlement.isImmigrationEnabled());
@@ -188,12 +195,12 @@ public final class SettlementManager {
             case CLEAR_UPKEEP_CHEST -> requireManager(player, settlement, () -> { settlement.setUpkeepChest("", null); return "City Upkeep Chest cleared."; });
             case RECALCULATE_HOUSING -> requireManager(player, settlement, () -> "Housing recalculated: " + CampaignSystemsManager.recalculateHousing(player.serverLevel(), settlement) + " bed(s).");
             case OPEN_CHARACTER, OPEN_MAIN, SELECT_PREVIOUS, SELECT_NEXT -> "Screen opened.";
+            case TRAIN_TROOPS, CANCEL_TRAINING, MUSTER_TROOPS, RANSOM_FOREIGN_MP, INTEGRATE_FOREIGN_MP, REFRESH_MILITARY -> "Military screen updated.";
             case REFRESH -> "";
         };
         sendSnapshot(player, settlement, false, result);
         if (switch (action) {
-            case RECRUIT_UNIT, RAISE_LEVY, RETURN_LEVY, SET_CUSTOM_BANNER,
-                    USE_FACTION_BANNER, RENAME_SETTLEMENT, SET_TOWN_SQUARE -> true;
+            case SET_CUSTOM_BANNER, USE_FACTION_BANNER, RENAME_SETTLEMENT, SET_TOWN_SQUARE -> true;
             default -> false;
         }) CampaignManager.broadcastMapMarkers(player.getServer());
     }
@@ -296,74 +303,6 @@ public final class SettlementManager {
                 ? action.get() : "Only the settlement owner or an administrator may do that.";
     }
 
-    public static String recruitProfessionals(ServerPlayer player, SettlementData.SettlementRecord settlement, CampaignData.UnitType unitType, int amount) {
-        if (amount <= 0) return "Invalid recruitment amount.";
-        String validation = validateMilitarySpawnSetup(player.getServer(), settlement);
-        if (validation != null) return validation;
-        int treasuryPerUnit = professionalCost(unitType);
-        int treasuryCost = amount * treasuryPerUnit;
-        CampaignSystemsData campaignSystems = CampaignSystemsData.get(player.serverLevel());
-        int foreignAvailable = campaignSystems.foreignManpower(settlement.getId());
-        if ((long) settlement.getAvailableManpower() + foreignAvailable < amount)
-            return "Not enough recruitable manpower. Available: " + settlement.getAvailableManpower() + " native + " + foreignAvailable + " foreign.";
-        if (StateTreasury.balance(player.serverLevel(), settlement) < treasuryCost) return "Not enough State Treasury funds. Required: " + treasuryCost + ".";
-
-        ServerLevel level = resolveMusterGroundLevel(player.getServer(), settlement);
-        if (level == null) return "The saved Muster Ground dimension is unavailable.";
-        PlayerTeam team = settlement.getEffectiveRecruitsTeam().isBlank() ? null : level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
-        List<UUID> spawned = new ArrayList<>();
-        for (int i = 0; i < amount; i++) {
-            AbstractRecruitEntity recruit = spawnRecruit(level, player, settlement, unitType, i, team, false, null);
-            if (recruit == null) { discardSpawned(level, spawned); return "Recruit spawning failed; no MP or treasury was charged."; }
-            spawned.add(recruit.getUUID());
-        }
-        // Use treaty-transferred foreign manpower first so its stability penalty disappears once those soldiers
-        // have actually been absorbed into the army. Native manpower remains governed by the normal MP ceiling.
-        int foreignSpent = Math.min(amount, campaignSystems.foreignManpower(settlement.getId()));
-        if (foreignSpent > 0) campaignSystems.spendForeignManpower(settlement.getId(), foreignSpent);
-        int nativeSpent = amount - foreignSpent;
-        if (nativeSpent > 0) settlement.spendAvailableManpower(nativeSpent);
-        if (campaignSystems.foreignManpower(settlement.getId()) <= 0) campaignSystems.removeModifier(settlement.getId(), "foreign_soldiers");
-        StateTreasury.spend(player.serverLevel(), settlement, treasuryCost);
-        spawned.forEach(settlement::addProfessional);
-        settlement.addChronicle("Recruited " + amount + " " + unitType.displayName() + (amount == 1 ? "" : "s") + ".");
-        return "Spawned " + amount + " unhired " + unitType.displayName() + (amount == 1 ? "" : "s") + ". Recruits' normal hiring cost still applies.";
-    }
-
-    private static String sellForeignManpower(ServerPlayer player, SettlementData.SettlementRecord settlement, int requested) {
-        if (requested <= 0) return "Choose at least one foreign manpower to sell.";
-        CampaignSystemsData systems = CampaignSystemsData.get(player.serverLevel());
-        int available = systems.foreignManpower(settlement.getId());
-        if (available <= 0) return "There is no foreign manpower to sell.";
-        int quantity = Math.min(requested, available);
-        int unitValue = SettlementConfig.FOREIGN_MANPOWER_SELL_VALUE.get();
-        int balance = StateTreasury.balance(player.serverLevel(), settlement);
-        long proceeds = (long) quantity * unitValue;
-        int room = Integer.MAX_VALUE - balance;
-        if (room <= 0) return "The State Treasury is already at its maximum balance.";
-        if (proceeds > room) {
-            quantity = Math.min(quantity, room / unitValue);
-            proceeds = (long) quantity * unitValue;
-        }
-        if (quantity <= 0) return "The State Treasury has no room for this sale.";
-        if (!systems.spendForeignManpower(settlement.getId(), quantity)) return "Foreign manpower changed; refresh and try again.";
-        StateTreasury.change(player.serverLevel(), settlement, (int) proceeds);
-        if (systems.foreignManpower(settlement.getId()) == 0) systems.removeModifier(settlement.getId(), "foreign_soldiers");
-        settlement.addChronicle("Sold " + quantity + " foreign manpower for " + proceeds + " treasury.");
-        return "Sold " + quantity + " foreign manpower for " + proceeds + " treasury.";
-    }
-
-    private static int professionalCost(CampaignData.UnitType type) {
-        return switch (type) {
-            case RECRUIT -> 10;
-            case SHIELDMAN, BOWMAN -> 15;
-            case CROSSBOWMAN -> 20;
-            case HORSEMAN -> 30;
-            case NOMAD -> 25;
-            case LEVY -> 0;
-        };
-    }
-
     static AbstractRecruitEntity spawnRecruit(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,
                                                        CampaignData.UnitType unitType, int index, PlayerTeam team, boolean levy, UUID batchId) {
         ItemStack template = CampaignData.get(level).resolveUnitTemplate(settlement, unitType);
@@ -379,6 +318,30 @@ public final class SettlementManager {
     static AbstractRecruitEntity spawnRecruitFromTemplate(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,
                                                             CampaignData.UnitType unitType, int index, PlayerTeam team, boolean levy,
                                                             UUID batchId, ItemStack template, String mercenaryCompanyId) {
+        return spawnRecruitFromTemplate(level, actor, settlement, unitType, index, team, levy, batchId, template,
+                mercenaryCompanyId, null, null, null, false);
+    }
+
+    /**
+     * Creates a timed-muster arrival with ownership and group membership established before the
+     * entity enters the world. Barracks behavior is deliberately not touched here; it belongs to
+     * Garrison through the passive API.
+     */
+    static AbstractRecruitEntity spawnMusteredRecruit(ServerLevel level, ServerPlayer actor,
+                                                       SettlementData.SettlementRecord settlement,
+                                                       CampaignData.UnitType unitType, int index, PlayerTeam team,
+                                                       ItemStack template, UUID ownerId, UUID groupId,
+                                                       UUID musterOrderId, String mercenaryCompanyId, boolean foreignOrigin) {
+        return spawnRecruitFromTemplate(level, actor, settlement, unitType, index, team, false, null, template,
+                mercenaryCompanyId, ownerId, groupId, musterOrderId, foreignOrigin);
+    }
+
+    private static AbstractRecruitEntity spawnRecruitFromTemplate(ServerLevel level, ServerPlayer actor,
+                                                                   SettlementData.SettlementRecord settlement,
+                                                                   CampaignData.UnitType unitType, int index, PlayerTeam team,
+                                                                   boolean levy, UUID batchId, ItemStack template,
+                                                                   String mercenaryCompanyId, UUID ownerId, UUID groupId,
+                                                                   UUID musterOrderId, boolean foreignOrigin) {
         if (template == null) template = ItemStack.EMPTY;
         EntityType<?> entityType = null;
         CompoundTag templateTag = null;
@@ -389,7 +352,9 @@ public final class SettlementManager {
         if (entityType == null) entityType = fallbackType(unitType);
         Entity raw = entityType.create(level);
         if (!(raw instanceof AbstractRecruitEntity recruit)) return null;
-        BlockPos spawnPos = CampaignSystemsManager.findMusterSpawn(level, settlement, index);
+        // The player-designated point is authoritative. Do not silently move an obstructed Muster Ground.
+        BlockPos spawnPos = settlement.getMusterGround();
+        if (spawnPos == null) return null;
         recruit.moveTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F, 0.0F);
         recruit.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos), MobSpawnType.COMMAND, null, null);
         if (templateTag != null) {
@@ -401,10 +366,14 @@ public final class SettlementManager {
         recruit.getPersistentData().putString(TAG_KIND, levy ? "levy" : "professional");
         recruit.getPersistentData().putString(TAG_SETTLEMENT, settlement.getId());
         recruit.getPersistentData().putString(TAG_UNIT_TYPE, unitType.name());
-        if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank())
+        if (foreignOrigin) recruit.getPersistentData().putBoolean(TAG_FOREIGN_ORIGIN, true);
+        boolean timedMuster = ownerId != null && groupId != null && musterOrderId != null;
+        if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank()) {
             recruit.getPersistentData().putString(TAG_MERCENARY_COMPANY, mercenaryCompanyId);
+            if (timedMuster) recruit.getPersistentData().putBoolean(TAG_MERCENARY, true);
+        }
         if (batchId != null) recruit.getPersistentData().putUUID(TAG_BATCH, batchId);
-        if (template.getTag() != null && template.getTag().getBoolean(TAG_MERCENARY)) {
+        if (!timedMuster && template.getTag() != null && template.getTag().getBoolean(TAG_MERCENARY)) {
             int wage = Math.max(1, template.getTag().getInt(TAG_MERCENARY_WAGE));
             int interval = Math.max(1, template.getTag().getInt(TAG_MERCENARY_INTERVAL_DAYS));
             recruit.getPersistentData().putBoolean(TAG_MERCENARY, true);
@@ -413,15 +382,20 @@ public final class SettlementManager {
             recruit.getPersistentData().putLong(TAG_MERCENARY_NEXT_PAYMENT_DAY, level.getDayTime() / 24000L + interval);
             recruit.getPersistentData().putInt(TAG_MERCENARY_MISSED_PAYMENTS, 0);
         }
-        if (settlement.hasBarracks()) {
-            BlockPos upkeep = settlement.getBarracksChest() != null ? settlement.getBarracksChest() : settlement.getBarracks();
-            recruit.setUpkeepPos(upkeep);
-        }
         if (levy) { recruit.setCustomName(Component.literal("Levyman")); recruit.setCustomNameVisible(false); }
-        if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank())
+        if (timedMuster) {
+            recruit.assignToPlayer(ownerId, groupId);
+            recruit.getPersistentData().putUUID(MilitaryManager.TAG_MUSTER_OWNER, ownerId);
+            recruit.getPersistentData().putUUID(MilitaryManager.TAG_MUSTER_ORDER, musterOrderId);
+            recruit.getPersistentData().putUUID(MilitaryManager.TAG_MUSTER_GROUP, groupId);
+            recruit.getPersistentData().putInt(MilitaryManager.TAG_MUSTER_INDEX, index);
+        } else if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank()) {
             MercenaryRosterManager.markPendingSpawn(recruit);
+        }
         if (!level.addFreshEntity(recruit)) return null;
-        if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank()
+        if (timedMuster && RecruitEvents.recruitsGroupsManager != null) {
+            RecruitEvents.recruitsGroupsManager.addMember(groupId, recruit.getUUID(), level);
+        } else if (mercenaryCompanyId != null && !mercenaryCompanyId.isBlank()
                 && !MercenaryRosterManager.activateSpawnedRecruit(recruit, actor)) {
             recruit.discard();
             return null;
@@ -430,7 +404,7 @@ public final class SettlementManager {
             try { FactionEvents.addRecruitToTeam(recruit, team, level); }
             catch (RuntimeException exception) { level.getScoreboard().addPlayerToTeam(recruit.getScoreboardName(), team); }
         }
-        if (recruit.getPersistentData().getBoolean(TAG_MERCENARY)) {
+        if (!timedMuster && recruit.getPersistentData().getBoolean(TAG_MERCENARY)) {
             registerMercenaryContract(level, recruit, settlement, actor == null ? null : actor.getUUID());
         }
         return recruit;
@@ -467,11 +441,24 @@ public final class SettlementManager {
             entity.remove(key);
         }
         entity.remove(TAG_SETTLEMENT); entity.remove(TAG_BATCH); entity.remove(TAG_MANAGED); entity.remove(TAG_KIND);
-        entity.remove(TAG_UNIT_TYPE);
+        entity.remove(TAG_UNIT_TYPE); entity.remove(TAG_FOREIGN_ORIGIN);
+        entity.remove(TAG_MERCENARY); entity.remove(TAG_MERCENARY_COMPANY); entity.remove(TAG_MERCENARY_WAGE);
+        entity.remove(TAG_MERCENARY_INTERVAL_DAYS); entity.remove(TAG_MERCENARY_NEXT_PAYMENT_DAY);
+        entity.remove(TAG_MERCENARY_MISSED_PAYMENTS);
+        entity.remove(MilitaryManager.TAG_MUSTER_OWNER); entity.remove(MilitaryManager.TAG_MUSTER_ORDER);
+        entity.remove(MilitaryManager.TAG_MUSTER_GROUP); entity.remove(MilitaryManager.TAG_MUSTER_INDEX);
+        entity.remove(MilitaryManager.TAG_DEPLOYMENT_RELEASED);
         if (entity.contains("ForgeData", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
             CompoundTag forgeData = entity.getCompound("ForgeData");
             forgeData.remove(TAG_SETTLEMENT); forgeData.remove(TAG_BATCH); forgeData.remove(TAG_MANAGED);
             forgeData.remove(TAG_KIND); forgeData.remove(TAG_UNIT_TYPE);
+            forgeData.remove(TAG_FOREIGN_ORIGIN);
+            forgeData.remove(TAG_MERCENARY); forgeData.remove(TAG_MERCENARY_COMPANY); forgeData.remove(TAG_MERCENARY_WAGE);
+            forgeData.remove(TAG_MERCENARY_INTERVAL_DAYS); forgeData.remove(TAG_MERCENARY_NEXT_PAYMENT_DAY);
+            forgeData.remove(TAG_MERCENARY_MISSED_PAYMENTS);
+            forgeData.remove(MilitaryManager.TAG_MUSTER_OWNER); forgeData.remove(MilitaryManager.TAG_MUSTER_ORDER);
+            forgeData.remove(MilitaryManager.TAG_MUSTER_GROUP); forgeData.remove(MilitaryManager.TAG_MUSTER_INDEX);
+            forgeData.remove(MilitaryManager.TAG_DEPLOYMENT_RELEASED);
             entity.put("ForgeData", forgeData);
         }
         root.put("EntityTag", entity);
@@ -957,26 +944,6 @@ public final class SettlementManager {
         return server.getLevel(key);
     }
 
-    public static String returnToBarracks(ServerPlayer player, SettlementData.SettlementRecord settlement) {
-        if (!settlement.hasBarracks()) return "Set this settlement's Barracks first.";
-        ServerLevel barracksLevel = resolveBarracksLevel(player.getServer(), settlement);
-        if (barracksLevel == null) return "The saved Barracks dimension is unavailable.";
-        int ordered = 0;
-        BlockPos target = settlement.getBarracks();
-        for (UUID uuid : settlement.getAllMilitaryUnits()) {
-            Entity entity = barracksLevel.getEntity(uuid);
-            if (!(entity instanceof AbstractRecruitEntity recruit)) continue;
-            recruit.setMovePos(target);
-            recruit.setShouldMovePos(true);
-            recruit.setShouldRest(false);
-            BlockPos upkeep = settlement.getBarracksChest() != null ? settlement.getBarracksChest() : target;
-            recruit.setUpkeepPos(upkeep);
-            ordered++;
-        }
-        return ordered == 0 ? "No loaded soldiers in the Barracks dimension could receive the order."
-                : "Ordered " + ordered + " soldiers to return to the Barracks.";
-    }
-
     public static String markHeldTemplateMercenary(ServerPlayer player, int wage, int intervalDays) {
         ItemStack held = player.getMainHandItem();
         if (held.isEmpty() || !(held.getItem() instanceof SpawnEggItem)) return "Hold a configured Recruits spawn egg in your main hand.";
@@ -1011,9 +978,7 @@ public final class SettlementManager {
                 AbstractRecruitEntity recruit = findLoadedRecruit(server, uuid);
                 if (recruit != null) loaded.add(recruit);
             }
-            updateBarracksRotation(settlement, loaded, day);
             for (AbstractRecruitEntity recruit : loaded) {
-                maintainBarracksLink(recruit, settlement);
                 syncMercenaryEntityFromContract(recruit, CampaignSystemsData.get(server.overworld()).mercenaryContract(recruit.getUUID()));
                 applySettlementMorale(recruit, settlement, settlements, campaign);
             }
@@ -1143,40 +1108,6 @@ public final class SettlementManager {
         return null;
     }
 
-    private static void maintainBarracksLink(AbstractRecruitEntity recruit, SettlementData.SettlementRecord settlement) {
-        if (!settlement.hasBarracks()) return;
-        BlockPos upkeep = settlement.getBarracksChest() != null ? settlement.getBarracksChest() : settlement.getBarracks();
-        if (upkeep != null && !upkeep.equals(recruit.getUpkeepPos())) recruit.setUpkeepPos(upkeep);
-    }
-
-    private static void updateBarracksRotation(SettlementData.SettlementRecord settlement,
-                                               List<AbstractRecruitEntity> loaded, long day) {
-        List<AbstractRecruitEntity> garrison = settlement.hasBarracks() ? loaded.stream()
-                .filter(recruit -> settlement.containsBarracks(
-                        recruit.level().dimension().location().toString(), recruit.blockPosition()))
-                .sorted(Comparator.comparing(AbstractRecruitEntity::getUUID)).toList() : List.of();
-        Set<UUID> garrisonIds = garrison.stream().map(AbstractRecruitEntity::getUUID).collect(java.util.stream.Collectors.toSet());
-        boolean hasReserve = garrison.size() >= 2;
-        int resting = hasReserve ? garrison.size() / 2 : 0;
-        int offset = garrison.isEmpty() ? 0 : Math.floorMod((int)day, garrison.size());
-        Set<UUID> restingIds = new HashSet<>();
-        for (int i = 0; i < resting; i++) restingIds.add(garrison.get((offset + i) % garrison.size()).getUUID());
-
-        for (AbstractRecruitEntity recruit : loaded) {
-            CompoundTag data = recruit.getPersistentData();
-            boolean inside = garrisonIds.contains(recruit.getUUID());
-            if (inside) {
-                data.putBoolean(TAG_BARRACKS_ROTATION, true);
-                data.putBoolean(TAG_BARRACKS_UNDERSTAFFED, !hasReserve);
-                recruit.setShouldRest(restingIds.contains(recruit.getUUID()));
-            } else if (data.getBoolean(TAG_BARRACKS_ROTATION)) {
-                data.remove(TAG_BARRACKS_ROTATION);
-                data.remove(TAG_BARRACKS_UNDERSTAFFED);
-                recruit.setShouldRest(false);
-            }
-        }
-    }
-
     private static void desertMercenary(AbstractRecruitEntity recruit, SettlementData.SettlementRecord settlement,
                                          CampaignData campaign, long day) {
         CompoundTag data = recruit.getPersistentData();
@@ -1213,10 +1144,6 @@ public final class SettlementManager {
         CampaignData.MarriageRecord marriage = settlement.getOwnerId() == null ? null : campaign.getMarriage(settlement.getOwnerId());
         if (marriage != null && (settlement.isCapital() || (settlement.getFactionTeam().isBlank() && settlement.getRank().ordinal() >= SettlementData.SettlementRank.CITY.ordinal()))) {
             target += marriage.effectiveMoraleBonus(settlements);
-        }
-        if (settlement.containsBarracks(recruit.level().dimension().location().toString(), recruit.blockPosition())) {
-            target += recruit.getPersistentData().getBoolean(TAG_BARRACKS_UNDERSTAFFED) ? -8 : 8;
-            if (recruit.getShouldRest()) target += 4;
         }
         CampaignSystemsData extra = CampaignSystemsData.get((ServerLevel) recruit.level());
         for (CampaignSystemsData.ModifierRecord modifier : extra.modifiers(settlement.getId())) target += modifier.morale;
@@ -1365,10 +1292,12 @@ public final class SettlementManager {
         data.remove(TAG_MERCENARY_MISSED_PAYMENTS);
         data.remove(TAG_MERCENARY_COMPANY);
         data.remove(TAG_UNIT_TYPE);
-        if (entity instanceof AbstractRecruitEntity recruit) {
-            recruit.clearUpkeepPos();
-            recruit.setShouldRest(false);
-        }
+        data.remove(TAG_FOREIGN_ORIGIN);
+        data.remove(MilitaryManager.TAG_MUSTER_OWNER);
+        data.remove(MilitaryManager.TAG_MUSTER_ORDER);
+        data.remove(MilitaryManager.TAG_MUSTER_GROUP);
+        data.remove(MilitaryManager.TAG_MUSTER_INDEX);
+        data.remove(MilitaryManager.TAG_DEPLOYMENT_RELEASED);
     }
 
     private static String formattedCharacterName(MinecraftServer server, SettlementData.CharacterRecord character) {
@@ -1386,8 +1315,8 @@ public final class SettlementManager {
     }
 
     public enum SettlementAction {
-        RECRUIT_UNIT, SELL_FOREIGN_MP, SELL_ALL_FOREIGN_MP,
-        RAISE_LEVY, RETURN_LEVY, RETURN_TO_BARRACKS, SET_TAX_POLICY, TOGGLE_IMMIGRATION,
+        TRAIN_TROOPS, CANCEL_TRAINING, MUSTER_TROOPS, RANSOM_FOREIGN_MP, INTEGRATE_FOREIGN_MP, REFRESH_MILITARY,
+        SET_TAX_POLICY, TOGGLE_IMMIGRATION,
         SET_CUSTOM_BANNER, USE_FACTION_BANNER, LINK_CURRENT_CLAIM, UNLINK_CURRENT_CLAIM, CLEAR_CLAIMS,
         RENAME_SETTLEMENT, TRANSFER_SETTLEMENT, ADD_MEMBER_COOWNER,
         SET_TOWN_SQUARE, SET_UPKEEP_CHEST, CLEAR_UPKEEP_CHEST,

@@ -22,6 +22,7 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
     private static final int ROW_H = 35, VISIBLE_ROWS = 6;
     private MercenaryRosterSnapshot snapshot;
     private int left, top, selected, scroll;
+    private long receivedAt = System.currentTimeMillis();
 
     public MercenaryRosterScreen(MercenaryRosterSnapshot snapshot) {
         super(Component.literal("Mercenary Rosters"));
@@ -33,7 +34,7 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
     }
 
     public void updateSnapshot(MercenaryRosterSnapshot value) {
-        snapshot = value;
+        snapshot = value; receivedAt = System.currentTimeMillis();
         selected = Math.min(selected, Math.max(0, snapshot.entries().size() - 1));
         scroll = Math.min(scroll, Math.max(0, snapshot.entries().size() - VISIBLE_ROWS));
         rebuildWidgets();
@@ -88,7 +89,7 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
         drawCampaignFrame(graphics, left, top, W, H, 62);
         graphics.drawCenteredString(font, "MERCENARY ROSTERS", left + W / 2, top + 13, CAMPAIGN_TITLE);
         graphics.drawCenteredString(font, snapshot.settlementName() + " · " + snapshot.factionName(), left + W / 2, top + 31, 0xFFB8B0A0);
-        graphics.drawCenteredString(font, "Available Treasury: " + snapshot.availableTreasury() + " · Reliability: " + snapshot.reliability(), left + W / 2, top + 46, 0xFFCFBE98);
+        graphics.drawCenteredString(font, "Available Silver: " + snapshot.availableTreasury() + " · Reliability: " + snapshot.reliability(), left + W / 2, top + 46, 0xFFCFBE98);
 
         drawCampaignPanel(graphics, left + 14, top + 72, left + 310, top + 300);
         drawCampaignPanel(graphics, left + 320, top + 72, left + 546, top + 326);
@@ -113,11 +114,21 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
             detail(graphics, "Status", entry.status(), 100);
             detail(graphics, "Employer", entry.employer(), 116);
             detail(graphics, "Loyalty", entry.loyalty() + "/100", 132);
-            detail(graphics, "Base hire", entry.hireCost() + " Treasury", 148);
-            detail(graphics, entry.yours() ? "Contract" : "Current price", entry.yours() ? "Active" : entry.effectiveHireCost() + " Treasury", 164);
+            detail(graphics, "Base hire", entry.hireCost() + " Silver", 148);
+            detail(graphics, entry.yours() ? "Contract" : "Current price", entry.yours() ? "Active" : entry.effectiveHireCost() + " Silver", 164);
             detail(graphics, "Upkeep", entry.upkeep() + " every " + entry.intervalDays() + " day(s)", 180);
-            graphics.drawString(font, "COMPOSITION", left + 330, top + 204, 0xFFE7D8B0, false);
-            graphics.drawWordWrap(font, Component.literal(entry.composition()), left + 330, top + 218, 202, 0xFFDDDDDD);
+            if (entry.phaseTotalTicks() > 0) {
+                int elapsed = (int)Math.min(entry.phaseRemainingTicks(), Math.max(0L, (System.currentTimeMillis() - receivedAt) / 50L));
+                int remaining = Math.max(0, entry.phaseRemainingTicks() - elapsed);
+                double progress = 1D - remaining / (double)Math.max(1, entry.phaseTotalTicks());
+                graphics.drawString(font, "Acceptance " + duration(remaining), left + 330, top + 198, 0xFFCFBE98, false);
+                progressBar(graphics, left + 330, top + 211, 202, progress);
+            } else if (entry.arrivalTotal() > 0) {
+                graphics.drawString(font, "Mustering " + entry.arrived() + "/" + entry.arrivalTotal(), left + 330, top + 198, 0xFFCFBE98, false);
+                progressBar(graphics, left + 330, top + 211, 202, entry.arrived() / (double)Math.max(1, entry.arrivalTotal()));
+            }
+            graphics.drawString(font, "COMPOSITION", left + 330, top + 226, 0xFFE7D8B0, false);
+            graphics.drawWordWrap(font, Component.literal(entry.composition()), left + 330, top + 240, 202, 0xFFDDDDDD);
             if (!entry.reason().isBlank()) graphics.drawWordWrap(font, Component.literal(entry.reason()), left + 330, top + 258, 202, 0xFFFFA080);
         } else {
             graphics.drawCenteredString(font, "No mercenary companies configured.", left + 433, top + 150, 0xFFFFA080);
@@ -130,6 +141,16 @@ public final class MercenaryRosterScreen extends ScaledCampaignScreen {
     private void detail(GuiGraphics graphics, String label, String value, int y) {
         graphics.drawString(font, label + ":", left + 330, top + y, 0xFFAAA294, false);
         graphics.drawString(font, fitText(value, 130), left + 400, top + y, CAMPAIGN_TEXT, false);
+    }
+
+    private void progressBar(GuiGraphics graphics, int x, int y, int width, double progress) {
+        graphics.fill(x, y, x + width, y + 7, 0xFF211B16);
+        graphics.fill(x, y, x + (int)Math.round(width * Math.max(0D, Math.min(1D, progress))), y + 7, 0xFFAF8950);
+    }
+
+    private static String duration(long ticks) {
+        long seconds = Math.max(0L, (ticks + 19L) / 20L);
+        return String.format(Locale.ROOT, "%02d:%02d", seconds / 60L, seconds % 60L);
     }
 
     private ItemStack icon(String raw) {

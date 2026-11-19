@@ -9,6 +9,7 @@ import ee.lastpagans.settlements.WorldNewsSnapshot;
 import ee.lastpagans.settlements.ResearchSnapshot;
 import ee.lastpagans.settlements.SettlementSnapshot;
 import ee.lastpagans.settlements.MapMarkerSnapshot;
+import ee.lastpagans.settlements.MilitarySnapshot;
 import ee.lastpagans.settlements.network.SnapshotPacket;
 import ee.lastpagans.settlements.network.HousingAreasPacket;
 import net.minecraft.client.Minecraft;
@@ -22,8 +23,7 @@ public final class SettlementClientHandler {
         Minecraft minecraft = Minecraft.getInstance();
         lastSettlementSnapshot = packet.snapshot();
         if (!packet.open()) {
-            if (minecraft.screen instanceof MilitaryScreen military) military.updateSnapshot(packet.snapshot());
-            else if (minecraft.screen instanceof SettlementScreen settlement) settlement.updateSnapshot(packet.snapshot());
+            if (minecraft.screen instanceof SettlementScreen settlement) settlement.updateSnapshot(packet.snapshot());
             else if (!packet.snapshot().message().isBlank()) TransientAlertOverlay.show(packet.snapshot().message());
             return;
         }
@@ -51,11 +51,15 @@ public final class SettlementClientHandler {
         minecraft.setScreen(new FactionScreen(snapshot));
     }
     public static void openWorldNews(WorldNewsSnapshot snapshot) { Minecraft.getInstance().setScreen(new WorldNewsScreen(snapshot)); }
-    public static void openMilitary(SettlementSnapshot snapshot) { Minecraft.getInstance().setScreen(new MilitaryScreen(snapshot)); }
-    public static void openMercenaryRosters(ee.lastpagans.settlements.MercenaryRosterSnapshot snapshot) {
+    public static void acceptMilitary(boolean open, MilitarySnapshot snapshot) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof MilitaryScreen screen) screen.updateSnapshot(snapshot);
+        else if (open) minecraft.setScreen(new MilitaryScreen(snapshot));
+    }
+    public static void acceptMercenaryRosters(boolean open, ee.lastpagans.settlements.MercenaryRosterSnapshot snapshot) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.screen instanceof MercenaryRosterScreen screen) screen.updateSnapshot(snapshot);
-        else minecraft.setScreen(new MercenaryRosterScreen(snapshot));
+        else if (open) minecraft.setScreen(new MercenaryRosterScreen(snapshot));
     }
     public static void openResearch(ResearchSnapshot snapshot) {
         Minecraft minecraft = Minecraft.getInstance();

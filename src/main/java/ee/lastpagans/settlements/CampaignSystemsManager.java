@@ -105,8 +105,6 @@ public final class CampaignSystemsManager {
             applyDailyModifierEffects(settlement, extra, day);
             updateSettlementTier(server.overworld(), settlement, extra);
         }
-        processLevyMobilizations(server, extra, settlements);
-        processLevyServicePenalties(server, extra, settlements);
         processForcedNapExpiry(server, extra, day);
         processPassiveRelations(server, extra, day);
         processDevotionSites(server, extra, settlements, day);

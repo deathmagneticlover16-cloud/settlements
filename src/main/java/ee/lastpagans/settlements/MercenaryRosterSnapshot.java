@@ -25,17 +25,20 @@ public record MercenaryRosterSnapshot(String settlementId, String settlementName
 
     public record Entry(String id, String name, String iconItem, String composition, int size, int hireCost, int effectiveHireCost,
                         int upkeep, int intervalDays, int loyalty, String status, String employer, boolean canHire,
-                        boolean yours, String actionLabel, String reason) {
+                        boolean yours, String actionLabel, String reason, int phaseRemainingTicks, int phaseTotalTicks,
+                        int arrived, int arrivalTotal) {
         private void encode(FriendlyByteBuf buffer) {
             buffer.writeUtf(id, 64); buffer.writeUtf(name, 96); buffer.writeUtf(iconItem, 128); buffer.writeUtf(composition, 256);
             buffer.writeInt(size); buffer.writeInt(hireCost); buffer.writeInt(effectiveHireCost); buffer.writeInt(upkeep); buffer.writeInt(intervalDays);
             buffer.writeInt(loyalty); buffer.writeUtf(status, 32); buffer.writeUtf(employer, 128); buffer.writeBoolean(canHire); buffer.writeBoolean(yours);
-            buffer.writeUtf(actionLabel, 48); buffer.writeUtf(reason, 256);
+            buffer.writeUtf(actionLabel, 48); buffer.writeUtf(reason, 256); buffer.writeVarInt(phaseRemainingTicks);
+            buffer.writeVarInt(phaseTotalTicks); buffer.writeVarInt(arrived); buffer.writeVarInt(arrivalTotal);
         }
         private static Entry decode(FriendlyByteBuf buffer) {
             return new Entry(buffer.readUtf(64), buffer.readUtf(96), buffer.readUtf(128), buffer.readUtf(256),
                     buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readInt(), buffer.readInt(),
-                    buffer.readUtf(32), buffer.readUtf(128), buffer.readBoolean(), buffer.readBoolean(), buffer.readUtf(48), buffer.readUtf(256));
+                    buffer.readUtf(32), buffer.readUtf(128), buffer.readBoolean(), buffer.readBoolean(), buffer.readUtf(48), buffer.readUtf(256),
+                    buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt());
         }
     }
 }

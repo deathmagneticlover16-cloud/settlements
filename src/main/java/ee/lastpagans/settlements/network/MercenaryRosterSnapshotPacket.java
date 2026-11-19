@@ -7,10 +7,10 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-public record MercenaryRosterSnapshotPacket(MercenaryRosterSnapshot snapshot) {
-    public static void encode(MercenaryRosterSnapshotPacket packet, FriendlyByteBuf buffer) { packet.snapshot().encode(buffer); }
-    public static MercenaryRosterSnapshotPacket decode(FriendlyByteBuf buffer) { return new MercenaryRosterSnapshotPacket(MercenaryRosterSnapshot.decode(buffer)); }
+public record MercenaryRosterSnapshotPacket(boolean open, MercenaryRosterSnapshot snapshot) {
+    public static void encode(MercenaryRosterSnapshotPacket packet, FriendlyByteBuf buffer) { buffer.writeBoolean(packet.open); packet.snapshot().encode(buffer); }
+    public static MercenaryRosterSnapshotPacket decode(FriendlyByteBuf buffer) { return new MercenaryRosterSnapshotPacket(buffer.readBoolean(), MercenaryRosterSnapshot.decode(buffer)); }
     public static void handle(MercenaryRosterSnapshotPacket packet, Supplier<NetworkEvent.Context> supplier) {
-        NetworkEvent.Context context = supplier.get(); context.enqueueWork(() -> SettlementClientHandler.openMercenaryRosters(packet.snapshot())); context.setPacketHandled(true);
+        NetworkEvent.Context context = supplier.get(); context.enqueueWork(() -> SettlementClientHandler.acceptMercenaryRosters(packet.open, packet.snapshot())); context.setPacketHandled(true);
     }
 }

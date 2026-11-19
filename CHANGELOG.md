@@ -1,5 +1,23 @@
 # Changelog
 
+## 4.2.0
+
+### Recruitment and mustering
+
+- Added persistent per-settlement troop reserves with native and foreign origin tracking, configurable capacities, costs, and training durations.
+- Added a server-authoritative global FIFO training queue with individual completions and exact unfinished-order refunds.
+- Added one-group timed mustering at the designated Muster Ground, with one directly owned recruit arriving per second and pending soldiers held against the deployment cap.
+- Added configurable mercenary contract acceptance followed by automatic arrival through the same Muster Ground queue without a second hiring charge.
+- Added player-wide world and campaign deployment accounting plus a passive barracks API for Garrison integration.
+
+### Interface and lifecycle
+
+- Rebuilt Military as full Overview, Train Troops, and Muster Troops workspaces with live origin bars, queue progress, cancellation, quantity controls, and active arrival status.
+- Added acceptance and mustering progress to the existing mercenary contract screen.
+- Removed Settlements-owned barracks rotation, rest, morale, and upkeep automation while retaining barracks geometry as an integration hook.
+- Converted conquered trained reserves to foreign manpower and retired the legacy levy mobilization route.
+- Network protocol is 47.
+
 ## 4.0.0
 
 ### System simplification

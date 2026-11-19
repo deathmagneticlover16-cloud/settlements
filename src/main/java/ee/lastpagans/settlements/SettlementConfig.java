@@ -2,6 +2,10 @@ package ee.lastpagans.settlements;
 
 import net.minecraftforge.common.ForgeConfigSpec;
 
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.Map;
+
 /** Server/common balance knobs for mechanics that Recruits itself cannot configure low enough. */
 public final class SettlementConfig {
     public static final ForgeConfigSpec SPEC;
@@ -31,6 +35,13 @@ public final class SettlementConfig {
     public static final ForgeConfigSpec.IntValue UPKEEP_CHEST_MAX_ITEMS_PER_SWEEP;
     public static final ForgeConfigSpec.IntValue TAX_POPULATION_PER_COIN;
     public static final ForgeConfigSpec.IntValue FOREIGN_MANPOWER_SELL_VALUE;
+    public static final ForgeConfigSpec.IntValue FOREIGN_MANPOWER_INTEGRATION_PERCENT;
+    public static final ForgeConfigSpec.IntValue PLAYER_DEPLOYED_TROOP_CAP;
+    public static final ForgeConfigSpec.IntValue MERCENARY_ACCEPTANCE_SECONDS;
+    public static final Map<CampaignData.UnitType, ForgeConfigSpec.IntValue> RESERVE_CAPACITY;
+    public static final Map<CampaignData.UnitType, ForgeConfigSpec.IntValue> TRAINING_SILVER_COST;
+    public static final Map<CampaignData.UnitType, ForgeConfigSpec.IntValue> TRAINING_MP_MILLI_COST;
+    public static final Map<CampaignData.UnitType, ForgeConfigSpec.IntValue> TRAINING_SECONDS;
     public static final ForgeConfigSpec.IntValue RELATION_NAP_MINIMUM;
     public static final ForgeConfigSpec.IntValue RELATION_WAR_AID_MINIMUM;
     public static final ForgeConfigSpec.IntValue RELATION_DEFENSIVE_ALLIANCE_MINIMUM;
@@ -138,6 +149,35 @@ public final class SettlementConfig {
                 .defineInRange("populationPerCoin", 10, 1, 1000);
         FOREIGN_MANPOWER_SELL_VALUE = builder.comment("Silver added to the State Treasury when one Foreign Manpower is sold.")
                 .defineInRange("foreignManpowerSellValue", 10, 1, 1000000);
+        FOREIGN_MANPOWER_INTEGRATION_PERCENT = builder.comment("Percentage of foreign manpower retained when it is integrated.")
+                .defineInRange("foreignManpowerIntegrationPercent", 75, 1, 100);
+        builder.pop();
+
+        builder.push("military_training");
+        PLAYER_DEPLOYED_TROOP_CAP = builder.comment("Maximum world and campaign-stored troops controlled by one player, including pending muster commitments.")
+                .defineInRange("playerDeployedTroopCap", 300, 1, 100000);
+        MERCENARY_ACCEPTANCE_SECONDS = builder.comment("Active-server seconds before a signed mercenary contract enters the Muster Ground queue.")
+                .defineInRange("mercenaryAcceptanceSeconds", 180, 0, 86400);
+        EnumMap<CampaignData.UnitType, ForgeConfigSpec.IntValue> capacities = new EnumMap<>(CampaignData.UnitType.class);
+        EnumMap<CampaignData.UnitType, ForgeConfigSpec.IntValue> silverCosts = new EnumMap<>(CampaignData.UnitType.class);
+        EnumMap<CampaignData.UnitType, ForgeConfigSpec.IntValue> mpCosts = new EnumMap<>(CampaignData.UnitType.class);
+        EnumMap<CampaignData.UnitType, ForgeConfigSpec.IntValue> durations = new EnumMap<>(CampaignData.UnitType.class);
+        for (CampaignData.UnitType type : CampaignData.UnitType.values()) {
+            String key = type.name().toLowerCase(java.util.Locale.ROOT);
+            int capacity = switch (type) { case LEVY -> 96; case HORSEMAN, NOMAD -> 48; case BOWMAN, CROSSBOWMAN -> 40; default -> 64; };
+            int silver = switch (type) { case LEVY -> 6; case RECRUIT -> 15; case SHIELDMAN, BOWMAN -> 18; case CROSSBOWMAN -> 22; case HORSEMAN -> 40; case NOMAD -> 35; };
+            int mpMilli = type == CampaignData.UnitType.LEVY ? 500 : 1000;
+            int seconds = switch (type) { case LEVY -> 60; case RECRUIT -> 120; case SHIELDMAN -> 300; case BOWMAN -> 240; case CROSSBOWMAN -> 360; case HORSEMAN -> 900; case NOMAD -> 600; };
+            capacities.put(type, builder.defineInRange(key + "ReserveCapacity", capacity, 1, 100000));
+            silverCosts.put(type, builder.defineInRange(key + "SilverPerSoldier", silver, 0, 1000000));
+            mpCosts.put(type, builder.comment("Manpower cost in thousandths per " + type.displayName() + ". 500 means two soldiers per MP.")
+                    .defineInRange(key + "ManpowerMilliPerSoldier", mpMilli, 1, 100000));
+            durations.put(type, builder.defineInRange(key + "TrainingSecondsPerSoldier", seconds, 1, 604800));
+        }
+        RESERVE_CAPACITY = Collections.unmodifiableMap(capacities);
+        TRAINING_SILVER_COST = Collections.unmodifiableMap(silverCosts);
+        TRAINING_MP_MILLI_COST = Collections.unmodifiableMap(mpCosts);
+        TRAINING_SECONDS = Collections.unmodifiableMap(durations);
         builder.pop();
 
         builder.push("diplomacy");

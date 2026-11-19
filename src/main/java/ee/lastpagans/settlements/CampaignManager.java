@@ -82,8 +82,7 @@ public final class CampaignManager {
             SettlementManager.open(player, settlement.getId());
             return;
         }
-        SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                new MilitarySnapshotPacket(SettlementSnapshot.from(settlement, player, message)));
+        MilitaryManager.open(player, settlement, message);
     }
 
     public static void openDiplomacy(ServerPlayer player, String message) {
@@ -1173,6 +1172,8 @@ public final class CampaignManager {
     private static void transferSettlementByTreaty(ServerLevel level, String settlementId, String winnerFaction, UUID recipientOwner) {
         SettlementData.SettlementRecord settlement = SettlementData.get(level).getSettlement(settlementId); if (settlement == null || recipientOwner == null) return;
         UUID previousOwner = settlement.getOwnerId();
+        if (!recipientOwner.equals(previousOwner) || !java.util.Objects.equals(winnerFaction, settlement.getFactionTeam()))
+            MilitaryManager.convertReservesToForeign(level, settlement);
         settlement.setFactionTeam(winnerFaction);
         if (!recipientOwner.equals(previousOwner)) {
             settlement.setOwner(recipientOwner);

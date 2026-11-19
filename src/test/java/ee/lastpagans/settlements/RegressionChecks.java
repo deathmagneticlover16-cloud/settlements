@@ -33,10 +33,42 @@ public final class RegressionChecks {
         researchTiers();
         capturePacket();
         recruitTemplateSanitization();
+        militaryQueuePersistence();
         characterBodyData();
         assertions += CharacterDraftChecks.run();
         assertions += WildfireBridgeChecks.run();
         System.out.println("Settlements regression checks passed: " + assertions + " assertions");
+    }
+
+    private static void militaryQueuePersistence() {
+        MilitaryData data = new MilitaryData();
+        data.pool("oak_hall", CampaignData.UnitType.LEVY).set(7, 3);
+        data.setIntegratedForeignMilli("oak_hall", 1_375);
+        data.setCapturedForeignCredit("oak_hall", 500);
+        UUID trainingId = UUID.randomUUID(), owner = UUID.randomUUID();
+        data.mutableTraining("oak_hall").add(new MilitaryData.TrainingOrder(trainingId, owner, "oak_hall",
+                CampaignData.UnitType.LEVY, 6, 4, 2, 6, 500, 20, 1, 10, data.nextSequence()));
+        UUID musterId = UUID.randomUUID(), groupId = UUID.randomUUID();
+        data.mutableMusters("oak_hall").add(new MilitaryData.MusterOrder(musterId, groupId, owner, "oak_hall", "",
+                "Levy", java.util.List.of(CampaignData.UnitType.LEVY, CampaignData.UnitType.LEVY), 1, 1, false,
+                MilitaryData.MusterPhase.MUSTERING, 1, 0, data.nextSequence(), 200L));
+        data.setDeployed(owner, 8, 5);
+
+        MilitaryData restored = MilitaryData.load(data.save(new CompoundTag()));
+        check(restored.pool("oak_hall", CampaignData.UnitType.LEVY).nativeCount() == 7
+                        && restored.pool("oak_hall", CampaignData.UnitType.LEVY).foreignCount() == 3,
+                "native and foreign reserve origins survive persistence");
+        check(restored.integratedForeignMilli("oak_hall") == 1_375 && restored.capturedForeignCredit("oak_hall") == 500,
+                "integrated and fractional captured foreign manpower remain separate across persistence");
+        MilitaryData.TrainingOrder training = restored.training("oak_hall").get(0);
+        check(training.id.equals(trainingId) && training.remaining() == 5 && training.remainingNative() == 3
+                        && training.remainingForeign() == 2 && training.progressTicks == 10,
+                "partial FIFO training ledger survives persistence without changing refund attribution");
+        MilitaryData.MusterOrder muster = restored.musters("oak_hall").get(0);
+        check(muster.id.equals(musterId) && muster.groupId.equals(groupId) && muster.spawned == 1 && muster.remaining() == 1,
+                "one-group timed muster progress survives persistence");
+        check(restored.deployed(owner).world() == 8 && restored.deployed(owner).campaign() == 5,
+                "world and campaign deployment counts persist separately");
     }
 
     private static void capturePersistenceAndGeometry() {

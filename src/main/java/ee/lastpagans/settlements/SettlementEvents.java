@@ -55,6 +55,7 @@ public final class SettlementEvents {
             return;
         }
 
+        MilitaryManager.onTrackedUnitDeath(level, entity.getUUID(), entity.getPersistentData());
         if (settlement == null) settlement = data.findSettlementTrackingUnit(entity.getUUID());
         if (settlement == null) return;
         CampaignSystemsData extra = CampaignSystemsData.get(level);
@@ -87,7 +88,12 @@ public final class SettlementEvents {
      */
     public static void onEntityLeave(EntityLeaveLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level)) return;
-        if (!(event.getEntity() instanceof Villager villager)) return;
+        Entity leaving = event.getEntity();
+        Entity.RemovalReason leavingReason = leaving.getRemovalReason();
+        if (leavingReason == Entity.RemovalReason.KILLED || leavingReason == Entity.RemovalReason.DISCARDED) {
+            MilitaryManager.onTrackedUnitDeath(level, leaving.getUUID(), leaving.getPersistentData());
+        }
+        if (!(leaving instanceof Villager villager)) return;
         Entity.RemovalReason reason = villager.getRemovalReason();
         if (reason != Entity.RemovalReason.KILLED && reason != Entity.RemovalReason.DISCARDED) return;
         removeResidentVillager(level, villager,
@@ -288,6 +294,7 @@ public final class SettlementEvents {
             server.getPlayerList().getPlayers().forEach(SettlementsWildfireAuthority::reassert);
             SettlementManager.processFirstSettlerArrivals(server);
             SettlementManager.processImmigration(server, gameTime, server.overworld().getDayTime() / 24000L);
+            MilitaryManager.process(server);
             ResearchManager.processResearch(server);
             CaptureZoneManager.process(server);
         }

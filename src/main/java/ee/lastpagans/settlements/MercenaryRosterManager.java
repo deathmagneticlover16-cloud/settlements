@@ -37,10 +37,10 @@ public final class MercenaryRosterManager {
             player.sendSystemMessage(net.minecraft.network.chat.Component.literal("Select a settlement you can view before opening Mercenary Rosters."));
             return;
         }
-        send(player, settlement, message);
+        send(player, settlement, true, message);
     }
 
-    private static void send(ServerPlayer player, SettlementData.SettlementRecord settlement, String message) {
+    private static void send(ServerPlayer player, SettlementData.SettlementRecord settlement, boolean open, String message) {
         String factionId = settlement.getFactionTeam();
         int treasury = StateTreasury.balance(player.serverLevel(), settlement);
         int reliability = factionId.isBlank() ? 0 : CampaignData.get(player.serverLevel()).getFactionReliability(factionId);
@@ -56,7 +56,11 @@ public final class MercenaryRosterManager {
             int price = effectiveHireCost(player.serverLevel(), definition, contract, settlement, loyalty);
             boolean canManage = SettlementManager.canManage(player, settlement);
             boolean canHire = canManage;
-            String status = contract == null ? "Available" : contract.status();
+            MilitaryData.MusterOrder arrival = MilitaryData.get(player.serverLevel()).musters(settlement.getId()).stream()
+                    .filter(value -> definition.id().equals(value.companyId)).findFirst().orElse(null);
+            String status = contract == null ? "Available" : arrival == null ? contract.status()
+                    : arrival.phase == MilitaryData.MusterPhase.ACCEPTING_CONTRACT ? "Accepting Contract"
+                    : "Mustering " + arrival.spawned + "/" + arrival.total();
             String employer = contract == null ? "None" : employerName(player.getServer(), contract);
             String action = contract == null ? "Hire Company" : yours ? "End Contract" : "Buy Out";
             String reason = "";
@@ -64,15 +68,23 @@ public final class MercenaryRosterManager {
             else if (contract != null && !yours && refusesPoaching(player.serverLevel(), definition, contract, loyalty)) {
                 canHire = false; reason = "The company refuses to break loyalty with " + employer + ".";
             } else if (!yours && treasury < price) {
-                canHire = false; reason = "Requires " + price + " State Treasury; available " + treasury + ".";
+                canHire = false; reason = "Requires " + price + " Silver; available " + treasury + ".";
             }
             entries.add(new MercenaryRosterSnapshot.Entry(definition.id(), definition.name(), definition.iconItem(), definition.composition(),
                     definition.size(), definition.hireCost(), price, definition.upkeep(), definition.paymentIntervalDays(), loyalty,
-                    status, employer, canHire, yours, action, reason));
+                    status, employer, canHire, yours, action, reason,
+                    arrival == null ? 0 : arrival.acceptanceTicks,
+                    arrival == null || arrival.phase != MilitaryData.MusterPhase.ACCEPTING_CONTRACT ? 0
+                            : SettlementConfig.MERCENARY_ACCEPTANCE_SECONDS.get() * 20,
+                    arrival == null ? 0 : arrival.spawned, arrival == null ? 0 : arrival.total()));
         }
         SettlementNetwork.CHANNEL.send(PacketDistributor.PLAYER.with(() -> player),
-                new MercenaryRosterSnapshotPacket(new MercenaryRosterSnapshot(settlement.getId(), settlement.getName(),
+                new MercenaryRosterSnapshotPacket(open, new MercenaryRosterSnapshot(settlement.getId(), settlement.getName(),
                         factionId.isBlank() ? "Independent" : CampaignManager.factionName(factionId), treasury, reliability, List.copyOf(entries), message == null ? "" : message)));
+    }
+
+    static void refresh(ServerPlayer player, SettlementData.SettlementRecord settlement) {
+        if (player != null && settlement != null && SettlementManager.canView(player, settlement)) send(player, settlement, false, "");
     }
 
     public static void handleAction(ServerPlayer player, String companyId, String action) {
@@ -81,7 +93,7 @@ public final class MercenaryRosterManager {
         String result = "Unknown mercenary action.";
         if ("HIRE".equalsIgnoreCase(action)) result = hire(player, settlement, companyId);
         else if ("RELEASE".equalsIgnoreCase(action)) result = release(player, settlement, companyId);
-        send(player, settlement, result);
+        send(player, settlement, true, result);
     }
 
     public static String hire(ServerPlayer player, SettlementData.SettlementRecord settlement, String companyId) {
@@ -100,60 +112,33 @@ public final class MercenaryRosterManager {
         int price = effectiveHireCost(player.serverLevel(), definition, existing, settlement, currentLoyalty);
         String factionId = settlement.getFactionTeam();
         int available = StateTreasury.balance(player.serverLevel(), settlement);
-        if (available < price) return "Hiring " + definition.name() + " costs " + price + " State Treasury; only " + available + " is available.";
+        if (available < price) return "Hiring " + definition.name() + " costs " + price + " Silver; only " + available + " is available.";
 
         ServerLevel level = SettlementManager.resolveMusterGroundLevel(player.getServer(), settlement);
         if (level == null) return "The Muster Ground dimension is unavailable.";
-        CampaignSystemsData.RegionRecord area = CampaignSystemsData.get(level).musterArea(settlement.getId());
-        if (area != null && area.valid()) {
-            int capacity = CampaignSystemsManager.usableMusterCapacity(level, area, definition.size());
-            if (capacity < definition.size()) return "The Muster Ground has only " + capacity + " safe standing positions; " + definition.size() + " are required for this company.";
-        }
-
+        MilitaryData military = MilitaryData.get(level);
+        MilitaryData.DeploymentCount deployed = military.deployed(player.getUUID());
+        int room = SettlementConfig.PLAYER_DEPLOYED_TROOP_CAP.get() - deployed.total() - military.pendingForPlayer(player.getUUID());
+        if (definition.size() > room) return "Deployment cap allows only " + Math.max(0, room) + " more soldiers.";
         CampaignData campaign = CampaignData.get(level);
-        CampaignData.RosterRecord templateRoster = campaign.getRoster(definition.templateRoster());
-        PlayerTeam team = settlement.getEffectiveRecruitsTeam().isBlank() ? null : level.getScoreboard().getPlayerTeam(settlement.getEffectiveRecruitsTeam());
-        List<AbstractRecruitEntity> spawned = new ArrayList<>();
-        int index = 0;
-        for (MercenaryRosterRegistry.UnitStack unit : definition.units()) {
-            ItemStack template = templateRoster == null ? ItemStack.EMPTY : templateRoster.getTemplate(unit.type());
-            for (int i = 0; i < unit.count(); i++, index++) {
-                AbstractRecruitEntity recruit = SettlementManager.spawnRecruitFromTemplate(level, player, settlement, unit.type(), index, team, false, null, template, definition.id());
-                if (recruit == null) {
-                    rollbackSpawnedRecruits(player.getServer(), spawned);
-                    return "Mercenary spawning failed; no Treasury was charged.";
-                }
-                // Company contracts are paid once per company, never once per soldier.
-                CampaignSystemsData.get(level).removeMercenaryContract(recruit.getUUID());
-                recruit.getPersistentData().remove(SettlementManager.TAG_MERCENARY_WAGE);
-                recruit.getPersistentData().remove(SettlementManager.TAG_MERCENARY_INTERVAL_DAYS);
-                recruit.getPersistentData().remove(SettlementManager.TAG_MERCENARY_NEXT_PAYMENT_DAY);
-                recruit.getPersistentData().remove(SettlementManager.TAG_MERCENARY_MISSED_PAYMENTS);
-                recruit.getPersistentData().putBoolean(SettlementManager.TAG_MERCENARY, true);
-                recruit.getPersistentData().putString(SettlementManager.TAG_MERCENARY_COMPANY, definition.id());
-                spawned.add(recruit);
-            }
-        }
-
-        boolean paid = StateTreasury.spend(level, settlement, price);
-        if (!paid) {
-            rollbackSpawnedRecruits(player.getServer(), spawned);
-            return "The treasury changed before the contract completed; no company was hired.";
-        }
+        if (!StateTreasury.spend(level, settlement, price)) return "The treasury changed before the contract completed; no company was hired.";
 
         if (existing != null) terminateContract(player.getServer(), existing, false, "The company accepted a rival contract.");
-        Set<UUID> units = new HashSet<>();
-        for (AbstractRecruitEntity recruit : spawned) { units.add(recruit.getUUID()); settlement.addMercenaryCompanyUnit(recruit.getUUID()); }
         long day = level.getDayTime() / 24000L;
         data.put(new MercenaryCompanyData.CompanyContract(definition.id(), settlement.getId(), factionId, player.getUUID(), day,
-                day + definition.paymentIntervalDays(), 0, units));
+                day + definition.paymentIntervalDays(), 0, Set.of()));
+        if (!MilitaryManager.queueMercenary(player, settlement, definition)) {
+            data.remove(definition.id()); StateTreasury.change(level, settlement, price);
+            return "Recruits group management is unavailable; the contract was not charged.";
+        }
         int bidderReliability = factionId.isBlank() ? 0 : campaign.getFactionReliability(factionId);
         int starting = Math.max(definition.startingLoyalty(), definition.startingLoyalty() + bidderReliability / 10);
         data.setTrust(definition.id(), newKey, Math.max(data.trust(definition.id(), newKey, definition.startingLoyalty()), starting));
-        settlement.addChronicle(definition.name() + " was contracted for " + price + " Treasury (" + definition.size() + " mercenaries)." );
+        settlement.addChronicle(definition.name() + " was contracted for " + price + " Silver (" + definition.size() + " mercenaries)." );
         campaign.addNews(CampaignData.NewsCategory.MILITARY, CampaignData.NewsImportance.MINOR, "Mercenaries hired",
                 settlement.getName() + " contracted " + definition.name() + ".", day, factionId, settlement.getId(), CampaignData.NewsVisibility.FACTION);
-        return "Hired " + definition.name() + " for " + price + " Treasury. Upkeep: " + definition.upkeep() + " every " + definition.paymentIntervalDays() + " day(s).";
+        return definition.name() + " is accepting the contract. Arrival begins automatically after "
+                + SettlementConfig.MERCENARY_ACCEPTANCE_SECONDS.get() + " seconds; no second payment is required.";
     }
 
     public static String release(ServerPlayer player, SettlementData.SettlementRecord settlement, String companyId) {
@@ -177,7 +162,6 @@ public final class MercenaryRosterManager {
         for (MercenaryCompanyData.CompanyContract original : List.copyOf(data.contracts())) {
             MercenaryRosterRegistry.Definition definition = MercenaryRosterRegistry.get(original.companyId());
             SettlementData.SettlementRecord settlement = settlements.getSettlement(original.settlementId());
-            if (original.unitIds().isEmpty()) { data.remove(original.companyId()); continue; }
             if (definition == null) {
                 terminateContract(server, original, true, "The mercenary company was removed from the roster configuration; its contract ended.");
                 continue;
@@ -260,7 +244,9 @@ public final class MercenaryRosterManager {
         for (MercenaryCompanyData.CompanyContract contract : List.copyOf(data.contracts())) {
             if (!contract.unitIds().contains(unitId)) continue;
             MercenaryCompanyData.CompanyContract updated = contract.withoutUnit(unitId);
-            if (updated.unitIds().isEmpty()) data.remove(contract.companyId()); else data.put(updated);
+            boolean stillArriving = MilitaryData.get(level).musters(contract.settlementId()).stream()
+                    .anyMatch(order -> order.mercenary && contract.companyId().equals(order.companyId));
+            if (updated.unitIds().isEmpty() && !stillArriving) data.remove(contract.companyId()); else data.put(updated);
             return;
         }
     }
@@ -370,6 +356,7 @@ public final class MercenaryRosterManager {
         if (server == null || contract == null) return;
         MercenaryCompanyData data = MercenaryCompanyData.get(server.overworld());
         SettlementData.SettlementRecord settlement = SettlementData.get(server.overworld()).getSettlement(contract.settlementId());
+        MilitaryManager.cancelMercenary(contract.settlementId(), contract.companyId(), server.overworld());
         Set<UUID> unavailable = new HashSet<>();
         for (UUID unit : contract.unitIds()) {
             if (settlement != null) settlement.removeMercenaryCompanyUnit(unit);

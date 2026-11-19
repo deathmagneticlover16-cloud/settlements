@@ -84,6 +84,13 @@ public final class MercenaryCompanyData extends SavedData {
     public CompanyContract contractForUnit(UUID unit) {
         return unit == null ? null : contracts.values().stream().filter(value -> value.unitIds().contains(unit)).findFirst().orElse(null);
     }
+    public void addUnit(String companyId, UUID unit) {
+        CompanyContract contract = contract(companyId);
+        if (contract == null || unit == null || contract.unitIds().contains(unit)) return;
+        java.util.Set<UUID> units = new java.util.HashSet<>(contract.unitIds()); units.add(unit);
+        put(new CompanyContract(contract.companyId(), contract.settlementId(), contract.factionId(), contract.hiringPlayer(),
+                contract.hiredDay(), contract.nextPaymentDay(), contract.missedPayments(), units));
+    }
 
     private static int clamp(int value) { return Math.max(0, Math.min(100, value)); }
 
