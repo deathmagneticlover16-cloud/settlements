@@ -52,7 +52,7 @@ public record SettlementSnapshot(
         ItemStack custom = visual == null ? ItemStack.EMPTY : visual.getCustomBanner();
         if (!custom.isEmpty()) custom.save(settlementBanner);
 
-        List<UnitTemplateEntry> templates = Arrays.stream(CampaignData.UnitType.values())
+        List<UnitTemplateEntry> templates = CampaignData.UnitType.selectableValues().stream()
                 .<UnitTemplateEntry>map(type -> UnitTemplateEntry.from(type, campaign.resolveUnitTemplate(settlement, type)))
                 .toList();
 

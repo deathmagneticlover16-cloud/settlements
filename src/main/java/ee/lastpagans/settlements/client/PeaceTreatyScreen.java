@@ -29,7 +29,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
     private DropdownWidget faith, settlement, claimSettlement, claim, destination, independenceSettlement;
     private int faithIndex, settlementIndex, claimSettlementIndex, claimIndex, destinationIndex, independenceSettlementIndex;
     private final Set<UUID> selectedClaimIds = new LinkedHashSet<>();
-    private boolean convertFaith, transferSettlement, transferClaim, renounceClaim, recognizeIndependence;
+    private boolean convertFaith, transferSettlement, transferClaim, renounceClaim, recognizeIndependence, recognizeFactionIndependence;
 
     public PeaceTreatyScreen(Screen parent, DiplomacySnapshot snapshot, DiplomacySnapshot.WarEntry war) {
         super(Component.literal("Peace Treaty")); this.parent = parent; this.snapshot = snapshot; this.war = war;
@@ -94,6 +94,10 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
                     independenceNames.isEmpty() ? List.of("No releasable settlement") : independenceNames, independenceSettlementIndex,
                     v -> independenceSettlementIndex = Math.max(0, independenceNames.indexOf(v))));
         }
+        if ("INDEPENDENCE_WAR".equals(war.goal())) addRenderableWidget(Button.builder(
+                        Component.literal(recognizeFactionIndependence ? "☑ Recognize faction independence" : "☐ Recognize faction independence"),
+                        b -> { preserveValues(); recognizeFactionIndependence = !recognizeFactionIndependence; rebuildWidgets(); })
+                .bounds(left + 272, top + 328, 220, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Send Treaty"), b -> send()).bounds(left + 300, top + 385, 112, 22).build());
         addRenderableWidget(Button.builder(Component.literal("Back"), b -> minecraft.setScreen(parent)).bounds(left + 418, top + 385, 74, 22).build());
     }
@@ -177,6 +181,7 @@ public final class PeaceTreatyScreen extends ScaledCampaignScreen {
         }
         DiplomacySnapshot.SettlementTarget independenceTarget = selectedIndependenceSettlement();
         if (recognizeIndependence && independenceTarget != null) terms.add("RECOGNIZE_INDEPENDENCE~" + clean(independenceTarget.settlementId()) + "~0~0~");
+        if (recognizeFactionIndependence && "INDEPENDENCE_WAR".equals(war.goal())) terms.add("RECOGNIZE_FACTION_INDEPENDENCE~~0~0~");
         SettlementNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket("OFFER_PEACE_TERMS", "", null, war.id(), String.join(";", terms)));
         minecraft.setScreen(parent);
     }

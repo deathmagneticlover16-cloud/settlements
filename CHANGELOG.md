@@ -1,5 +1,23 @@
 # Changelog
 
+## 5.0.0
+
+### Diplomacy
+
+- Replaced the tabbed diplomacy menu with a map-centred faction workspace, conditional dossiers, contextual negotiations, correspondence, culture, relationship, and agreement overlays.
+- Normalized conflicts to War and Raid, migrated legacy conflict records, required an eligible casus belli, and added Independence War tribute suspension.
+- Added durable sent/received/history correspondence, withdrawal, peaceful independence and tribute requests, requests to join wars, and asynchronous multi-ally calls.
+- Added all eight supplied culture dossiers, Celtic Paganism, faction culture selection, and server-derived signed relationship-factor arithmetic.
+
+### Settlements and military
+
+- Removed manual capital reassignment.
+- Removed Shieldmen from all player-selectable military and template lists while retaining old-save decoding.
+- Spawned mustered recruits only on safe blocks inside the configured Muster Ground and kept obstructed orders queued.
+- Shortened the training confirmation to `X added to training queue.`
+
+- Network protocol is 48.
+
 ## 4.2.2
 
 - Prevented Recruits' per-player soldier registry from accepting null owner UUIDs.

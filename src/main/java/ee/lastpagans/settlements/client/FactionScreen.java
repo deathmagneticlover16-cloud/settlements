@@ -3,6 +3,7 @@ package ee.lastpagans.settlements.client;
 import com.talhanation.recruits.client.gui.component.BannerRenderer;
 import com.talhanation.recruits.world.RecruitsFaction;
 import ee.lastpagans.settlements.CampaignData;
+import ee.lastpagans.settlements.CultureDefinition;
 import ee.lastpagans.settlements.FactionSnapshot;
 import ee.lastpagans.settlements.FactionColorUtil;
 import ee.lastpagans.settlements.network.FactionActionPacket;
@@ -47,6 +48,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private DropdownWidget teamColorDrop;
     private DropdownWidget unitColorDrop;
     private DropdownWidget governmentDrop;
+    private DropdownWidget cultureDrop;
     private DropdownWidget capitalDrop;
     private DropdownWidget bannerBaseDrop;
     private DropdownWidget bannerPatternDrop;
@@ -56,6 +58,7 @@ public final class FactionScreen extends ScaledCampaignScreen {
     private int teamColorIndex;
     private int unitColorIndex;
     private int governmentIndex;
+    private int cultureIndex;
     private int capitalIndex;
     private int bannerBaseColorIndex;
     private int bannerPatternIndex;
@@ -151,14 +154,19 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 governmentDrop = addRenderableWidget(new DropdownWidget(left + 168, top + 202, 280, 20, governments, governmentIndex,
                         value -> governmentIndex = Math.max(0, governments.indexOf(value))));
 
+                List<String> cultures = CultureDefinition.values().stream().map(CultureDefinition::name).sorted().toList();
+                cultureIndex = clampIndex(cultureIndex, cultures.size());
+                cultureDrop = addRenderableWidget(new DropdownWidget(left + 168, top + 230, 280, 20, cultures, cultureIndex,
+                        value -> cultureIndex = Math.max(0, cultures.indexOf(value))));
+
                 List<String> capitals = snapshot.settlements().stream()
                         .map(value -> value.name() + " - " + value.rank() + " · Pop " + value.population()).toList();
                 capitalIndex = clampIndex(capitalIndex, capitals.size());
-                if (!capitals.isEmpty()) capitalDrop = addRenderableWidget(new DropdownWidget(left + 168, top + 240, 280, 20, capitals, capitalIndex,
+                if (!capitals.isEmpty()) capitalDrop = addRenderableWidget(new DropdownWidget(left + 168, top + 258, 280, 20, capitals, capitalIndex,
                         value -> capitalIndex = Math.max(0, capitals.indexOf(value))));
 
                 addRenderableWidget(Button.builder(Component.literal("Create Faction"), button -> createFaction())
-                        .bounds(left + 196, top + 284, 168, 22).build());
+                        .bounds(left + 196, top + 288, 168, 22).build());
                 setInitialFocus(factionNameEdit);
             } else if (createPage == CreatePage.BANNER) {
                 List<String> dyes = dyeDisplayNames();
@@ -287,8 +295,6 @@ public final class FactionScreen extends ScaledCampaignScreen {
             settlementIndex = Math.max(0, Math.min(settlementIndex, names.size() - 1));
             settlementDrop = addRenderableWidget(new DropdownWidget(left + 22, top + 336, 190, 20, names, settlementIndex,
                     value -> settlementIndex = Math.max(0, names.indexOf(value))));
-            addRenderableWidget(Button.builder(Component.literal("Set Capital"), button -> factionSettlementAction("SET_CAPITAL"))
-                    .bounds(left + 218, top + 336, 96, 20).build());
         }
     }
 
@@ -301,9 +307,11 @@ public final class FactionScreen extends ScaledCampaignScreen {
         DyeColor unit = dyes[clampIndex(unitColorIndex, dyes.length)];
         CampaignData.GovernmentType[] governments = CampaignData.GovernmentType.values();
         CampaignData.GovernmentType government = governments[clampIndex(governmentIndex, governments.length)];
+        List<CultureDefinition> cultures = CultureDefinition.values().stream().sorted(java.util.Comparator.comparing(CultureDefinition::name)).toList();
+        String culture = cultures.isEmpty() ? "" : cultures.get(clampIndex(cultureIndex, cultures.size())).id();
         FactionSnapshot.SettlementEntry capital = snapshot.settlements().get(clampIndex(capitalIndex, snapshot.settlements().size()));
         ItemStack bannerItem = buildDesignedBanner(false);
-        SettlementNetwork.CHANNEL.sendToServer(new FactionCreatePacket(name, team.getName(), unit.getName(), government.name(), capital.id(), bannerItem));
+        SettlementNetwork.CHANNEL.sendToServer(new FactionCreatePacket(name, team.getName(), unit.getName(), government.name(), culture, capital.id(), bannerItem));
     }
 
     private void factionSettlementAction(String action) {
@@ -384,7 +392,8 @@ public final class FactionScreen extends ScaledCampaignScreen {
                 graphics.drawString(font, "Faction color", left + 92, top + 170, 0xFFE7D8B0, false);
                 graphics.drawString(font, "Unit color", left + 316, top + 152, 0xFFE7D8B0, false);
                 graphics.drawString(font, "Government", left + 92, top + 208, 0xFFE7D8B0, false);
-                graphics.drawString(font, "Capital", left + 92, top + 246, 0xFFE7D8B0, false);
+                graphics.drawString(font, "Culture", left + 92, top + 236, 0xFFE7D8B0, false);
+                graphics.drawString(font, "Founding seat", left + 92, top + 264, 0xFFE7D8B0, false);
                 renderFoundingChecklist(graphics);
             } else if (createPage == CreatePage.BANNER) {
                 graphics.drawString(font, "Base dye", left + 92, top + 138, 0xFFE7D8B0, false);

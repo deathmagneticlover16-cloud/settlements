@@ -352,8 +352,8 @@ public final class SettlementManager {
         if (entityType == null) entityType = fallbackType(unitType);
         Entity raw = entityType.create(level);
         if (!(raw instanceof AbstractRecruitEntity recruit)) return null;
-        // The player-designated point is authoritative. Do not silently move an obstructed Muster Ground.
-        BlockPos spawnPos = settlement.getMusterGround();
+        // Mustered recruits must stand on a safe block inside the configured Muster Ground region.
+        BlockPos spawnPos = CampaignSystemsManager.findMusterSpawn(level, settlement, Math.max(0, index));
         if (spawnPos == null) return null;
         recruit.moveTo(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D, 0.0F, 0.0F);
         recruit.finalizeSpawn(level, level.getCurrentDifficultyAt(spawnPos), MobSpawnType.COMMAND, null, null);

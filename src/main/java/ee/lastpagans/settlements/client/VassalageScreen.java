@@ -38,7 +38,7 @@ public final class VassalageScreen extends ScaledCampaignScreen {
         if (canImpose) addRenderableWidget(Button.builder(Component.literal("Release Vassal"), ignored -> send("RELEASE_VASSAL", relation.vassalId(), ""))
                 .bounds(left + 34, top + H - 52, 116, 22).build());
         else if (snapshot.canManage() && snapshot.ownFactionId().equals(relation.vassalId()))
-            addRenderableWidget(Button.builder(Component.literal("Seek Independence"), ignored -> send("SEEK_INDEPENDENCE", "", ""))
+            addRenderableWidget(Button.builder(Component.literal("Request Independence"), ignored -> send("SEEK_INDEPENDENCE", "", ""))
                     .bounds(left + 34, top + H - 52, 130, 22).build());
         addRenderableWidget(Button.builder(Component.literal("Back"), ignored -> minecraft.setScreen(parent))
                 .bounds(left + W - 82, top + 14, 48, 18).build());

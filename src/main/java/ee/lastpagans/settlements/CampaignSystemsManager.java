@@ -158,7 +158,7 @@ public final class CampaignSystemsManager {
         income = Math.max(0, income);
         int retained = income;
         CampaignData.VassalageRecord vassalage = CampaignData.get(level).vassalageFor(settlement.getFactionTeam());
-        if (income > 0 && vassalage != null) {
+        if (income > 0 && vassalage != null && !vassalage.suspended()) {
             int due = Math.max(0, (int) ((long) income * vassalage.tributeRate() / 100L));
             int room = Integer.MAX_VALUE - extra.treasuryBalance(vassalage.overlord());
             int tribute = Math.min(due, Math.max(0, room));
@@ -224,7 +224,7 @@ public final class CampaignSystemsManager {
                 "Religious conversion resistance", settlement.isConvertingFaith()
                         ? settlement.getConversionFromFaith() + " → " + settlement.getConversionTargetFaith() + " · " + settlement.getConversionProgress() + "%" : "");
         CampaignData.VassalageRecord vassalage = factionId.isBlank() ? null : CampaignData.get(server.overworld()).vassalageFor(factionId);
-        int tributeRate = vassalage == null ? 0 : vassalage.tributeRate();
+        int tributeRate = vassalage == null || vassalage.suspended() ? 0 : vassalage.tributeRate();
         int tributePressure = switch (tributeRate) { case 5 -> -1; case 10 -> -2; case 25 -> -5; case 50 -> -10; default -> 0; };
         replacePressure(extra, settlement.getId(), "vassal_tribute_unrest", tributePressure,
                 "Vassal tribute burden", tributeRate <= 0 ? "" : tributeRate + "% of actual tax receipts are diverted to the overlord");
@@ -735,11 +735,9 @@ public final class CampaignSystemsManager {
         for (CampaignData.WarRecord war : campaign.getWars()) {
             if (war.status() != CampaignData.WarStatus.ACTIVE) continue;
             boolean attacker = settlement.getId().equals(war.attackerSettlement())
-                    || (!faction.isBlank() && (faction.equals(war.attackerFaction()) && (war.type() != CampaignData.WarType.SETTLEMENT_WAR || war.attackerFactionJoined())
-                    || war.supportingAttackers().contains(faction)));
+                    || (!faction.isBlank() && (faction.equals(war.attackerFaction()) || war.supportingAttackers().contains(faction)));
             boolean defender = settlement.getId().equals(war.defenderSettlement())
-                    || (!faction.isBlank() && (faction.equals(war.defenderFaction()) && (war.type() != CampaignData.WarType.SETTLEMENT_WAR || war.defenderFactionJoined())
-                    || war.supportingDefenders().contains(faction)));
+                    || (!faction.isBlank() && (faction.equals(war.defenderFaction()) || war.supportingDefenders().contains(faction)));
             if (attacker == defender) continue;
             int before = extra.warScore(war.id());
             extra.changeWarScore(war.id(), attacker ? -impact : impact);
@@ -766,9 +764,7 @@ public final class CampaignSystemsManager {
     }
 
     private static String participatingWarFaction(CampaignData.WarRecord war, boolean attackerSide) {
-        boolean factionJoined = war.type() != CampaignData.WarType.SETTLEMENT_WAR
-                || (attackerSide ? war.attackerFactionJoined() : war.defenderFactionJoined());
-        return factionJoined ? (attackerSide ? war.attackerFaction() : war.defenderFaction()) : "";
+        return attackerSide ? war.attackerFaction() : war.defenderFaction();
     }
 
     private static void notifyWarSide(MinecraftServer server, CampaignData.WarRecord war, boolean attackerSide, String title, String body) {
@@ -918,13 +914,12 @@ public final class CampaignSystemsManager {
             int z = area.min().getZ() + ((slot / width) % depth);
             if (!area.containsHorizontal(new BlockPos(x, area.min().getY(), z))) continue;
             int surface = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-            int y = Math.max(area.min().getY(), Math.min(area.max().getY() + 2, surface));
-            BlockPos pos = new BlockPos(x, y, z);
+            if (surface < area.min().getY() - 4 || surface > area.max().getY() + 8) continue;
+            BlockPos pos = new BlockPos(x, surface, z);
             if (isSafeStanding(level, pos)) return pos;
         }
-        BlockPos center = new BlockPos((area.min().getX() + area.max().getX()) / 2, area.min().getY(),
-                (area.min().getZ() + area.max().getZ()) / 2);
-        return oldGridSafe(level, center, index);
+        // Never fall back outside a configured region: keep the order queued until space is clear.
+        return null;
     }
 
     private static BlockPos oldGridSafe(ServerLevel level, BlockPos base, int index) {
@@ -936,7 +931,7 @@ public final class CampaignSystemsManager {
             BlockPos value = candidate.offset(0, dy, 0);
             if (isSafeStanding(level, value)) return value;
         }
-        return candidate;
+        return null;
     }
 
     private static boolean isSafeStanding(ServerLevel level, BlockPos pos) {

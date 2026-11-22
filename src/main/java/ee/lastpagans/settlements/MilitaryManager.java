@@ -43,7 +43,7 @@ public final class MilitaryManager {
     }
 
     public static String train(ServerPlayer player, SettlementData.SettlementRecord settlement, CampaignData.UnitType type, int quantity) {
-        if (type == null || quantity < 1 || quantity > 100000) return "Choose a valid troop type and quantity.";
+        if (type == null || !type.selectable() || quantity < 1 || quantity > 100000) return "Choose a valid troop type and quantity.";
         MilitaryData data = MilitaryData.get(player.serverLevel());
         if (data.training(settlement.getId()).size() >= 256) return "This settlement's training queue is full.";
         MilitaryData.ReservePool pool = data.pool(settlement.getId(), type);
@@ -75,7 +75,7 @@ public final class MilitaryManager {
         data.mutableTraining(settlement.getId()).add(order); data.setDirty();
         refreshForeignPressure(player.serverLevel(), settlement, data);
         settlement.addChronicle(quantity + " " + plural(type, quantity) + " entered training.");
-        return quantity + " " + plural(type, quantity) + " added to the FIFO training queue.";
+        return quantity + " added to training queue.";
     }
 
     public static String cancelTraining(ServerPlayer player, SettlementData.SettlementRecord settlement, UUID orderId) {
@@ -94,7 +94,7 @@ public final class MilitaryManager {
     }
 
     public static String muster(ServerPlayer player, SettlementData.SettlementRecord settlement, CampaignData.UnitType type, int quantity) {
-        if (type == null || quantity < 1 || quantity > 100000) return "Choose a valid troop type and quantity.";
+        if (type == null || !type.selectable() || quantity < 1 || quantity > 100000) return "Choose a valid troop type and quantity.";
         if (!settlement.hasMusterGround()) return "Set this settlement's Muster Ground before deploying reserves.";
         ServerLevel level = SettlementManager.resolveMusterGroundLevel(player.getServer(), settlement);
         if (level == null) return "The saved Muster Ground dimension is unavailable.";

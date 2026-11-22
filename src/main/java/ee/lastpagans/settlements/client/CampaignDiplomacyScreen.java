@@ -1,6 +1,7 @@
 package ee.lastpagans.settlements.client;
 
 import ee.lastpagans.settlements.CampaignData;
+import ee.lastpagans.settlements.CultureDefinition;
 import ee.lastpagans.settlements.DiplomacySnapshot;
 import ee.lastpagans.settlements.network.DiplomacyActionPacket;
 import ee.lastpagans.settlements.network.OpenCampaignRequestPacket;
@@ -13,392 +14,397 @@ import net.minecraft.network.chat.Component;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 
-/** Settlements guided diplomacy screen. Settlement wars are settlement-to-settlement by design. */
+/** Map-centred, contextual diplomacy workspace backed exclusively by server snapshots. */
 public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
-    private static final int W = 560, H = 380;
+    private static final int W = 840, H = 460;
     private final DiplomacySnapshot snapshot;
-    private int left, top;
-    private Tab tab = Tab.RELATIONS;
-    private int relationIndex;
-    private int warTypeIndex = 2;
-    private int sourceSettlementIndex;
-    private int targetSettlementIndex;
-    private int goalIndex;
-    private int warAllyIndex;
-    private DropdownWidget factionDropdown, typeDropdown, sourceDropdown, targetDropdown, goalDropdown, warAllyDropdown;
-    private EditBox customCasusBelli;
+    private int left, top, selectedIndex = -1, scroll;
+    private Overlay overlay = Overlay.NONE;
+    private CampaignData.ProposalType draftTerm;
+    private CampaignData.WarType warType = CampaignData.WarType.WAR;
+    private int goalIndex, settlementIndex;
+    private EditBox customReason;
     private Button declareButton;
+    private final Set<String> selectedAllies = new LinkedHashSet<>();
 
     public CampaignDiplomacyScreen(DiplomacySnapshot snapshot) {
-        super(Component.literal("Campaign Diplomacy"));
+        super(Component.literal("Last Pagans · Diplomacy"));
         this.snapshot = snapshot;
     }
 
     @Override protected void init() {
-        setupCampaignScale(W, H);
-        left = campaignLeft(W);
-        top = campaignTop(H);
-        buildWidgets();
+        setupCampaignScale(W, H); left = campaignLeft(W); top = campaignTop(H); rebuild();
     }
 
-    private void buildWidgets() {
-        clearWidgets();
-        factionDropdown = typeDropdown = sourceDropdown = targetDropdown = goalDropdown = warAllyDropdown = null;
-        customCasusBelli = null;
-        String[] tabs = {"Relations", "Declare Conflict", "Proposals", "Active Wars"};
-        addCampaignTabs(tabs, tab.ordinal(), left + 12, top + 45, 130, 20, 4,
-                index -> { tab = Tab.values()[index]; buildWidgets(); });
-        switch (tab) {
-            case RELATIONS -> relationWidgets();
-            case DECLARE -> declarationWidgets();
-            case PROPOSALS -> proposalWidgets();
-            case WARS -> warWidgets();
+    private void rebuild() {
+        clearWidgets(); customReason = null; declareButton = null;
+        addRenderableWidget(Button.builder(Component.literal("Correspondence (" + snapshot.proposals().size() + ")"), b -> open(Overlay.CORRESPONDENCE))
+                .bounds(left + W - 260, top + 14, 142, 20).build());
+        addRenderableWidget(Button.builder(Component.literal("Return"), b -> SettlementNetwork.CHANNEL.sendToServer(
+                        new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
+                .bounds(left + W - 108, top + 14, 88, 20).build());
+        for (int i = 0; i < Math.min(13, snapshot.relations().size()); i++) {
+            int index = i; DiplomacySnapshot.RelationEntry relation = snapshot.relations().get(i);
+            Button row = addRenderableWidget(Button.builder(Component.literal(relation.factionName() + "  " + signed(relation.relationship())), b -> select(index))
+                    .bounds(left + 18, top + 166 + i * 21, 204, 19).build());
+            row.active = overlay == Overlay.NONE;
         }
-        addRenderableWidget(Button.builder(Component.literal("Return to Main"), button ->
-                        SettlementNetwork.CHANNEL.sendToServer(new OpenCampaignRequestPacket(OpenCampaignRequestPacket.ScreenTarget.MAIN)))
-                .bounds(left + W - 132, top + H - 29, 120, 20).build());
+        int mapRight = selected() == null ? left + W - 14 : left + W - 294;
+        for (DiplomacySnapshot.SettlementTarget holding : snapshot.settlements().stream().limit(40).toList()) {
+            int relation = relationIndex(holding.factionId());
+            int[] point = mapPoint(holding, left + 248, top + 82, mapRight - 92, top + H - 64);
+            Button marker = addRenderableWidget(Button.builder(Component.literal(holding.settlementName()), b -> {
+                if (relation < 0) { selectedIndex = -1; rebuild(); } else select(relation);
+            }).bounds(point[0], point[1], 82, 18).build());
+            marker.active = overlay == Overlay.NONE;
+        }
+        addRenderableWidget(Button.builder(Component.literal("ⓘ"), b -> { scroll = 0; open(Overlay.OWN_CULTURE); })
+                .bounds(left + 190, top + 124, 24, 18).build());
+        DiplomacySnapshot.RelationEntry target = selected();
+        if (target != null) {
+            addRenderableWidget(Button.builder(Component.literal("ⓘ"), b -> { scroll = 0; open(Overlay.TARGET_CULTURE); })
+                    .bounds(left + W - 45, top + 134, 22, 18).build());
+            addRenderableWidget(Button.builder(Component.literal("NEGOTIATE"), b -> beginNegotiation())
+                    .bounds(left + W - 273, top + 202, 250, 22).build());
+            addRenderableWidget(Button.builder(Component.literal("AGREEMENTS & OBLIGATIONS"), b -> open(Overlay.AGREEMENTS))
+                    .bounds(left + W - 273, top + 229, 250, 22).build());
+            addRenderableWidget(Button.builder(Component.literal("FULL RELATIONSHIP BREAKDOWN"), b -> { scroll = 0; open(Overlay.RELATIONSHIP); })
+                    .bounds(left + W - 273, top + H - 56, 250, 20).build());
+        }
+        if (overlay != Overlay.NONE) overlayWidgets();
     }
 
-    private void relationWidgets() {
-        List<String> factions = snapshot.relations().stream().map(DiplomacySnapshot.RelationEntry::factionName).toList();
-        factionDropdown = addRenderableWidget(new DropdownWidget(left + 20, top + 88, 235, 20,
-                factions.isEmpty() ? List.of("No other factions") : factions, relationIndex,
-                value -> { relationIndex = Math.max(0, factions.indexOf(value)); buildWidgets(); }));
-        Button nap = addRenderableWidget(Button.builder(Component.literal("Non-aggression pact"), b -> send("PROPOSE_NAP", null, null, ""))
-                .bounds(left + 20, top + 254, 160, 20).build());
-        Button defensive = addRenderableWidget(Button.builder(Component.literal("Defensive alliance"), b -> send("PROPOSE_DEFENSIVE", null, null, ""))
-                .bounds(left + 186, top + 254, 160, 20).build());
-        Button military = addRenderableWidget(Button.builder(Component.literal("Military alliance"), b -> send("PROPOSE_MILITARY", null, null, ""))
-                .bounds(left + 352, top + 254, 160, 20).build());
-        Button breakTreaty = addRenderableWidget(Button.builder(Component.literal("Break current treaty"), b -> send("BREAK_TREATY", null, null, ""))
-                .bounds(left + 20, top + 280, 190, 20).build());
-        DiplomacySnapshot.RelationEntry relation = snapshot.relations().isEmpty() ? null : snapshot.relations().get(clampIndex(relationIndex, snapshot.relations().size()));
-        boolean hasVassalage = relation != null && relation.tributeRate() > 0;
-        Button vassalage = addRenderableWidget(Button.builder(Component.literal(hasVassalage ? "Vassalage / Tribute" : "Offer to Become Vassal"), b -> {
-                    if (hasVassalage) minecraft.setScreen(new VassalageScreen(this, snapshot, relation));
-                    else send("PROPOSE_VASSALAGE", null, null, "");
-                }).bounds(left + 216, top + 280, 160, 20).build());
-        boolean active = snapshot.canManage() && !snapshot.relations().isEmpty();
-        nap.active = defensive.active = military.active = breakTreaty.active = active;
-        vassalage.active = active;
-    }
-
-    private void declarationWidgets() {
-        List<CampaignData.WarType> types = supportedWarTypes();
-        List<String> typeNames = types.stream().map(CampaignData.WarType::displayName).toList();
-        CampaignData.WarType type = selectedWarType();
-        List<CampaignData.WarGoal> goals = goals();
-        List<String> goalNames = goals.stream().map(CampaignData.WarGoal::displayName).toList();
-        goalIndex = Math.min(goalIndex, Math.max(0, goalNames.size() - 1));
-
-        goalDropdown = addRenderableWidget(new DropdownWidget(left + 294, top + 143, 246, 20, goalNames, goalIndex, value -> {
-            goalIndex = Math.max(0, goalNames.indexOf(value));
-            buildWidgets();
-        }));
-        typeDropdown = addRenderableWidget(new DropdownWidget(left + 20, top + 91, 250, 20, typeNames, warTypeIndex, value -> {
-            warTypeIndex = Math.max(0, typeNames.indexOf(value));
-            sourceSettlementIndex = targetSettlementIndex = goalIndex = 0;
-            buildWidgets();
-        }));
-
-        if (type == CampaignData.WarType.SETTLEMENT_WAR) {
-            List<DiplomacySnapshot.SettlementTarget> ownSettlements = manageableSettlements();
-            List<DiplomacySnapshot.SettlementTarget> targets = targetSettlements();
-            List<String> ownNames = ownSettlements.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
-            List<String> targetNames = targets.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
-            sourceSettlementIndex = clampIndex(sourceSettlementIndex, ownNames.size());
-            targetSettlementIndex = clampIndex(targetSettlementIndex, targetNames.size());
-            sourceDropdown = addRenderableWidget(new DropdownWidget(left + 294, top + 91, 246, 20,
-                    ownNames.isEmpty() ? List.of("No manageable settlement") : ownNames, sourceSettlementIndex, value -> {
-                        sourceSettlementIndex = Math.max(0, ownNames.indexOf(value)); targetSettlementIndex = 0; buildWidgets();
-                    }));
-            targetDropdown = addRenderableWidget(new DropdownWidget(left + 20, top + 143, 250, 20,
-                    targetNames.isEmpty() ? List.of("No valid target settlement") : targetNames, targetSettlementIndex,
-                    value -> targetSettlementIndex = Math.max(0, targetNames.indexOf(value))));
-        } else {
-            List<String> factionNames = snapshot.relations().stream().map(DiplomacySnapshot.RelationEntry::factionName).toList();
-            factionDropdown = addRenderableWidget(new DropdownWidget(left + 294, top + 91, 246, 20,
-                    factionNames.isEmpty() ? List.of("No other factions") : factionNames, relationIndex,
-                    value -> { relationIndex = Math.max(0, factionNames.indexOf(value)); targetSettlementIndex = 0; buildWidgets(); }));
-            List<DiplomacySnapshot.SettlementTarget> targets = factionTargetSettlements();
-            List<String> targetNames = targets.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
-            if (type != CampaignData.WarType.FACTION_WAR) {
-                targetSettlementIndex = clampIndex(targetSettlementIndex, targetNames.size());
-                targetDropdown = addRenderableWidget(new DropdownWidget(left + 20, top + 143, 250, 20,
-                        targetNames.isEmpty() ? List.of("No target settlement") : targetNames, targetSettlementIndex,
-                        value -> targetSettlementIndex = Math.max(0, targetNames.indexOf(value))));
+    private void overlayWidgets() {
+        addRenderableWidget(Button.builder(Component.literal("✕ CLOSE"), b -> closeOverlay())
+                .bounds(left + W - 190, top + 66, 110, 20).build());
+        switch (overlay) {
+            case NEGOTIATION -> {
+                addRenderableWidget(Button.builder(Component.literal("+ ADD OFFER / DEMAND"), b -> open(Overlay.TERM_PICKER))
+                        .bounds(left + 244, top + H - 100, 184, 22).build());
+                addRenderableWidget(Button.builder(Component.literal("WAR / RAID"), b -> { overlay = Overlay.WAR; rebuild(); })
+                        .bounds(left + 434, top + H - 100, 118, 22).build());
+                DiplomacySnapshot.WarEntry joinable = joinableWar();
+                if (joinable != null) addRenderableWidget(Button.builder(Component.literal("REQUEST TO JOIN WAR"), b -> send("REQUEST_JOIN_WAR", null, joinable.id(), ""))
+                        .bounds(left + 244, top + H - 126, 184, 20).build());
+                Button send = addRenderableWidget(Button.builder(Component.literal("SEND PROPOSAL"), b -> sendDraft())
+                        .bounds(left + 558, top + H - 100, 150, 22).build());
+                send.active = draftTerm != null && selected() != null;
             }
+            case TERM_PICKER -> termPickerWidgets();
+            case WAR -> warWidgets();
+            case AGREEMENTS -> agreementWidgets();
+            case CORRESPONDENCE -> correspondenceWidgets();
+            default -> { }
         }
-
-        if (selectedGoal() == CampaignData.WarGoal.CUSTOM) {
-            customCasusBelli = new EditBox(font, left + 20, top + 188, 520, 20, Component.literal("Custom casus belli"));
-            customCasusBelli.setMaxLength(100);
-            customCasusBelli.setHint(Component.literal("Describe the reason for war (max 100 characters)"));
-            customCasusBelli.setResponder(value -> { if (declareButton != null) declareButton.active = snapshot.canDeclareWar() && declarationValid(); });
-            addRenderableWidget(customCasusBelli);
-        }
-
-        declareButton = addRenderableWidget(Button.builder(Component.literal("Declare " + type.displayName()), b -> declareConflict())
-                .bounds(left + 330, top + 290, 210, 24).build());
-        declareButton.active = snapshot.canDeclareWar() && declarationValid();
     }
 
-    private void proposalWidgets() {
-        for (int i = 0; i < Math.min(8, snapshot.proposals().size()); i++) {
-            DiplomacySnapshot.ProposalEntry proposal = snapshot.proposals().get(i);
-            int y = top + 94 + i * 28;
-            String acceptAction = proposal.structuredPeace() ? "ACCEPT_PEACE_TERMS" : "ACCEPT_PROPOSAL";
-            String rejectAction = proposal.structuredPeace() ? "REJECT_PEACE_TERMS" : "REJECT_PROPOSAL";
-            Button accept = addRenderableWidget(Button.builder(Component.literal(proposal.structuredPeace() && !proposal.canReject() ? "Accept (Capitulated)" : "Accept"), b -> send(acceptAction, proposal.id(), null, ""))
-                    .bounds(left + 374, y, 92, 20).build());
-            Button reject = addRenderableWidget(Button.builder(Component.literal("Reject"), b -> send(rejectAction, proposal.id(), null, ""))
-                    .bounds(left + 472, y, 64, 20).build());
-            accept.active = snapshot.canManage() || proposal.structuredPeace();
-            reject.active = (snapshot.canManage() || proposal.structuredPeace()) && proposal.canReject();
+    private void termPickerWidgets() {
+        DiplomacySnapshot.RelationEntry target = selected(); if (target == null) return;
+        int y = top + 140;
+        DiplomacySnapshot.WarEntry activeWar = warWith(target.factionId());
+        if ("WAR".equals(target.state())) {
+            if (activeWar != null && "WAR".equals(activeWar.type())) termButton("Peace", CampaignData.ProposalType.PEACE, y);
+            return;
         }
+        termButton("Non-aggression pact", CampaignData.ProposalType.NON_AGGRESSION, y);
+        termButton("Defensive alliance", CampaignData.ProposalType.DEFENSIVE_ALLIANCE, y + 28);
+        termButton("Military alliance", CampaignData.ProposalType.MILITARY_ALLIANCE, y + 56);
+        if (target.tributeRate() == 0) termButton("Vassalage", CampaignData.ProposalType.VASSALAGE, y + 84);
+    }
+
+    private void termButton(String label, CampaignData.ProposalType type, int y) {
+        addRenderableWidget(Button.builder(Component.literal(label), b -> { draftTerm = type; overlay = Overlay.NEGOTIATION; rebuild(); })
+                .bounds(left + 290, y, 260, 22).build());
     }
 
     private void warWidgets() {
-        List<DiplomacySnapshot.RelationEntry> allies = alliedRelations();
-        List<String> allyNames = allies.stream().map(DiplomacySnapshot.RelationEntry::factionName).toList();
-        warAllyIndex = clampIndex(warAllyIndex, allyNames.size());
-        warAllyDropdown = addRenderableWidget(new DropdownWidget(left + 20, top + 88, 235, 20,
-                allyNames.isEmpty() ? List.of("No allied faction") : allyNames, warAllyIndex,
-                value -> warAllyIndex = Math.max(0, allyNames.indexOf(value))));
-
-        for (int i = 0; i < Math.min(5, snapshot.wars().size()); i++) {
-            DiplomacySnapshot.WarEntry war = snapshot.wars().get(i);
-            int y = top + 128 + i * 43;
-            boolean settlementWar = "SETTLEMENT_WAR".equals(war.type());
-            boolean fullFactionConflict = !settlementWar || (war.attackerFactionJoined() && war.defenderFactionJoined());
-            boolean viewerJoinedSettlementWar = settlementWar
-                    && ((war.viewerIsAttackerParent() && war.attackerFactionJoined())
-                    || (war.viewerIsDefenderParent() && war.defenderFactionJoined()));
-            boolean viewerIsParent = war.viewerIsAttackerParent() || war.viewerIsDefenderParent();
-            boolean maySendAid = snapshot.canManage() && viewerIsParent;
-
-            if (settlementWar && !fullFactionConflict) {
-                if (!viewerJoinedSettlementWar && war.viewerIsDefenderParent()) {
-                    Button ignore = addRenderableWidget(Button.builder(Component.literal(war.viewerIgnoredIntervention() ? "Ignored" : "Ignore"), b -> sendToFaction("IGNORE_SETTLEMENT_WAR", snapshot.ownFactionId(), null, war.id(), ""))
-                            .bounds(left + 286, y, 52, 20).build());
-                    ignore.active = snapshot.canManage() && !war.viewerIgnoredIntervention();
-                }
-                Button aid = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> minecraft.setScreen(new WarAidScreen(this, snapshot, war)))
-                        .bounds(left + 342, y, 64, 20).build());
-                aid.active = maySendAid;
-                if (!viewerJoinedSettlementWar && viewerIsParent) {
-                    Button join = addRenderableWidget(Button.builder(Component.literal("Join War"), b -> sendToFaction("JOIN_SETTLEMENT_WAR", snapshot.ownFactionId(), null, war.id(), ""))
-                            .bounds(left + 410, y, 64, 20).build());
-                    join.active = snapshot.canManage();
-                }
-            } else {
-                if (settlementWar && maySendAid) {
-                    Button aid = addRenderableWidget(Button.builder(Component.literal("Send Aid"), b -> minecraft.setScreen(new WarAidScreen(this, snapshot, war)))
-                            .bounds(left + 286, y, 82, 20).build());
-                    aid.active = true;
-                }
-                Button call = addRenderableWidget(Button.builder(Component.literal("Call Ally"), b -> sendToFaction("CALL_TO_WAR", selectedWarAllyId(), null, war.id(), ""))
-                        .bounds(left + 374, y, 72, 20).build());
-                call.active = snapshot.canManage() && !allies.isEmpty();
+        if (selected() == null) return;
+        addRenderableWidget(Button.builder(Component.literal("WAR"), b -> { warType = CampaignData.WarType.WAR; goalIndex = settlementIndex = 0; rebuild(); })
+                .bounds(left + 240, top + 124, 130, 22).build());
+        addRenderableWidget(Button.builder(Component.literal("RAID"), b -> { warType = CampaignData.WarType.RAID; goalIndex = settlementIndex = 0; rebuild(); })
+                .bounds(left + 376, top + 124, 130, 22).build());
+        List<CampaignData.WarGoal> goals = goals(); List<String> names = goals.stream().map(CampaignData.WarGoal::displayName).toList();
+        goalIndex = clamp(goalIndex, names.size());
+        addRenderableWidget(new DropdownWidget(left + 240, top + 174, 266, 20, names, goalIndex, value -> {
+            goalIndex = Math.max(0, names.indexOf(value)); rebuild();
+        }));
+        List<DiplomacySnapshot.SettlementTarget> settlements = targetSettlements();
+        if (selectedGoal().requiresSettlement()) {
+            List<String> settlementNames = settlements.stream().map(DiplomacySnapshot.SettlementTarget::display).toList();
+            settlementIndex = clamp(settlementIndex, settlementNames.size());
+            addRenderableWidget(new DropdownWidget(left + 240, top + 224, 266, 20,
+                    settlementNames.isEmpty() ? List.of("No eligible holding") : settlementNames, settlementIndex,
+                    value -> settlementIndex = Math.max(0, settlementNames.indexOf(value))));
+        }
+        if (selectedGoal().custom()) {
+            customReason = new EditBox(font, left + 240, top + 274, 360, 20, Component.literal("Casus Belli"));
+            customReason.setMaxLength(100); customReason.setHint(Component.literal("Required written reason"));
+            customReason.setResponder(value -> updateDeclareButton()); addRenderableWidget(customReason);
+        }
+        if (warType == CampaignData.WarType.WAR) {
+            int allyY = top + 306;
+            for (DiplomacySnapshot.RelationEntry ally : offensiveAllies()) {
+                boolean chosen = selectedAllies.contains(ally.factionId());
+                addRenderableWidget(Button.builder(Component.literal((chosen ? "☑ " : "☐ ") + ally.factionName()), b -> {
+                    if (!selectedAllies.add(ally.factionId())) selectedAllies.remove(ally.factionId()); rebuild();
+                }).bounds(left + 240, allyY, 266, 18).build());
+                allyY += 20;
             }
-            Button peace = addRenderableWidget(Button.builder(Component.literal("Peace Terms"), b -> minecraft.setScreen(new PeaceTreatyScreen(this, snapshot, war)))
-                    .bounds(left + 478, y, 72, 20).build());
-            boolean managesWarSettlement = manageableSettlements().stream().anyMatch(s -> s.settlementId().equals(war.attackerSettlementId()) || s.settlementId().equals(war.targetSettlementId()));
-            boolean factionMayNegotiate = snapshot.canManage() && (!settlementWar || fullFactionConflict || viewerJoinedSettlementWar);
-            peace.active = managesWarSettlement || factionMayNegotiate;
+        }
+        declareButton = addRenderableWidget(Button.builder(Component.literal("DECLARE " + warType.displayName().toUpperCase(Locale.ROOT)), b -> declareConflict())
+                .bounds(left + 508, top + H - 100, 200, 22).build());
+        updateDeclareButton();
+    }
+
+    private void agreementWidgets() {
+        DiplomacySnapshot.RelationEntry target = selected(); if (target == null) return;
+        if (!"NEUTRAL".equals(target.state()) && !"WAR".equals(target.state()))
+            addRenderableWidget(Button.builder(Component.literal("END " + pretty(target.state()).toUpperCase(Locale.ROOT)), b -> send("BREAK_TREATY", null, null, ""))
+                    .bounds(left + 510, top + 180, 198, 22).build());
+        if (snapshot.ownFactionId().equals(target.overlordId()))
+            addRenderableWidget(Button.builder(Component.literal("RELEASE VASSAL"), b -> send("RELEASE_VASSAL", null, null, ""))
+                    .bounds(left + 510, top + 214, 198, 22).build());
+        if (snapshot.ownFactionId().equals(target.vassalId()) && target.factionId().equals(target.overlordId())) {
+            addRenderableWidget(Button.builder(Component.literal("REQUEST INDEPENDENCE"), b -> send("REQUEST_INDEPENDENCE", null, null, ""))
+                    .bounds(left + 510, top + 214, 198, 22).build());
+            int lower = nextLowerTribute(target.tributeRate());
+            if (lower > 0) addRenderableWidget(Button.builder(Component.literal("REQUEST " + lower + "% TRIBUTE"), b -> send("REQUEST_LOWER_TRIBUTE", null, null, Integer.toString(lower)))
+                    .bounds(left + 510, top + 248, 198, 22).build());
+        }
+        DiplomacySnapshot.WarEntry war = warWith(target.factionId());
+        if (war != null) addRenderableWidget(Button.builder(Component.literal(war.type().equals("RAID") ? "END RAID" : "NEGOTIATE PEACE"), b -> {
+            if ("RAID".equals(war.type())) send("END_RAID", null, war.id(), "");
+            else { draftTerm = CampaignData.ProposalType.PEACE; overlay = Overlay.NEGOTIATION; rebuild(); }
+        }).bounds(left + 510, top + 282, 198, 22).build());
+        if (war != null && "WAR".equals(war.type())) {
+            boolean defending = snapshot.ownFactionId().equals(war.defenderFactionId()) || war.supportingDefenders().contains(snapshot.ownFactionName());
+            int y = top + 316;
+            for (DiplomacySnapshot.RelationEntry ally : snapshot.relations().stream()
+                    .filter(v -> "MILITARY_ALLIANCE".equals(v.state()) || defending && "DEFENSIVE_ALLIANCE".equals(v.state()))
+                    .filter(v -> !war.attackerFactionId().equals(v.factionId()) && !war.defenderFactionId().equals(v.factionId())).toList()) {
+                addRenderableWidget(Button.builder(Component.literal("CALL " + ally.factionName()), b -> sendToFaction("CALL_TO_WAR", ally.factionId(), null, war.id(), ""))
+                        .bounds(left + 510, y, 198, 18).build());
+                y += 20;
+            }
         }
     }
 
-    private List<DiplomacySnapshot.SettlementTarget> manageableSettlements() {
-        return snapshot.settlements().stream().filter(DiplomacySnapshot.SettlementTarget::manageable).toList();
-    }
-
-    private List<DiplomacySnapshot.SettlementTarget> targetSettlements() {
-        DiplomacySnapshot.SettlementTarget source = selectedSourceSettlement();
-        return snapshot.settlements().stream()
-                .filter(value -> source == null || !value.settlementId().equals(source.settlementId()))
-                .filter(value -> !value.manageable())
-                .toList();
-    }
-
-    private List<DiplomacySnapshot.SettlementTarget> factionTargetSettlements() {
-        return snapshot.settlements().stream().filter(value -> value.factionId().equals(selectedFactionId())).toList();
-    }
-
-    private List<CampaignData.WarGoal> goals() {
-        CampaignData.WarType selected = selectedWarType();
-        return Arrays.stream(CampaignData.WarGoal.values()).filter(value -> value.appliesTo(selected)).toList();
-    }
-
-    private CampaignData.WarType selectedWarType() {
-        List<CampaignData.WarType> values = supportedWarTypes();
-        return values.get(clampIndex(warTypeIndex, values.size()));
-    }
-
-    private String selectedFactionId() {
-        if (snapshot.relations().isEmpty()) return "";
-        return snapshot.relations().get(clampIndex(relationIndex, snapshot.relations().size())).factionId();
-    }
-    private String selectedFactionName() {
-        if (snapshot.relations().isEmpty()) return "None";
-        return snapshot.relations().get(clampIndex(relationIndex, snapshot.relations().size())).factionName();
-    }
-
-    private DiplomacySnapshot.SettlementTarget selectedSourceSettlement() {
-        List<DiplomacySnapshot.SettlementTarget> values = manageableSettlements();
-        return values.isEmpty() ? null : values.get(clampIndex(sourceSettlementIndex, values.size()));
-    }
-    private DiplomacySnapshot.SettlementTarget selectedTargetSettlement() {
-        List<DiplomacySnapshot.SettlementTarget> values = selectedWarType() == CampaignData.WarType.SETTLEMENT_WAR ? targetSettlements() : factionTargetSettlements();
-        return values.isEmpty() ? null : values.get(clampIndex(targetSettlementIndex, values.size()));
-    }
-    private CampaignData.WarGoal selectedGoal() {
-        List<CampaignData.WarGoal> values = goals();
-        return values.isEmpty() ? CampaignData.WarGoal.defaultFor(selectedWarType()) : values.get(clampIndex(goalIndex, values.size()));
-    }
-
-    private boolean declarationValid() {
-        if (selectedWarType() == CampaignData.WarType.SETTLEMENT_WAR) {
-            if (selectedSourceSettlement() == null || selectedTargetSettlement() == null) return false;
-            return selectedGoal() != CampaignData.WarGoal.CUSTOM || (customCasusBelli != null && !customCasusBelli.getValue().trim().isBlank());
+    private void correspondenceWidgets() {
+        for (int i = 0; i < Math.min(9, snapshot.proposals().size()); i++) {
+            DiplomacySnapshot.ProposalEntry proposal = snapshot.proposals().get(i); int y = top + 142 + i * 30;
+            if (proposal.incoming() && "PENDING".equals(proposal.status())) {
+                addRenderableWidget(Button.builder(Component.literal("ACCEPT"), b -> sendToFaction(proposal.structuredPeace() ? "ACCEPT_PEACE_TERMS" : "ACCEPT_PROPOSAL", proposal.fromFactionId(), proposal.id(), proposal.linkedWar(), ""))
+                        .bounds(left + 550, y, 72, 20).build());
+                Button reject = addRenderableWidget(Button.builder(Component.literal("DECLINE"), b -> sendToFaction(proposal.structuredPeace() ? "REJECT_PEACE_TERMS" : "REJECT_PROPOSAL", proposal.fromFactionId(), proposal.id(), proposal.linkedWar(), ""))
+                        .bounds(left + 628, y, 80, 20).build());
+                reject.active = proposal.canReject();
+            } else if (!proposal.incoming() && "PENDING".equals(proposal.status()) && !proposal.structuredPeace()) {
+                addRenderableWidget(Button.builder(Component.literal("WITHDRAW"), b -> sendToFaction("WITHDRAW_PROPOSAL", proposal.toFactionId(), proposal.id(), proposal.linkedWar(), ""))
+                        .bounds(left + 628, y, 80, 20).build());
+            }
         }
-        if (snapshot.relations().isEmpty()) return false;
-        if (selectedWarType() != CampaignData.WarType.FACTION_WAR && selectedTargetSettlement() == null) return false;
-        return selectedGoal() != CampaignData.WarGoal.CUSTOM || (customCasusBelli != null && !customCasusBelli.getValue().trim().isBlank());
+    }
+
+    private void beginNegotiation() {
+        DiplomacySnapshot.WarEntry conflict = selected() == null ? null : warWith(selected().factionId());
+        draftTerm = conflict != null && "WAR".equals(conflict.type()) ? CampaignData.ProposalType.PEACE : null;
+        overlay = Overlay.NEGOTIATION; rebuild();
+    }
+
+    private void sendDraft() {
+        if (draftTerm == null) return;
+        if (draftTerm == CampaignData.ProposalType.PEACE) {
+            DiplomacySnapshot.WarEntry peaceWar = selected() == null ? null : warWith(selected().factionId());
+            if (peaceWar != null && minecraft != null) minecraft.setScreen(new PeaceTreatyScreen(this, snapshot, peaceWar));
+            return;
+        }
+        String action = switch (draftTerm) {
+            case NON_AGGRESSION -> "PROPOSE_NAP";
+            case DEFENSIVE_ALLIANCE -> "PROPOSE_DEFENSIVE";
+            case MILITARY_ALLIANCE -> "PROPOSE_MILITARY";
+            case VASSALAGE -> "PROPOSE_VASSALAGE";
+            case REQUEST_INDEPENDENCE -> "REQUEST_INDEPENDENCE";
+            case REQUEST_TRIBUTE -> "REQUEST_LOWER_TRIBUTE";
+            case PEACE -> "OFFER_PEACE";
+            case CALL_TO_WAR -> "CALL_TO_WAR";
+            case REQUEST_JOIN_WAR -> "REQUEST_JOIN_WAR";
+        };
+        DiplomacySnapshot.WarEntry war = selected() == null ? null : warWith(selected().factionId());
+        send(action, null, war == null ? null : war.id(), "");
     }
 
     private void declareConflict() {
-        CampaignData.WarType type = selectedWarType();
-        String custom = customCasusBelli == null ? "" : customCasusBelli.getValue().replace('|', '/').trim();
-        if (type == CampaignData.WarType.SETTLEMENT_WAR) {
-            DiplomacySnapshot.SettlementTarget source = selectedSourceSettlement();
-            DiplomacySnapshot.SettlementTarget target = selectedTargetSettlement();
-            if (source == null || target == null) return;
-            String extra = "SETTLEMENT_WAR|" + source.settlementId() + "|" + target.settlementId() + "|" + selectedGoal().name() + "|" + custom;
-            sendToFaction("DECLARE_WAR", target.factionId(), null, null, extra);
-            return;
-        }
-        DiplomacySnapshot.SettlementTarget target = selectedTargetSettlement();
-        String extra = type.name() + "|" + (target == null ? "" : target.settlementId()) + "|" + selectedGoal().name() + "|" + custom;
-        send("DECLARE_WAR", null, null, extra);
+        DiplomacySnapshot.SettlementTarget settlement = selectedGoal().requiresSettlement() && !targetSettlements().isEmpty()
+                ? targetSettlements().get(clamp(settlementIndex, targetSettlements().size())) : null;
+        String reason = customReason == null ? "" : customReason.getValue().replace('|', '/').trim();
+        send("DECLARE_WAR", null, null, warType.name() + "|" + (settlement == null ? "" : settlement.settlementId()) + "|" + selectedGoal().name() + "|" + reason + "|" + String.join(",", selectedAllies));
     }
 
-    private void send(String action, UUID proposal, UUID war, String extra) { sendToFaction(action, selectedFactionId(), proposal, war, extra); }
-    private void sendToFaction(String action, String targetFaction, UUID proposal, UUID war, String extra) {
-        SettlementNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket(action, targetFaction == null ? "" : targetFaction, proposal, war, extra));
-    }
-    private List<DiplomacySnapshot.RelationEntry> alliedRelations() {
-        return snapshot.relations().stream().filter(v -> "DEFENSIVE_ALLIANCE".equals(v.state()) || "MILITARY_ALLIANCE".equals(v.state())).toList();
-    }
-    private String selectedWarAllyId() {
-        List<DiplomacySnapshot.RelationEntry> allies = alliedRelations();
-        return allies.isEmpty() ? "" : allies.get(clampIndex(warAllyIndex, allies.size())).factionId();
+    private void updateDeclareButton() {
+        if (declareButton == null) return;
+        declareButton.active = snapshot.canDeclareWar() && selected() != null
+                && (!selectedGoal().requiresSettlement() || !targetSettlements().isEmpty())
+                && (!selectedGoal().custom() || customReason != null && !customReason.getValue().trim().isBlank());
     }
 
-    @Override public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(graphics);
-        int uiMouseX = campaignMouseX(mouseX);
-        int uiMouseY = campaignMouseY(mouseY);
-        beginCampaignRender(graphics);
-        drawCampaignFrame(graphics, left, top, W, H, 39);
-        drawCampaignPanel(graphics, left + 12, top + 72, left + W - 12, top + H - 42);
-        String polity = snapshot.ownFactionName().isBlank() ? "INDEPENDENT" : snapshot.ownFactionName().toUpperCase(Locale.ROOT);
-        graphics.drawCenteredString(font, "CAMPAIGN DIPLOMACY - " + polity, left + W / 2, top + 12, CAMPAIGN_TITLE);
-        graphics.drawCenteredString(font, "Authority: [" + snapshot.viewerRank() + "]", left + W / 2, top + 25, snapshot.canManage() ? 0xFFA9D18E : 0xFFFFA080);
-        switch (tab) {
-            case RELATIONS -> renderRelations(graphics);
-            case DECLARE -> renderDeclaration(graphics);
-            case PROPOSALS -> renderProposals(graphics);
-            case WARS -> renderWars(graphics);
-        }
-        if (!snapshot.message().isBlank()) graphics.drawCenteredString(font, snapshot.message(), left + W / 2, top + H - 52, 0xFFFFD27A);
-        super.render(graphics, uiMouseX, uiMouseY, partialTick);
-        endCampaignRender(graphics);
+    private void select(int index) { if (overlay != Overlay.NONE) return; selectedIndex = selectedIndex == index ? -1 : index; draftTerm = null; scroll = 0; rebuild(); }
+    private void open(Overlay value) { overlay = value; rebuild(); }
+    private void closeOverlay() { overlay = overlay == Overlay.TERM_PICKER || overlay == Overlay.WAR ? Overlay.NEGOTIATION : Overlay.NONE; rebuild(); }
+    private DiplomacySnapshot.RelationEntry selected() { return selectedIndex < 0 || selectedIndex >= snapshot.relations().size() ? null : snapshot.relations().get(selectedIndex); }
+    private List<CampaignData.WarGoal> goals() { return Arrays.stream(CampaignData.WarGoal.values()).filter(v -> v.appliesTo(warType)).filter(this::eligibleGoal).toList(); }
+    private boolean eligibleGoal(CampaignData.WarGoal goal) {
+        DiplomacySnapshot.RelationEntry target = selected();
+        if (goal == CampaignData.WarGoal.INDEPENDENCE_WAR) return target != null && snapshot.ownFactionId().equals(target.vassalId()) && target.factionId().equals(target.overlordId());
+        if (goal == CampaignData.WarGoal.PUNITIVE_RAID || goal == CampaignData.WarGoal.BORDER_CLASH
+                || goal == CampaignData.WarGoal.RECOVER_TERRITORY || goal == CampaignData.WarGoal.LIBERATE_SETTLEMENT
+                || goal == CampaignData.WarGoal.FORCE_WITHDRAWAL || goal == CampaignData.WarGoal.PUNITIVE_WAR) return false;
+        return true;
+    }
+    private CampaignData.WarGoal selectedGoal() { List<CampaignData.WarGoal> values = goals(); return values.isEmpty() ? CampaignData.WarGoal.defaultFor(warType) : values.get(clamp(goalIndex, values.size())); }
+    private List<DiplomacySnapshot.SettlementTarget> targetSettlements() { DiplomacySnapshot.RelationEntry target = selected(); return target == null ? List.of() : snapshot.settlements().stream().filter(v -> target.factionId().equals(v.factionId())).toList(); }
+    private DiplomacySnapshot.WarEntry warWith(String faction) { return snapshot.wars().stream().filter(w -> faction.equals(w.attackerFactionId()) || faction.equals(w.defenderFactionId())).findFirst().orElse(null); }
+    private DiplomacySnapshot.WarEntry joinableWar() { DiplomacySnapshot.RelationEntry target = selected(); if (target == null) return null; return snapshot.wars().stream().filter(w -> "WAR".equals(w.type())).filter(w -> target.factionId().equals(w.attackerFactionId()) || target.factionId().equals(w.defenderFactionId())).filter(w -> !snapshot.ownFactionId().equals(w.attackerFactionId()) && !snapshot.ownFactionId().equals(w.defenderFactionId())).findFirst().orElse(null); }
+    private List<DiplomacySnapshot.RelationEntry> offensiveAllies() { return snapshot.relations().stream().filter(v -> "MILITARY_ALLIANCE".equals(v.state())).filter(v -> selected() == null || !v.factionId().equals(selected().factionId())).toList(); }
+    private void send(String action, UUID proposal, UUID war, String extra) { sendToFaction(action, selected() == null ? "" : selected().factionId(), proposal, war, extra); }
+    private void sendToFaction(String action, String target, UUID proposal, UUID war, String extra) { SettlementNetwork.CHANNEL.sendToServer(new DiplomacyActionPacket(action, target == null ? "" : target, proposal, war, extra)); }
+
+    @Override public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        renderBackground(g); int ux = campaignMouseX(mouseX), uy = campaignMouseY(mouseY); beginCampaignRender(g);
+        drawCampaignFrame(g, left, top, W, H, 40); g.drawString(font, "LAST PAGANS · DIPLOMACY", left + 20, top + 19, 0xFFD8BA83, false);
+        renderLeft(g); renderPoliticalMap(g); if (selected() != null) renderDossier(g, selected()); if (overlay != Overlay.NONE) renderOverlay(g);
+        if (!snapshot.message().isBlank()) g.drawCenteredString(font, fitText(snapshot.message(), W - 60), left + W / 2, top + H - 18, CAMPAIGN_MESSAGE);
+        super.render(g, ux, uy, partialTick); endCampaignRender(g);
     }
 
-    private void renderRelations(GuiGraphics graphics) {
-        graphics.drawString(font, "Target faction", left + 20, top + 78, 0xFFE7D8B0, false);
-        if (snapshot.relations().isEmpty()) { graphics.drawString(font, "No other Recruits factions exist.", left + 20, top + 120, 0xFFAAAAAA, false); return; }
-        DiplomacySnapshot.RelationEntry r = snapshot.relations().get(clampIndex(relationIndex, snapshot.relations().size()));
-        graphics.drawString(font, "CURRENT RELATIONSHIP", left + 292, top + 84, 0xFFE7D8B0, false);
-        stat(graphics, "Diplomatic state", pretty(r.state()), 292, 106);
-        stat(graphics, "Political relations", r.relationship(), 292, 125);
-        stat(graphics, "Religious compatibility", signed(r.faithModifier()), 292, 144);
-        stat(graphics, "Reliability", signed(r.reliability()), 292, 163);
-        stat(graphics, "NAP threshold", r.napMinimum(), 292, 182);
-        stat(graphics, "Alliance thresholds", r.defensiveMinimum() + " / " + r.militaryMinimum(), 292, 201);
-        stat(graphics, "Vassalage threshold", r.vassalMinimum(), 292, 220);
-        graphics.drawWordWrap(font, Component.literal("Formal war controls battlefield hostility."), left + 20, top + 132, 235, 0xFFAAAAAA);
+    private void renderLeft(GuiGraphics g) {
+        drawCampaignPanel(g, left + 12, top + 48, left + 228, top + H - 32); DiplomacySnapshot.PolityDetails d = snapshot.ownDetails();
+        g.drawString(font, "YOUR FACTION", left + 22, top + 60, 0xFFD8BA83, false); g.drawString(font, snapshot.ownFactionName(), left + 22, top + 78, 0xFFF1E5D0, false);
+        compact(g, "Ruler", d.ruler(), 22, 94); compact(g, "Capital", d.capital(), 22, 106); compact(g, "Faith", d.faith(), 22, 118); compact(g, "Culture", d.culture(), 22, 130);
+        compact(g, "Authority", snapshot.viewerRank(), 22, 142); g.drawString(font, "KNOWN FACTIONS", left + 22, top + 154, 0xFFD8BA83, false);
     }
 
-    private void renderDeclaration(GuiGraphics graphics) {
-        CampaignData.WarType type = selectedWarType();
-        if (type == CampaignData.WarType.SETTLEMENT_WAR) {
-            graphics.drawString(font, "1. Conflict tier", left + 20, top + 79, 0xFFE7D8B0, false);
-            graphics.drawString(font, "2. Your settlement", left + 294, top + 79, 0xFFE7D8B0, false);
-            graphics.drawString(font, "3. Target settlement", left + 20, top + 131, 0xFFE7D8B0, false);
-            graphics.drawString(font, "4. Casus Belli", left + 294, top + 131, 0xFFE7D8B0, false);
-        } else {
-            graphics.drawString(font, "1. Conflict tier", left + 20, top + 79, 0xFFE7D8B0, false);
-            graphics.drawString(font, "2. Target faction", left + 294, top + 79, 0xFFE7D8B0, false);
-            if (type != CampaignData.WarType.FACTION_WAR) graphics.drawString(font, "3. Target settlement", left + 20, top + 131, 0xFFE7D8B0, false);
-            graphics.drawString(font, type == CampaignData.WarType.FACTION_WAR ? "3. Casus Belli" : "4. Casus Belli", left + 294, top + 131, 0xFFE7D8B0, false);
-        }
-        if (selectedGoal() == CampaignData.WarGoal.CUSTOM) graphics.drawString(font, "Custom Casus Belli", left + 20, top + 176, 0xFFE7D8B0, false);
-
-        drawCampaignInset(graphics, left + 20, top + 218, left + W - 20, top + 282);
-        graphics.drawString(font, "DECLARATION SUMMARY", left + 30, top + 227, 0xFFFFD27A, false);
-        if (type == CampaignData.WarType.SETTLEMENT_WAR) {
-            DiplomacySnapshot.SettlementTarget source = selectedSourceSettlement();
-            DiplomacySnapshot.SettlementTarget target = selectedTargetSettlement();
-            stat(graphics, "Attacker", source == null ? "None" : source.settlementName(), 30, 246);
-            stat(graphics, "Defender", target == null ? "None" : target.settlementName(), 285, 246);
-            stat(graphics, "Attacker parent", source == null || source.factionName().isBlank() ? "Independent" : source.factionName(), 30, 264);
-            stat(graphics, "Defender parent", target == null || target.factionName().isBlank() ? "Independent" : target.factionName(), 285, 264);
-        } else {
-            stat(graphics, "Attacker", snapshot.ownFactionName(), 30, 246);
-            stat(graphics, "Defender", selectedFactionName(), 285, 246);
-            stat(graphics, "Casus Belli", selectedGoal().displayName(), 30, 264);
-            stat(graphics, "Conflict tier", type.displayName(), 285, 264);
-        }
-        graphics.drawString(font, type == CampaignData.WarType.SETTLEMENT_WAR
-                ? "Parent factions are observers until they send aid or explicitly join; joining escalates the conflict."
-                : "A full faction declaration changes Recruits relations to Enemy only after server-side verification.",
-                left + 20, top + 320, 0xFFB8B0A0, false);
+    private void renderPoliticalMap(GuiGraphics g) {
+        int right = selected() == null ? left + W - 14 : left + W - 294; drawCampaignPanel(g, left + 236, top + 48, right, top + H - 32);
+        g.drawCenteredString(font, "POLITICAL MAP", (left + 236 + right) / 2, top + 60, 0xFFD8BA83);
+        g.drawCenteredString(font, "Authoritative settlement positions", (left + 236 + right) / 2, top + 72, 0xFF999999);
     }
 
-    private void renderProposals(GuiGraphics graphics) {
-        graphics.drawString(font, "PENDING PROPOSALS", left + 20, top + 82, 0xFFE7D8B0, false);
-        if (snapshot.proposals().isEmpty()) { graphics.drawString(font, "No pending diplomatic proposals.", left + 20, top + 108, 0xFFAAAAAA, false); return; }
-        for (int i = 0; i < Math.min(8, snapshot.proposals().size()); i++) {
-            DiplomacySnapshot.ProposalEntry p = snapshot.proposals().get(i); int y = top + 100 + i * 28;
-            graphics.drawString(font, pretty(p.type()) + " from " + p.fromFactionName(), left + 20, y, 0xFFFFFFFF, false);
-            if (!p.summary().isBlank()) graphics.drawString(font, font.plainSubstrByWidth(p.summary(), 335), left + 20, y + 11, p.canReject() ? 0xFFAAAAAA : 0xFFFFD27A, false);
-            else if (p.linkedWar() != null) graphics.drawString(font, "Linked war: " + p.linkedWar(), left + 20, y + 11, 0xFF888888, false);
+    private void renderDossier(GuiGraphics g, DiplomacySnapshot.RelationEntry r) {
+        int x = left + W - 286; drawCampaignPanel(g, x, top + 48, left + W - 12, top + H - 32); DiplomacySnapshot.PolityDetails d = r.details();
+        g.drawString(font, "FACTION DETAILS", x + 12, top + 60, 0xFFD8BA83, false); g.drawString(font, r.factionName(), x + 12, top + 78, 0xFFF1E5D0, false);
+        compactAt(g, "Ruler", d.ruler(), x + 12, top + 96); compactAt(g, "Government", d.government(), x + 12, top + 108); compactAt(g, "Capital", d.capital(), x + 12, top + 120);
+        compactAt(g, "Culture", d.culture(), x + 12, top + 138); compactAt(g, "Faith", d.faith(), x + 12, top + 156); compactAt(g, "Holdings", d.holdings(), x + 12, top + 168); compactAt(g, "Reliability", signed(r.reliability()), x + 12, top + 180);
+        g.drawString(font, "RELATIONSHIP FACTORS  " + signed(r.relationship()), x + 12, top + 263, 0xFFD8BA83, false); int y = top + 282;
+        for (DiplomacySnapshot.RelationshipFactor f : r.factors()) {
+            int rowTop = y;
+            for (net.minecraft.util.FormattedCharSequence line : font.split(Component.literal(f.label()), 190)) {
+                if (y >= top + H - 62) break;
+                g.drawString(font, line, x + 12, y, 0xFFF1E5D0, false); y += 10;
+            }
+            g.drawString(font, signed(f.value()), left + W - 48, rowTop, f.value() < 0 ? 0xFFC77765 : 0xFF8DB16F, false);
+            y += 4;
+            if (y >= top + H - 62) break;
         }
     }
 
-    private void renderWars(GuiGraphics graphics) {
-        graphics.drawString(font, "Ally to call", left + 20, top + 78, 0xFFAAA084, false);
-        graphics.drawString(font, "ACTIVE WARS", left + 292, top + 78, 0xFFE7D8B0, false);
-        if (snapshot.wars().isEmpty()) { graphics.drawString(font, "No active wars relevant to you.", left + 20, top + 142, 0xFFAAAAAA, false); return; }
-        for (int i = 0; i < Math.min(5, snapshot.wars().size()); i++) {
-            DiplomacySnapshot.WarEntry war = snapshot.wars().get(i); int y = top + 125 + i * 43;
-            String attackers = war.attackerSettlementName().isBlank() ? war.attackerFactionName() : war.attackerSettlementName();
-            String defenders = war.targetSettlementName().isBlank() ? war.defenderFactionName() : war.targetSettlementName();
-            graphics.drawString(font, war.typeName() + " - " + attackers + " vs " + defenders, left + 20, y, 0xFFFFB0A0, false);
-            graphics.drawString(font, "Casus Belli: " + war.goalName() + " · War score " + signed(war.warScore()), left + 20, y + 12, 0xFFAAAAAA, false);
-            graphics.drawString(font, "Escalation: " + war.typeName(), left + 20, y + 23, 0xFF8FA8C8, false);
+    private void renderOverlay(GuiGraphics g) {
+        g.fill(left + 4, top + 42, left + W - 4, top + H - 28, 0xCC15120F); int x1 = left + 74, y1 = top + 54, x2 = left + W - 74, y2 = top + H - 42;
+        g.fill(x1, y1, x2, y2, 0xFFE4D2AD); g.renderOutline(x1, y1, x2 - x1, y2 - y1, 0xFF79664C);
+        switch (overlay) {
+            case OWN_CULTURE -> renderCulture(g, snapshot.ownDetails().culture(), snapshot.ownFactionName());
+            case TARGET_CULTURE -> renderCulture(g, selected() == null ? "" : selected().details().culture(), selected() == null ? "" : selected().factionName());
+            case RELATIONSHIP -> renderRelationship(g); case AGREEMENTS -> renderAgreements(g); case NEGOTIATION -> renderNegotiation(g);
+            case TERM_PICKER -> {
+                title(g, "ADD DIPLOMATIC TERM"); g.drawString(font, "Available terms", left + 290, top + 116, 0xFF493B2B, false);
+                g.drawString(font, "Trade Agreement unavailable: no authoritative province resource or route data", left + 290, top + 278, 0xFF79664C, false);
+            }
+            case WAR -> renderWar(g); case CORRESPONDENCE -> renderCorrespondence(g); default -> { }
         }
     }
 
-    private void stat(GuiGraphics graphics, String label, Object value, int x, int y) { graphics.drawString(font, label + ": " + value, left + x, top + y, 0xFFFFFFFF, false); }
-    private static int clampIndex(int index, int size) { return size <= 0 ? 0 : Math.max(0, Math.min(index, size - 1)); }
+    private void renderCulture(GuiGraphics g, String cultureName, String faction) {
+        title(g, "CULTURAL DOSSIER · " + cultureName.toUpperCase(Locale.ROOT)); CultureDefinition definition = CultureDefinition.get(cultureName);
+        if (definition == null) { g.drawString(font, "No culture definition", left + 100, top + 120, 0xFF493B2B, false); return; }
+        g.drawString(font, faction, left + 100, top + 96, 0xFF493B2B, false); g.drawString(font, "Primary faith: " + definition.primaryFaith(), left + 100, top + 116, 0xFF493B2B, false);
+        g.drawString(font, "Secondary faith(s): " + (definition.secondaryFaiths().isEmpty() ? "None" : String.join(", ", definition.secondaryFaiths())), left + 100, top + 130, 0xFF493B2B, false);
+        g.drawString(font, "ADVANTAGES", left + 100, top + 154, 0xFF493B2B, false); g.drawString(font, "DRAWBACKS", left + 430, top + 154, 0xFF493B2B, false);
+        renderTraitList(g, definition.advantages(), left + 100, top + 172, 300); renderTraitList(g, definition.drawbacks(), left + 430, top + 172, 300);
+    }
+    private void renderTraitList(GuiGraphics g, List<String> values, int x, int y, int width) {
+        int cursor = y;
+        for (int i = scroll; i < values.size() && cursor < top + H - 72; i++) {
+            String source = values.get(i);
+            String status = cultureTraitActive(source) ? " · Active" : " · Planned / not currently applied";
+            for (net.minecraft.util.FormattedCharSequence line : font.split(Component.literal("• " + source + status), width)) {
+                if (cursor >= top + H - 72) break;
+                g.drawString(font, line, x, cursor, 0xFF493B2B, false); cursor += 11;
+            }
+            cursor += 5;
+        }
+    }
+    private void renderRelationship(GuiGraphics g) {
+        title(g, "FULL RELATIONSHIP BREAKDOWN"); DiplomacySnapshot.RelationEntry target = selected(); if (target == null) return; int y = top + 112;
+        for (int i = 0; i < target.factors().size(); i++) { DiplomacySnapshot.RelationshipFactor f = target.factors().get(i); g.drawString(font, f.label(), left + 105, y + i * 34, 0xFF493B2B, false); g.drawString(font, f.explanation(), left + 105, y + 12 + i * 34, 0xFF79664C, false); g.drawString(font, signed(f.value()), left + W - 120, y + i * 34, f.value() < 0 ? 0xFF9A4F43 : 0xFF55763D, false); }
+        g.drawString(font, "TOTAL  " + signed(target.relationship()), left + W - 200, top + H - 78, 0xFF493B2B, false);
+    }
+    private void renderAgreements(GuiGraphics g) {
+        title(g, "AGREEMENTS & OBLIGATIONS"); DiplomacySnapshot.RelationEntry target = selected(); if (target == null) return;
+        g.drawString(font, snapshot.ownFactionName() + " ↔ " + target.factionName(), left + 105, top + 96, 0xFF493B2B, false); g.drawString(font, "ACTIVE CONTRACTS & CONFLICTS", left + 105, top + 128, 0xFF493B2B, false);
+        String state = pretty(target.state()); g.drawString(font, "• " + ("Neutral".equals(state) ? "No active bilateral treaty" : state), left + 105, top + 150, 0xFF493B2B, false);
+        if (target.tributeRate() > 0) g.drawString(font, "• Vassalage · " + target.tributeRate() + "% tribute" + (target.vassalSuspended() ? " · SUSPENDED" : " · projected " + target.projectedTribute() + " Silver"), left + 105, top + 166, 0xFF493B2B, false);
+        DiplomacySnapshot.WarEntry war = warWith(target.factionId()); if (war != null) g.drawString(font, "• " + war.typeName() + " · " + war.goalName() + " · score " + signed(war.warScore()), left + 105, top + 182, 0xFF493B2B, false);
+        g.drawString(font, "MANAGE DIPLOMATIC OBLIGATIONS", left + 500, top + 128, 0xFF493B2B, false);
+    }
+    private void renderNegotiation(GuiGraphics g) {
+        title(g, "NEGOTIATION · " + (selected() == null ? "" : selected().factionName())); g.drawString(font, "YOUR DEMANDS", left + 118, top + 120, 0xFF493B2B, false); g.drawString(font, "YOUR OFFERS", left + 444, top + 120, 0xFF493B2B, false);
+        if (draftTerm != null) { String term = pretty(draftTerm.name()); g.drawString(font, mutual(draftTerm) ? term + " (Mutual)" : term, left + 118, top + 150, 0xFF493B2B, false); if (mutual(draftTerm)) g.drawString(font, term + " (Mutual)", left + 444, top + 150, 0xFF493B2B, false); }
+    }
+    private void renderWar(GuiGraphics g) {
+        title(g, "DECLARE " + warType.displayName().toUpperCase(Locale.ROOT)); g.drawString(font, "Conflict type", left + 240, top + 110, 0xFF493B2B, false); g.drawString(font, "Casus Belli", left + 240, top + 160, 0xFF493B2B, false);
+        if (selectedGoal().requiresSettlement()) g.drawString(font, "Target holding", left + 240, top + 210, 0xFF493B2B, false); if (selectedGoal().custom()) g.drawString(font, "Written reason", left + 240, top + 260, 0xFF493B2B, false);
+        if (warType == CampaignData.WarType.WAR) g.drawString(font, "CALL MILITARY ALLIES", left + 240, top + 296, 0xFF493B2B, false);
+        else g.drawString(font, "Limited economic conflict; territorial terms are unavailable.", left + 240, top + 316, 0xFF79664C, false);
+    }
+    private void renderCorrespondence(GuiGraphics g) {
+        title(g, "CORRESPONDENCE · RECEIVED / SENT / HISTORY"); if (snapshot.proposals().isEmpty()) { g.drawString(font, "No diplomatic correspondence", left + 105, top + 120, 0xFF493B2B, false); return; }
+        for (int i = 0; i < Math.min(9, snapshot.proposals().size()); i++) { DiplomacySnapshot.ProposalEntry p = snapshot.proposals().get(i); int y = top + 144 + i * 30; String direction = p.incoming() ? "Received from " + p.fromFactionName() : "Sent to " + p.toFactionName(); g.drawString(font, pretty(p.type()) + " · " + direction + " · " + pretty(p.status()), left + 105, y, 0xFF493B2B, false); if (!p.summary().isBlank()) g.drawString(font, fitText(p.summary(), 390), left + 105, y + 11, 0xFF79664C, false); }
+    }
+
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) { if (overlay == Overlay.OWN_CULTURE || overlay == Overlay.TARGET_CULTURE) { scroll = Math.max(0, scroll + (delta < 0 ? 1 : -1)); return true; } return super.mouseScrolled(mouseX, mouseY, delta); }
+    @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (super.mouseClicked(mouseX, mouseY, button)) return true;
+        if (overlay != Overlay.NONE) return false;
+        double ux = campaignMouseX((int)mouseX), uy = campaignMouseY((int)mouseY);
+        int right = selected() == null ? left + W - 14 : left + W - 294;
+        if (ux >= left + 236 && ux <= right && uy >= top + 48 && uy <= top + H - 32) {
+            selectedIndex = -1; draftTerm = null; rebuild(); return true;
+        }
+        return false;
+    }
+    @Override public boolean keyPressed(int key, int scan, int mods) { if (key == 256 && overlay != Overlay.NONE) { closeOverlay(); return true; } if (key == 256 && selectedIndex >= 0) { selectedIndex = -1; rebuild(); return true; } return super.keyPressed(key, scan, mods); }
+    private void title(GuiGraphics g, String value) { g.drawString(font, value, left + 100, top + 72, 0xFF493B2B, false); }
+    private void compact(GuiGraphics g, String label, Object value, int x, int y) { compactAt(g, label, value, left + x, top + y); }
+    private void compactAt(GuiGraphics g, String label, Object value, int x, int y) { g.drawString(font, label + ": " + fitText(String.valueOf(value), 170), x, y, 0xFFF1E5D0, false); }
+    private static boolean mutual(CampaignData.ProposalType type) { return type == CampaignData.ProposalType.NON_AGGRESSION || type == CampaignData.ProposalType.DEFENSIVE_ALLIANCE || type == CampaignData.ProposalType.MILITARY_ALLIANCE || type == CampaignData.ProposalType.PEACE; }
+    private static boolean cultureTraitActive(String value) { String lower = value.toLowerCase(Locale.ROOT); return lower.contains("diplomatic penalty") || lower.contains("religious incompatibility penalties"); }
+    private static int nextLowerTribute(int current) { return current > 25 ? 25 : current > 10 ? 10 : current > 5 ? 5 : 0; }
+    private int relationIndex(String factionId) { for (int i = 0; i < snapshot.relations().size(); i++) if (snapshot.relations().get(i).factionId().equals(factionId)) return i; return -1; }
+    private int[] mapPoint(DiplomacySnapshot.SettlementTarget value, int minX, int minY, int maxX, int maxY) {
+        int worldMinX = snapshot.settlements().stream().mapToInt(DiplomacySnapshot.SettlementTarget::worldX).min().orElse(0);
+        int worldMaxX = snapshot.settlements().stream().mapToInt(DiplomacySnapshot.SettlementTarget::worldX).max().orElse(worldMinX + 1);
+        int worldMinZ = snapshot.settlements().stream().mapToInt(DiplomacySnapshot.SettlementTarget::worldZ).min().orElse(0);
+        int worldMaxZ = snapshot.settlements().stream().mapToInt(DiplomacySnapshot.SettlementTarget::worldZ).max().orElse(worldMinZ + 1);
+        double nx = worldMaxX == worldMinX ? 0.5D : (value.worldX() - worldMinX) / (double)(worldMaxX - worldMinX);
+        double nz = worldMaxZ == worldMinZ ? 0.5D : (value.worldZ() - worldMinZ) / (double)(worldMaxZ - worldMinZ);
+        return new int[]{minX + (int)Math.round(nx * Math.max(0, maxX - minX)), minY + (int)Math.round(nz * Math.max(0, maxY - minY))};
+    }
+    private static int clamp(int index, int size) { return size <= 0 ? 0 : Math.max(0, Math.min(index, size - 1)); }
     private static String signed(int value) { return value > 0 ? "+" + value : Integer.toString(value); }
     private static String pretty(String raw) { String v = raw == null ? "" : raw.replace('_', ' ').toLowerCase(Locale.ROOT); return v.isBlank() ? v : Character.toUpperCase(v.charAt(0)) + v.substring(1); }
-    private static List<CampaignData.WarType> supportedWarTypes() { return List.of(CampaignData.WarType.RAID, CampaignData.WarType.SKIRMISH, CampaignData.WarType.SETTLEMENT_WAR, CampaignData.WarType.FACTION_WAR); }
     @Override public boolean isPauseScreen() { return false; }
-    private enum Tab { RELATIONS, DECLARE, PROPOSALS, WARS }
+    private enum Overlay { NONE, OWN_CULTURE, TARGET_CULTURE, RELATIONSHIP, AGREEMENTS, NEGOTIATION, TERM_PICKER, WAR, CORRESPONDENCE }
 }

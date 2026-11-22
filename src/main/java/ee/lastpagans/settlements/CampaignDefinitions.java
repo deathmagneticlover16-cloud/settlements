@@ -16,6 +16,7 @@ public final class CampaignDefinitions {
     public static final List<String> RELIGIONS = List.of(
             "Catholic Christianity",
             "Orthodox Christianity",
+            "Celtic Paganism",
             "Baltic Paganism",
             "Finnic Paganism",
             "Norse Paganism",
@@ -42,7 +43,7 @@ public final class CampaignDefinitions {
         distance("Catholic Christianity", "Judaism", 55);
         distance("Orthodox Christianity", "Judaism", 50);
         distance("Islam", "Judaism", 35);
-        List<String> pagans = List.of("Baltic Paganism", "Finnic Paganism", "Norse Paganism", "Slavic Paganism", "Roman Paganism");
+        List<String> pagans = List.of("Celtic Paganism", "Baltic Paganism", "Finnic Paganism", "Norse Paganism", "Slavic Paganism", "Roman Paganism");
         for (int i = 0; i < pagans.size(); i++) for (int j = i + 1; j < pagans.size(); j++) distance(pagans.get(i), pagans.get(j), 28);
         for (String christian : List.of("Catholic Christianity", "Orthodox Christianity"))
             for (String pagan : pagans) distance(christian, pagan, 90);

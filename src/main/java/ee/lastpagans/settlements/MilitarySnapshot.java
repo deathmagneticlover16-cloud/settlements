@@ -22,7 +22,7 @@ public record MilitarySnapshot(
         MilitaryData military = MilitaryData.get(player.serverLevel());
         List<UnitEntry> units = new ArrayList<>();
         int ready = 0, trainingCount = 0;
-        for (CampaignData.UnitType type : CampaignData.UnitType.values()) {
+        for (CampaignData.UnitType type : CampaignData.UnitType.selectableValues()) {
             MilitaryData.ReservePool pool = military.pool(settlement.getId(), type);
             int pending = military.training(settlement.getId()).stream().filter(value -> value.type == type).mapToInt(MilitaryData.TrainingOrder::remaining).sum();
             ready += pool.total(); trainingCount += pending;

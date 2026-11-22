@@ -938,7 +938,7 @@ public final class SettlementCommands {
 
     private static int setRosterHand(CommandSourceStack source, String rosterId, String rawType) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source); CampaignData data = CampaignData.get(player.serverLevel()); CampaignData.RosterRecord roster = data.getRoster(rosterId); CampaignData.UnitType type = CampaignData.UnitType.parse(rawType);
-        if (roster == null || type == null) { source.sendFailure(Component.literal("Unknown roster or unit type.")); return 0; }
+        if (roster == null || type == null || !type.selectable()) { source.sendFailure(Component.literal("Unknown or unavailable roster unit type.")); return 0; }
         ItemStack held = player.getMainHandItem(); if (!isRecruitSpawnEgg(player, held)) { source.sendFailure(Component.literal("Hold a configured Villager Recruits spawn egg.")); return 0; }
         roster.setTemplate(type, held); data.setDirty(); source.sendSuccess(() -> Component.literal("Saved " + type.displayName() + " template to " + roster.getName() + "."), true); return 1;
     }
@@ -980,7 +980,7 @@ public final class SettlementCommands {
 
     private static int setSettlementUnitHand(CommandSourceStack source, String settlementId, String rawType) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
         ServerPlayer player = player(source); SettlementData.SettlementRecord settlement = SettlementData.get(player.serverLevel()).getSettlement(settlementId); CampaignData.UnitType type = CampaignData.UnitType.parse(rawType);
-        if (settlement == null || type == null) { source.sendFailure(Component.literal("Unknown settlement or unit type.")); return 0; }
+        if (settlement == null || type == null || !type.selectable()) { source.sendFailure(Component.literal("Unknown settlement or unavailable unit type.")); return 0; }
         ItemStack held = player.getMainHandItem(); if (!isRecruitSpawnEgg(player, held)) { source.sendFailure(Component.literal("Hold a configured Villager Recruits spawn egg.")); return 0; }
         CampaignData data = CampaignData.get(player.serverLevel()); data.visualFor(settlement.getId()).setUnitTemplate(type, held); data.setDirty();
         source.sendSuccess(() -> Component.literal("Saved local " + type.displayName() + " override for " + settlement.getName() + "."), true); return 1;

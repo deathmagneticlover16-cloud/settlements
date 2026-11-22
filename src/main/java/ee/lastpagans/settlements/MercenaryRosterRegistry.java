@@ -85,7 +85,7 @@ public final class MercenaryRosterRegistry {
                     JsonObject unitObject = unitRaw.getAsJsonObject();
                     CampaignData.UnitType type = CampaignData.UnitType.parse(string(unitObject, "type", ""));
                     int count = integer(unitObject, "count", 0, 0, 500);
-                    if (type != null && type != CampaignData.UnitType.LEVY && count > 0) units.add(new UnitStack(type, count));
+                    if (type != null && type.selectable() && type != CampaignData.UnitType.LEVY && count > 0) units.add(new UnitStack(type, count));
                 }
             }
             if (units.isEmpty()) units.add(new UnitStack(CampaignData.UnitType.RECRUIT, 10));
@@ -121,7 +121,7 @@ public final class MercenaryRosterRegistry {
     private static Map<String, Definition> builtinDefaults() {
         Map<String, Definition> values = new LinkedHashMap<>();
         values.put("free_spears", new Definition("free_spears", "Free Spears", "minecraft:iron_sword", "default", 350, 45, 1, 35,
-                List.of(new UnitStack(CampaignData.UnitType.RECRUIT, 12), new UnitStack(CampaignData.UnitType.SHIELDMAN, 8))));
+                List.of(new UnitStack(CampaignData.UnitType.RECRUIT, 20))));
         values.put("marcher_bowmen", new Definition("marcher_bowmen", "Marcher Bowmen", "minecraft:bow", "default", 300, 40, 1, 30,
                 List.of(new UnitStack(CampaignData.UnitType.BOWMAN, 16), new UnitStack(CampaignData.UnitType.RECRUIT, 4))));
         values.put("riders_of_fortune", new Definition("riders_of_fortune", "Riders of Fortune", "minecraft:saddle", "default", 500, 65, 1, 40,

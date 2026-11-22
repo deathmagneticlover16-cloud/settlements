@@ -8,20 +8,21 @@ import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
 
-public record FactionCreatePacket(String name, String teamDye, String unitDye, String government,
+public record FactionCreatePacket(String name, String teamDye, String unitDye, String government, String culture,
                                   String capitalSettlementId, ItemStack banner) {
     public static void encode(FactionCreatePacket packet, FriendlyByteBuf buffer) {
         buffer.writeUtf(packet.name == null ? "" : packet.name, 64);
         buffer.writeUtf(packet.teamDye == null ? "white" : packet.teamDye, 32);
         buffer.writeUtf(packet.unitDye == null ? "white" : packet.unitDye, 32);
         buffer.writeUtf(packet.government == null ? "MONARCHY" : packet.government, 32);
+        buffer.writeUtf(packet.culture == null ? "" : packet.culture, 32);
         buffer.writeUtf(packet.capitalSettlementId == null ? "" : packet.capitalSettlementId, 64);
         buffer.writeItem(packet.banner == null ? ItemStack.EMPTY : packet.banner);
     }
 
     public static FactionCreatePacket decode(FriendlyByteBuf buffer) {
         return new FactionCreatePacket(buffer.readUtf(64), buffer.readUtf(32), buffer.readUtf(32),
-                buffer.readUtf(32), buffer.readUtf(64), buffer.readItem());
+                buffer.readUtf(32), buffer.readUtf(32), buffer.readUtf(64), buffer.readItem());
     }
 
     public static void handle(FactionCreatePacket packet, Supplier<NetworkEvent.Context> supplier) {

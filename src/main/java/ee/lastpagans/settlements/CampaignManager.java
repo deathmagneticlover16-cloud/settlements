@@ -205,22 +205,7 @@ public final class CampaignManager {
                     result = "Tier " + Math.max(0, Math.min(4, tier)) + " title updated.";
                 }
             }
-            case "SET_CAPITAL" -> {
-                if (!leader) result = "Only the faction leader may designate the capital.";
-                else {
-                    SettlementData settlements = SettlementData.get(player.serverLevel());
-                    SettlementData.SettlementRecord target = settlements.getSettlement(value);
-                    if (target == null || !factionId.equals(target.getFactionTeam())) result = "Select one of your faction's settlements.";
-                    else {
-                        for (SettlementData.SettlementRecord settlement : settlements.settlementsForFaction(factionId)) {
-                            if (settlement != target) settlement.setCapital(false);
-                        }
-                        target.setCapital(true);
-                        broadcastMapMarkers(player.getServer());
-                        result = target.getName() + " is now the faction capital.";
-                    }
-                }
-            }
+            case "SET_CAPITAL" -> result = "Capital cities cannot be reassigned.";
             default -> result = "Unknown faction action.";
         }
         openFaction(player, result);
@@ -463,7 +448,7 @@ public final class CampaignManager {
         CampaignData data = CampaignData.get(player.serverLevel());
         long day = player.serverLevel().getDayTime() / 24000L;
         if ("DECLARE_WAR".equals(action) && extra != null && extra.toUpperCase(Locale.ROOT).startsWith("SETTLEMENT_WAR|")) {
-            openDiplomacy(player, declareSettlementWar(player, data, extra, day));
+            openDiplomacy(player, "Settlement War is obsolete. Reopen Diplomacy and select War with a settlement objective.");
             return;
         }
         if ("OFFER_PEACE_TERMS".equals(action)) {
@@ -483,17 +468,25 @@ public final class CampaignManager {
             case "PROPOSE_DEFENSIVE" -> propose(player, data, CampaignData.ProposalType.DEFENSIVE_ALLIANCE, own, targetFaction, null, day);
             case "PROPOSE_MILITARY" -> propose(player, data, CampaignData.ProposalType.MILITARY_ALLIANCE, own, targetFaction, null, day);
             case "PROPOSE_VASSALAGE" -> propose(player, data, CampaignData.ProposalType.VASSALAGE, own, targetFaction, null, day);
+            case "REQUEST_INDEPENDENCE" -> requestIndependence(player, data, own, targetFaction, day);
+            case "REQUEST_LOWER_TRIBUTE" -> requestLowerTribute(player, data, own, targetFaction, extra, day);
             case "SET_TRIBUTE" -> setTribute(player, data, own, targetFaction, extra);
             case "RELEASE_VASSAL" -> releaseVassal(player, data, own, targetFaction);
-            case "SEEK_INDEPENDENCE" -> seekIndependence(player, data, own);
+            case "SEEK_INDEPENDENCE" -> {
+                CampaignData.VassalageRecord record = data.vassalageFor(own);
+                yield requestIndependence(player, data, own, record == null ? "" : record.overlord(), day);
+            }
             case "DECLARE_WAR" -> declareWar(player, data, own, targetFaction, extra, day);
             case "OFFER_PEACE" -> offerPeace(player, data, own, warId, day);
+            case "END_RAID" -> endRaid(player, data, own, warId, day);
             case "CALL_TO_WAR" -> callToWar(player, data, own, targetFaction, warId, day);
-            case "JOIN_SETTLEMENT_WAR" -> joinSettlementWar(player, data, own, warId, day);
-            case "IGNORE_SETTLEMENT_WAR" -> ignoreSettlementWar(player, data, own, warId);
+            case "REQUEST_JOIN_WAR" -> requestJoinWar(player, data, own, targetFaction, warId, day);
+            case "JOIN_SETTLEMENT_WAR", "IGNORE_SETTLEMENT_WAR" ->
+                    "Settlement War intervention is obsolete. Reopen Diplomacy to use the current war system.";
             case "SEND_AID" -> sendWarAid(player, data, own, warId, extra, day);
             case "ACCEPT_PROPOSAL" -> acceptProposal(player, data, own, proposalId, day);
             case "REJECT_PROPOSAL" -> rejectProposal(player, data, own, proposalId);
+            case "WITHDRAW_PROPOSAL" -> withdrawProposal(player, data, own, proposalId);
             case "BREAK_TREATY" -> breakTreaty(player, data, own, targetFaction, day);
             default -> "Unknown diplomacy action.";
         };
@@ -506,7 +499,17 @@ public final class CampaignManager {
         if (!validOtherFaction(own, target)) return "Select another faction.";
         CampaignSystemsData protectedData = CampaignSystemsData.get(player.serverLevel());
         if (protectedData.factionProtected(own) || protectedData.factionProtected(target)) return "Protected admin factions are excluded from ordinary diplomacy.";
-        if (data.relation(own, target).state() == CampaignData.TreatyState.WAR) return "End the war before proposing a treaty.";
+        CampaignData.TreatyState currentState = data.relation(own, target).state();
+        if (currentState == CampaignData.TreatyState.WAR) return "End the war before proposing a treaty.";
+        CampaignData.TreatyState requestedState = switch (type) {
+            case NON_AGGRESSION -> CampaignData.TreatyState.NON_AGGRESSION;
+            case DEFENSIVE_ALLIANCE -> CampaignData.TreatyState.DEFENSIVE_ALLIANCE;
+            case MILITARY_ALLIANCE -> CampaignData.TreatyState.MILITARY_ALLIANCE;
+            default -> null;
+        };
+        if (requestedState != null && currentState == requestedState) return "That agreement is already active.";
+        if (requestedState != null && currentState.isAlliance() && requestedState != CampaignData.TreatyState.MILITARY_ALLIANCE)
+            return "End or upgrade the current alliance before proposing a different pact.";
         if (type == CampaignData.ProposalType.VASSALAGE) {
             if (!isFactionLeader(player, own)) return "Only the faction leader may offer vassalage.";
             if (data.vassalageFor(own) != null) return "Your faction already has an overlord.";
@@ -524,6 +527,29 @@ public final class CampaignManager {
         return "Proposal sent to " + factionName(target) + ".";
     }
 
+    private static String requestIndependence(ServerPlayer player, CampaignData data, String own, String target, long day) {
+        if (!isFactionLeader(player, own)) return "Only the faction leader may request independence.";
+        CampaignData.VassalageRecord record = data.vassalageFor(own);
+        if (record == null || !record.overlord().equals(target)) return "Independence can be requested only from your current overlord.";
+        if (record.suspended()) return "Resolve the active independence war first.";
+        data.createProposal(CampaignData.ProposalType.REQUEST_INDEPENDENCE, own, target, player.getUUID(), null, day);
+        CampaignToastSender.faction(player.getServer(), target, "INDEPENDENCE REQUEST", factionName(own) + " requests peaceful independence.");
+        return "Independence request sent to " + factionName(target) + ".";
+    }
+
+    private static String requestLowerTribute(ServerPlayer player, CampaignData data, String own, String target, String rawRate, long day) {
+        if (!isFactionLeader(player, own)) return "Only the faction leader may request a tribute change.";
+        CampaignData.VassalageRecord record = data.vassalageFor(own);
+        if (record == null || !record.overlord().equals(target)) return "Tribute can be negotiated only with your current overlord.";
+        int rate;
+        try { rate = Integer.parseInt(rawRate == null ? "" : rawRate.trim()); }
+        catch (NumberFormatException ignored) { return "Choose a tribute rate of 5%, 10%, 25%, or 50%."; }
+        if (!CampaignData.VassalageRecord.validRate(rate) || rate >= record.tributeRate()) return "Choose a valid rate below the current " + record.tributeRate() + "%.";
+        data.createProposal(CampaignData.ProposalType.REQUEST_TRIBUTE, own, target, player.getUUID(), null, day, rate);
+        CampaignToastSender.faction(player.getServer(), target, "TRIBUTE REQUEST", factionName(own) + " requests " + rate + "% tribute.");
+        return "Tribute request sent to " + factionName(target) + ".";
+    }
+
     private static String declareWar(ServerPlayer player, CampaignData data, String own, String target,
                                      String extra, long day) {
         if (!isFactionLeader(player, own)) return "Only the faction leader may declare war.";
@@ -533,24 +559,23 @@ public final class CampaignManager {
         if (extraData.marriageAlliance(own, target)) return "A Marriage Alliance currently binds these factions. End the marriage before declaring a faction war.";
         CampaignData.TreatyState previousState = data.relation(own, target).state();
         if (previousState == CampaignData.TreatyState.WAR) return "Your factions are already at war.";
-        if (data.vassalageBetween(own, target) != null) return "End the vassalage or seek independence before declaring war on the other party.";
 
         String[] split = extra == null ? new String[0] : extra.split("\\|", -1);
         CampaignData.WarType type = parseWarType(split.length > 0 ? split[0] : "");
-        if (type == CampaignData.WarType.SETTLEMENT_WAR) {
-            // Settlement Wars are deliberately settlement-v-settlement. Never allow the old
-            // faction-targeted declaration packet to recreate the confusing 2.0 behaviour
-            // or immediately mark both parent factions as enemies.
-            return "Settlement Wars must be declared through the settlement-v-settlement declaration screen.";
-        }
         String settlementId = split.length > 1 ? SettlementData.normalizeId(split[1]) : "";
         CampaignData.WarGoal goal = parseWarGoal(split.length > 2 ? split[2] : "", type);
+        CampaignData.VassalageRecord vassalage = data.vassalageBetween(own, target);
+        if (goal == CampaignData.WarGoal.INDEPENDENCE_WAR) {
+            if (vassalage == null || !own.equals(vassalage.vassal()) || !target.equals(vassalage.overlord()))
+                return "Independence War is available only against your current overlord.";
+        } else if (vassalage != null) return "Only an Independence War may challenge an active vassal relationship.";
         String customCasusBelli = split.length > 3 ? SettlementData.cleanText(split[3], "", 100) : "";
-        if (goal == CampaignData.WarGoal.CUSTOM && customCasusBelli.isBlank()) return "Enter a custom Casus Belli before declaring war.";
+        String allyList = split.length > 4 ? split[4] : "";
+        if (goal.custom() && customCasusBelli.isBlank()) return "Enter a custom Casus Belli before declaring war.";
 
         SettlementData.SettlementRecord targetSettlement = settlementId.isBlank() ? null
                 : SettlementData.get(player.serverLevel()).getSettlement(settlementId);
-        boolean needsSettlement = type == CampaignData.WarType.RAID || type == CampaignData.WarType.SKIRMISH;
+        boolean needsSettlement = goal.requiresSettlement();
         if (needsSettlement && targetSettlement == null) return "This conflict tier requires a valid target settlement.";
         if (targetSettlement != null) {
             if (!target.equals(targetSettlement.getEffectiveRecruitsTeam())) {
@@ -558,6 +583,10 @@ public final class CampaignManager {
             }
         }
         if (!goal.appliesTo(type)) return "The selected Casus Belli does not match the conflict tier.";
+        if (goal == CampaignData.WarGoal.PUNITIVE_RAID || goal == CampaignData.WarGoal.BORDER_CLASH
+                || goal == CampaignData.WarGoal.RECOVER_TERRITORY || goal == CampaignData.WarGoal.LIBERATE_SETTLEMENT
+                || goal == CampaignData.WarGoal.FORCE_WITHDRAWAL || goal == CampaignData.WarGoal.PUNITIVE_WAR)
+            return goal.displayName() + " requires a recorded triggering event that is not present.";
         if (goal == CampaignData.WarGoal.HOLY_WAR) {
             String ownFaith = factionFaith(player.serverLevel(), own);
             String targetFaith = factionFaith(player.serverLevel(), target);
@@ -568,7 +597,8 @@ public final class CampaignManager {
         }
 
         CampaignData.WarRecord war = data.createWar(type, goal, own, target, settlementId, player.getUUID(), day);
-        if (goal == CampaignData.WarGoal.CUSTOM) data.setWarCustomCasusBelli(war.id(), customCasusBelli);
+        if (goal == CampaignData.WarGoal.INDEPENDENCE_WAR) data.setVassalageSuspended(target, own, true);
+        if (goal.custom()) data.setWarCustomCasusBelli(war.id(), customCasusBelli);
         int reliabilityPenalty = switch (previousState) {
             case MILITARY_ALLIANCE, DEFENSIVE_ALLIANCE -> -25;
             case NON_AGGRESSION -> -15;
@@ -581,6 +611,12 @@ public final class CampaignManager {
         }
         CampaignSystemsManager.applyEmergencyMobilization(player.serverLevel(), target);
         CampaignToastSender.warDeclared(player.getServer(), own, target, type.displayName(), war.casusBelliName());
+        if (type == CampaignData.WarType.WAR && !allyList.isBlank()) {
+            for (String ally : allyList.split(",")) {
+                String candidate = ally.trim();
+                if (!candidate.isBlank()) callToWar(player, data, own, candidate, war.id(), day);
+            }
+        }
         String targetText = targetSettlement == null ? factionName(target) : targetSettlement.getName() + " (" + factionName(target) + ")";
         data.addNews(CampaignData.NewsCategory.WARS, CampaignData.NewsImportance.MAJOR,
                 type.displayName() + " declared", factionName(own) + " declared a " + type.displayName() + " against " + targetText
@@ -593,7 +629,7 @@ public final class CampaignManager {
         if (split.length < 4) return "Settlement War declaration is incomplete.";
         String sourceId = SettlementData.normalizeId(split[1]);
         String targetId = SettlementData.normalizeId(split[2]);
-        CampaignData.WarGoal goal = parseWarGoal(split[3], CampaignData.WarType.SETTLEMENT_WAR);
+        CampaignData.WarGoal goal = parseWarGoal(split[3], CampaignData.WarType.WAR);
         String custom = split.length > 4 ? SettlementData.cleanText(split[4], "", 100) : "";
         SettlementData settlements = SettlementData.get(player.serverLevel());
         SettlementData.SettlementRecord source = settlements.getSettlement(sourceId);
@@ -611,7 +647,7 @@ public final class CampaignManager {
             return "These settlements belong to factions bound by a Marriage Alliance.";
         }
         boolean duplicate = data.getWars().stream().anyMatch(war -> war.status() == CampaignData.WarStatus.ACTIVE
-                && war.type() == CampaignData.WarType.SETTLEMENT_WAR
+                && war.type() == CampaignData.WarType.WAR
                 && ((sourceId.equals(war.attackerSettlement()) && targetId.equals(war.defenderSettlement()))
                 || (targetId.equals(war.attackerSettlement()) && sourceId.equals(war.defenderSettlement()))));
         if (duplicate) return "Those settlements are already in an active Settlement War.";
@@ -628,7 +664,7 @@ public final class CampaignManager {
     private static String joinSettlementWar(ServerPlayer player, CampaignData data, String own, UUID warId, long day) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot commit the faction to a war.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
-        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.SETTLEMENT_WAR) return "Select an active Settlement War.";
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.WAR) return "Select an active War.";
         if (!war.attackerFaction().isBlank() && war.attackerFaction().equals(war.defenderFaction()))
             return "This is an internal settlement conflict. The shared parent faction cannot formally join either side.";
         boolean attackerSide;
@@ -672,7 +708,7 @@ public final class CampaignManager {
     private static String ignoreSettlementWar(ServerPlayer player, CampaignData data, String own, UUID warId) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot answer this settlement war.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
-        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.SETTLEMENT_WAR) return "Select an active Settlement War.";
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.WAR) return "Select an active War.";
         if (!war.attackerFaction().isBlank() && war.attackerFaction().equals(war.defenderFaction()))
             return "This is an internal settlement conflict; there is no separate parent-faction intervention decision.";
         if (!own.equals(war.defenderFaction())) return "Only the defending settlement's parent faction may formally ignore the conflict.";
@@ -690,7 +726,7 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 2)) return "Your faction rank cannot authorize war aid.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "Select an active war.";
-        if (war.type() == CampaignData.WarType.SETTLEMENT_WAR && !war.attackerFaction().isBlank()
+        if (war.type() == CampaignData.WarType.WAR && !war.attackerFaction().isBlank()
                 && war.attackerFaction().equals(war.defenderFaction()))
             return "The shared parent faction cannot use faction war aid to choose a side in its own internal settlement conflict.";
         if (!own.equals(war.attackerFaction()) && !own.equals(war.defenderFaction())) return "Only a parent faction may send settlement aid through this panel.";
@@ -748,28 +784,27 @@ public final class CampaignManager {
     }
 
     private static CampaignData.WarType parseWarType(String raw) {
-        try { return CampaignData.WarType.valueOf(raw.toUpperCase(Locale.ROOT).replace(' ', '_')); }
-        catch (IllegalArgumentException ignored) { return CampaignData.WarType.FACTION_WAR; }
+        String normalized = raw == null ? "" : raw.toUpperCase(Locale.ROOT).replace(' ', '_');
+        if ("SKIRMISH".equals(normalized)) return CampaignData.WarType.RAID;
+        if ("SETTLEMENT_WAR".equals(normalized) || "FACTION_WAR".equals(normalized)) return CampaignData.WarType.WAR;
+        try { return CampaignData.WarType.valueOf(normalized); }
+        catch (IllegalArgumentException ignored) { return CampaignData.WarType.WAR; }
     }
 
     private static CampaignData.WarGoal parseWarGoal(String raw, CampaignData.WarType type) {
         try {
             CampaignData.WarGoal goal = CampaignData.WarGoal.valueOf(raw.toUpperCase(Locale.ROOT).replace(' ', '_'));
+            if (type == CampaignData.WarType.RAID && goal == CampaignData.WarGoal.CUSTOM) goal = CampaignData.WarGoal.CUSTOM_RAID;
             return goal.appliesTo(type) ? goal : CampaignData.WarGoal.defaultFor(type);
         } catch (IllegalArgumentException ignored) {
             return CampaignData.WarGoal.defaultFor(type);
         }
     }
 
-    /** Returns the faction that is actually a belligerent on this side. Settlement Wars keep
-     * their parent faction ids for observer/escalation purposes, but those parents are not war
-     * parties until they explicitly Join War. */
+    /** Returns the principal faction belligerent on a side. */
     private static String participatingFaction(CampaignData.WarRecord war, boolean attackerSide) {
         if (war == null) return "";
-        if (war.type() != CampaignData.WarType.SETTLEMENT_WAR) return attackerSide ? war.attackerFaction() : war.defenderFaction();
-        if (attackerSide ? war.attackerFactionJoined() : war.defenderFactionJoined())
-            return attackerSide ? war.attackerFaction() : war.defenderFaction();
-        return "";
+        return attackerSide ? war.attackerFaction() : war.defenderFaction();
     }
 
     /** Principal belligerent faction only. Supporting allies may fight and send aid, but they cannot bind
@@ -813,6 +848,7 @@ public final class CampaignManager {
     private static String offerPeaceTerms(ServerPlayer player, CampaignData data, UUID warId, String encoded, long day) {
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "That war is not active.";
+        if (war.type() != CampaignData.WarType.WAR) return "Raids cannot use War peace terms.";
         SettlementData settlements = SettlementData.get(player.serverLevel());
         String ownFaction = diplomaticPolityId(player);
         SettlementData.SettlementRecord attackerSettlementRecord = settlements.getSettlement(war.attackerSettlement());
@@ -859,7 +895,7 @@ public final class CampaignManager {
             String[] p = raw.split("~", -1); if (p.length < 5) continue;
             int amount = parseInt(p[2], 0, 1_000_000); int duration = parseInt(p[3], 0, 3650);
             String type = p[0].toUpperCase(Locale.ROOT); String target = SettlementData.cleanText(p[1], "", 80); String text = SettlementData.cleanText(p[4], "", 120);
-            if (List.of("TREASURY","MANPOWER","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RENOUNCE_CLAIM","RECOGNIZE_INDEPENDENCE").contains(type))
+            if (List.of("TREASURY","MANPOWER","NAP","CONVERT_FAITH","TRANSFER_SETTLEMENT","TRANSFER_CLAIM","RENOUNCE_CLAIM","RECOGNIZE_INDEPENDENCE","RECOGNIZE_FACTION_INDEPENDENCE").contains(type))
                 terms.add(new CampaignSystemsData.PeaceTerm(type, target, amount, duration, text));
         }
         return List.copyOf(terms);
@@ -871,6 +907,7 @@ public final class CampaignManager {
         if (offer == null) return "That peace offer is no longer available.";
         CampaignData.WarRecord war = offer.warId() == null ? null : data.getWar(offer.warId());
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) { extra.removePeaceOffer(offerId); return "That war has already ended."; }
+        if (war.type() != CampaignData.WarType.WAR) { extra.removePeaceOffer(offerId); return "Raids cannot use War peace terms."; }
         String own = diplomaticPolityId(player);
         SettlementData.SettlementRecord targetSettlement = SettlementData.get(player.serverLevel()).getSettlement(offer.targetSettlement());
         boolean offerTargetsAttacker = peacePartyIsSide(war, offer.targetFaction(), offer.targetSettlement(), true);
@@ -931,6 +968,7 @@ public final class CampaignManager {
             case "RENOUNCE_CLAIM" -> 6;
             case "TRANSFER_SETTLEMENT" -> settlementPeaceCost(level, term.targetId(), false);
             case "RECOGNIZE_INDEPENDENCE" -> settlementPeaceCost(level, term.targetId(), true);
+            case "RECOGNIZE_FACTION_INDEPENDENCE" -> 40;
             default -> 0;
         };
     }
@@ -1005,7 +1043,7 @@ public final class CampaignManager {
                     if (!settlementBelongsToLosingSide(transferred, loserFaction, loserSettlement)) {
                         return transferred.getName() + " does not belong to the side receiving these demands";
                     }
-                    if (war.type() == CampaignData.WarType.SETTLEMENT_WAR && loserSettlement != null
+                    if (war.goal() == CampaignData.WarGoal.CAPTURE_SETTLEMENT && loserSettlement != null
                             && !transferred.getId().equals(loserSettlement.getId())) {
                         return "a Settlement War may only transfer its defending/negotiating settlement, not unrelated territory";
                     }
@@ -1055,6 +1093,13 @@ public final class CampaignManager {
                                         && !value.getId().equals(released.getId())).count();
                         if (independentHoldings >= 2) return "that settlement's ruler already owns the maximum two independent settlements";
                     }
+                }
+                case "RECOGNIZE_FACTION_INDEPENDENCE" -> {
+                    if (war.goal() != CampaignData.WarGoal.INDEPENDENCE_WAR || !war.attackerFaction().equals(winnerFaction)
+                            || !war.defenderFaction().equals(loserFaction))
+                        return "faction independence is available only to the rebelling vassal in its Independence War";
+                    CampaignData.VassalageRecord record = CampaignData.get(level).vassalageFor(winnerFaction);
+                    if (record == null || !loserFaction.equals(record.overlord())) return "the challenged vassal relationship no longer exists";
                 }
                 default -> { }
             }
@@ -1117,6 +1162,7 @@ public final class CampaignManager {
                 case "TRANSFER_CLAIM" -> transferClaimByTreaty(level, term.targetId(), term.text());
                 case "RENOUNCE_CLAIM" -> renounceClaimByTreaty(level, term.targetId());
                 case "RECOGNIZE_INDEPENDENCE" -> releaseSettlementByTreaty(settlements.getSettlement(term.targetId()));
+                case "RECOGNIZE_FACTION_INDEPENDENCE" -> CampaignData.get(level).releaseVassal(loserFaction, winnerFaction);
             }
         }
     }
@@ -1160,7 +1206,7 @@ public final class CampaignManager {
     }
     private static UUID treatyRecipientOwner(ServerLevel level, String winnerFaction, SettlementData.SettlementRecord winnerSettlement,
                                              CampaignData.WarRecord war) {
-        if (war != null && war.type() == CampaignData.WarType.SETTLEMENT_WAR && winnerSettlement != null && winnerSettlement.getOwnerId() != null)
+        if (war != null && (winnerFaction == null || winnerFaction.isBlank()) && winnerSettlement != null && winnerSettlement.getOwnerId() != null)
             return winnerSettlement.getOwnerId();
         if (winnerFaction != null && !winnerFaction.isBlank() && FactionEvents.recruitsFactionManager != null) {
             RecruitsFaction faction = FactionEvents.recruitsFactionManager.getFactionByStringID(winnerFaction);
@@ -1252,23 +1298,29 @@ public final class CampaignManager {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot offer peace.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || !war.involves(own)) return "That war is not active.";
-        if (war.type() == CampaignData.WarType.SETTLEMENT_WAR) {
-            return "Settlement Wars use negotiated Peace Terms. A parent faction cannot end a local war with the obsolete one-click peace action.";
-        }
+        if (war.type() != CampaignData.WarType.WAR) return "Raids use the limited End Raid resolution.";
         String target = own.equals(war.attackerFaction()) ? war.defenderFaction() : war.attackerFaction();
         data.createProposal(CampaignData.ProposalType.PEACE, own, target, player.getUUID(), war.id(), day);
         CampaignToastSender.faction(player.getServer(), target, "PEACE OFFER RECEIVED", factionName(own) + " has offered peace.");
         return "Peace offer sent to " + factionName(target) + ".";
     }
 
+    private static String endRaid(ServerPlayer player, CampaignData data, String own, UUID warId, long day) {
+        if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot end a Raid.";
+        CampaignData.WarRecord raid = warId == null ? null : data.getWar(warId);
+        if (raid == null || raid.status() != CampaignData.WarStatus.ACTIVE || raid.type() != CampaignData.WarType.RAID || !raid.involves(own))
+            return "That Raid is no longer active.";
+        data.endWar(raid.id(), day, "Raid ended without territorial concessions.");
+        synchronizeWarPeace(player.serverLevel(), data, raid, day);
+        CampaignToastSender.faction(player.getServer(), raid.attackerFaction(), "RAID ENDED", "Hostilities in the Raid have ended.");
+        CampaignToastSender.faction(player.getServer(), raid.defenderFaction(), "RAID ENDED", "Hostilities in the Raid have ended.");
+        return "Raid ended. No territory changed hands.";
+    }
+
     private static String callToWar(ServerPlayer player, CampaignData data, String own, String target, UUID warId, long day) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot call allies to war.";
         CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
         if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || !war.involves(own)) return "Select an active war.";
-        if (war.type() == CampaignData.WarType.SETTLEMENT_WAR
-                && !(war.attackerFactionJoined() && war.defenderFactionJoined())) {
-            return "Calls to war become available only after a Settlement War escalates to Faction vs Faction. Until then, parent factions may send aid or join directly.";
-        }
         if (!validOtherFaction(own, target)) return "Select an allied faction.";
         if (war.involves(target)) return factionName(target) + " is already participating in this war.";
         CampaignData.DiplomacyRecord relation = data.relationIfPresent(own, target);
@@ -1286,6 +1338,23 @@ public final class CampaignManager {
         return "Call to war sent to " + factionName(target) + ".";
     }
 
+    private static String requestJoinWar(ServerPlayer player, CampaignData data, String own, String target, UUID warId, long day) {
+        if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot request war participation.";
+        CampaignData.WarRecord war = warId == null ? null : data.getWar(warId);
+        if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.WAR) return "Select an active War.";
+        boolean targetAttacker = target.equals(war.attackerFaction());
+        boolean targetDefender = target.equals(war.defenderFaction());
+        if (!targetAttacker && !targetDefender) return "The selected faction is not a leader of that War.";
+        if (war.involves(own)) return "Your faction already participates in that War.";
+        String enemy = targetAttacker ? war.defenderFaction() : war.attackerFaction();
+        if (data.relation(own, enemy).state() == CampaignData.TreatyState.MILITARY_ALLIANCE
+                || data.relation(own, enemy).state() == CampaignData.TreatyState.DEFENSIVE_ALLIANCE)
+            return "Your current alliance conflicts with joining that side.";
+        data.createProposal(CampaignData.ProposalType.REQUEST_JOIN_WAR, own, target, player.getUUID(), war.id(), day);
+        CampaignToastSender.faction(player.getServer(), target, "WAR PARTICIPATION REQUEST", factionName(own) + " requests to join your side.");
+        return "Request to join the War sent to " + factionName(target) + ".";
+    }
+
     private static String acceptProposal(ServerPlayer player, CampaignData data, String own, UUID proposalId, long day) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot accept treaties.";
         CampaignData.DiplomacyProposal proposal = proposalId == null ? null : data.getProposal(proposalId);
@@ -1298,13 +1367,20 @@ public final class CampaignManager {
             int relationship = effectiveRelationship(player.serverLevel(), proposal.fromFaction(), proposal.toFaction());
             if (relationship < required) return "Relationship changed to " + relationship + "; " + required + " is required to accept this agreement.";
         }
+        CampaignData.TreatyState proposedTreaty = switch (proposal.type()) {
+            case NON_AGGRESSION -> CampaignData.TreatyState.NON_AGGRESSION;
+            case DEFENSIVE_ALLIANCE -> CampaignData.TreatyState.DEFENSIVE_ALLIANCE;
+            case MILITARY_ALLIANCE -> CampaignData.TreatyState.MILITARY_ALLIANCE;
+            default -> null;
+        };
+        if (proposedTreaty != null) {
+            CampaignData.TreatyState current = data.relation(proposal.fromFaction(), proposal.toFaction()).state();
+            if (current == CampaignData.TreatyState.WAR || current == proposedTreaty) return "That proposal is no longer valid under the current treaty state.";
+            if (current.isAlliance() && proposedTreaty != CampaignData.TreatyState.MILITARY_ALLIANCE) return "The current alliance conflicts with this proposal.";
+        }
         if (proposal.type() == CampaignData.ProposalType.CALL_TO_WAR && proposal.linkedWar() != null) {
             CampaignData.WarRecord war = data.getWar(proposal.linkedWar());
             if (war == null || war.status() != CampaignData.WarStatus.ACTIVE) return "The linked war has already ended.";
-            if (war.type() == CampaignData.WarType.SETTLEMENT_WAR
-                    && !(war.attackerFactionJoined() && war.defenderFactionJoined())) {
-                return "That Settlement War has not yet escalated to Faction vs Faction, so allied factions cannot formally join it.";
-            }
             boolean attackerSide = war.attackerFaction().equals(proposal.fromFaction()) || war.supportingAttackers().contains(proposal.fromFaction());
             String enemy = attackerSide ? war.defenderFaction() : war.attackerFaction();
             if (enemy == null || enemy.isBlank() || !syncRelation(player.serverLevel(), own, enemy, CampaignData.TreatyState.WAR)) {
@@ -1326,6 +1402,21 @@ public final class CampaignManager {
             CampaignToastSender.faction(player.getServer(), own, "WAR JOINED", "Your faction joined " + factionName(proposal.fromFaction()) + "'s war.");
             return "Call to war accepted. Your faction has joined the conflict.";
         }
+        if (proposal.type() == CampaignData.ProposalType.REQUEST_JOIN_WAR && proposal.linkedWar() != null) {
+            CampaignData.WarRecord war = data.getWar(proposal.linkedWar());
+            if (war == null || war.status() != CampaignData.WarStatus.ACTIVE || war.type() != CampaignData.WarType.WAR || war.involves(proposal.fromFaction()))
+                return "That war participation request is no longer valid.";
+            boolean attackerSide = own.equals(war.attackerFaction());
+            if (!attackerSide && !own.equals(war.defenderFaction())) return "Only a War leader may approve this request.";
+            String enemy = attackerSide ? war.defenderFaction() : war.attackerFaction();
+            if (!syncRelation(player.serverLevel(), proposal.fromFaction(), enemy, CampaignData.TreatyState.WAR))
+                return "War participation could not be synchronized with Recruits.";
+            war.addSupporter(proposal.fromFaction(), attackerSide);
+            data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
+            data.relation(proposal.fromFaction(), enemy).setState(CampaignData.TreatyState.WAR, day);
+            CampaignToastSender.faction(player.getServer(), proposal.fromFaction(), "WAR PARTICIPATION ACCEPTED", factionName(own) + " accepted your request.");
+            return factionName(proposal.fromFaction()) + " joined the War.";
+        }
         if (proposal.type() == CampaignData.ProposalType.VASSALAGE) {
             if (!isFactionLeader(player, own)) return "Only the faction leader may accept vassalage.";
             if (data.vassalageFor(proposal.fromFaction()) != null || data.wouldCreateVassalCycle(own, proposal.fromFaction())) {
@@ -1345,18 +1436,33 @@ public final class CampaignManager {
                     factionName(own) + " accepted your oath. Tribute begins at 10%.");
             return factionName(proposal.fromFaction()) + " is now a vassal of " + factionName(own) + ".";
         }
-        if (proposal.type() == CampaignData.ProposalType.PEACE && proposal.linkedWar() != null) {
-            CampaignData.WarRecord linked = data.getWar(proposal.linkedWar());
-            if (linked != null && linked.type() == CampaignData.WarType.SETTLEMENT_WAR) {
-                return "This Settlement War must be resolved through negotiated Peace Terms, not an obsolete one-click faction peace proposal.";
-            }
+        if (proposal.type() == CampaignData.ProposalType.REQUEST_INDEPENDENCE) {
+            CampaignData.VassalageRecord record = data.vassalageFor(proposal.fromFaction());
+            if (record == null || !own.equals(record.overlord()) || record.suspended()) return "That independence request is no longer valid.";
+            if (!data.releaseVassal(own, proposal.fromFaction())) return "Independence could not be applied.";
+            data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
+            changeRelationship(player.getServer(), data, own, proposal.fromFaction(), -tributePenalty(record.tributeRate()));
+            CampaignToastSender.faction(player.getServer(), proposal.fromFaction(), "INDEPENDENCE GRANTED", factionName(own) + " recognized your independence.");
+            return factionName(proposal.fromFaction()) + " is now independent.";
+        }
+        if (proposal.type() == CampaignData.ProposalType.REQUEST_TRIBUTE) {
+            CampaignData.VassalageRecord record = data.vassalageFor(proposal.fromFaction());
+            if (record == null || !own.equals(record.overlord()) || !CampaignData.VassalageRecord.validRate(proposal.value()) || proposal.value() >= record.tributeRate())
+                return "That tribute request is no longer valid.";
+            int oldRate = record.tributeRate();
+            if (!data.setTributeRate(own, proposal.fromFaction(), proposal.value())) return "Tribute could not be changed.";
+            data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
+            changeRelationship(player.getServer(), data, own, proposal.fromFaction(), tributePenalty(proposal.value()) - tributePenalty(oldRate));
+            return "Tribute reduced to " + proposal.value() + "%.";
         }
         data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.ACCEPTED);
         CampaignData.TreatyState state = switch (proposal.type()) {
             case NON_AGGRESSION -> CampaignData.TreatyState.NON_AGGRESSION;
             case DEFENSIVE_ALLIANCE -> CampaignData.TreatyState.DEFENSIVE_ALLIANCE;
             case MILITARY_ALLIANCE, CALL_TO_WAR -> CampaignData.TreatyState.MILITARY_ALLIANCE;
+            case REQUEST_JOIN_WAR -> CampaignData.TreatyState.NEUTRAL;
             case VASSALAGE -> CampaignData.TreatyState.NEUTRAL;
+            case REQUEST_INDEPENDENCE, REQUEST_TRIBUTE -> CampaignData.TreatyState.NEUTRAL;
             case PEACE -> CampaignData.TreatyState.NEUTRAL;
         };
         if (proposal.type() == CampaignData.ProposalType.PEACE && proposal.linkedWar() != null) {
@@ -1393,6 +1499,16 @@ public final class CampaignManager {
         return "Proposal rejected.";
     }
 
+    private static String withdrawProposal(ServerPlayer player, CampaignData data, String own, UUID proposalId) {
+        if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot withdraw proposals.";
+        CampaignData.DiplomacyProposal proposal = proposalId == null ? null : data.getProposal(proposalId);
+        if (proposal == null || proposal.status() != CampaignData.ProposalStatus.PENDING || !own.equals(proposal.fromFaction()))
+            return "That proposal can no longer be withdrawn.";
+        data.resolveProposal(proposal.id(), CampaignData.ProposalStatus.CANCELLED);
+        CampaignToastSender.faction(player.getServer(), proposal.toFaction(), "PROPOSAL WITHDRAWN", factionName(own) + " withdrew its " + pretty(proposal.type().name()) + " proposal.");
+        return "Proposal withdrawn.";
+    }
+
     private static String breakTreaty(ServerPlayer player, CampaignData data, String own, String target, long day) {
         if (!canManageDiplomacy(player, own, 3)) return "Your faction rank cannot break treaties.";
         if (!validOtherFaction(own, target)) return "Select another faction.";
@@ -1418,14 +1534,12 @@ public final class CampaignManager {
     }
 
     public static int effectiveRelationship(ServerLevel level, String first, String second) {
-        if (level == null || first == null || second == null || first.isBlank() || second.isBlank()) return 0;
-        int effective = uncappedEffectiveRelationship(level, first, second);
-        CampaignData.VassalageRecord vassalage = CampaignData.get(level).vassalageBetween(first, second);
-        return vassalage == null ? effective : Math.min(effective, tributeRelationshipCeiling(vassalage.tributeRate()));
+        return relationshipBreakdown(level, first, second).total();
     }
 
-    private static int uncappedEffectiveRelationship(ServerLevel level, String first, String second) {
-        if (level == null || first == null || second == null || first.isBlank() || second.isBlank()) return 0;
+    public static RelationshipBreakdown relationshipBreakdown(ServerLevel level, String first, String second) {
+        if (level == null || first == null || second == null || first.isBlank() || second.isBlank())
+            return new RelationshipBreakdown(0, List.of());
         CampaignData data = CampaignData.get(level);
         CampaignData.DiplomacyRecord relation = data.relationIfPresent(first, second);
         SettlementData settlements = SettlementData.get(level);
@@ -1435,9 +1549,67 @@ public final class CampaignManager {
         String secondFaith = secondRuler == null ? "Other" : secondRuler.getFaith();
         int traits = CampaignDefinitions.relationTraitModifier(firstRuler == null ? List.of() : firstRuler.getTraits(), firstFaith, secondFaith)
                 + CampaignDefinitions.relationTraitModifier(secondRuler == null ? List.of() : secondRuler.getTraits(), secondFaith, firstFaith);
-        return Math.max(-100, Math.min(100, (relation == null ? 0 : relation.relationship())
-                + CampaignDefinitions.religionRelationModifier(firstFaith, secondFaith) + traits));
+        int base = relation == null ? 0 : relation.relationship();
+        int religion = CampaignDefinitions.religionRelationModifier(firstFaith, secondFaith);
+        CultureDefinition firstCulture = culture(data, first);
+        CultureDefinition secondCulture = culture(data, second);
+        if (religion < 0 && (isCulture(firstCulture, "slavic") || isCulture(secondCulture, "slavic")))
+            religion = (int)Math.round(religion * 0.50D);
+
+        int relevantPenalty = Math.min(0, religion) + Math.min(0, traits);
+        double multiplier = culturePenaltyMultiplier(firstCulture, secondCulture, firstFaith, secondFaith);
+        int cultureDelta = relevantPenalty >= 0 || multiplier == 1.0D ? 0
+                : (int)Math.round(relevantPenalty * multiplier) - relevantPenalty;
+        List<RelationshipPart> parts = new java.util.ArrayList<>();
+        parts.add(new RelationshipPart("base", "Established relations", base, "Stored diplomatic history and direct political actions."));
+        parts.add(new RelationshipPart("faith", "Religious compatibility", religion, firstFaith + " / " + secondFaith));
+        if (traits != 0) parts.add(new RelationshipPart("ruler_traits", "Ruler traits", traits, "Server-calculated ruler trait effects."));
+        if (cultureDelta != 0) parts.add(new RelationshipPart("culture", cultureLabel(firstCulture, secondCulture), cultureDelta,
+                String.format(Locale.ROOT, "Relevant penalties %d × %.3f; incremental contribution %d.", relevantPenalty, multiplier, cultureDelta)));
+        int raw = base + religion + traits + cultureDelta;
+        int clamped = Math.max(-100, Math.min(100, raw));
+        if (clamped != raw) parts.add(new RelationshipPart("range_cap", "Relationship range cap", clamped - raw, "Final relationship is limited to -100…+100."));
+        CampaignData.VassalageRecord vassalage = data.vassalageBetween(first, second);
+        int total = clamped;
+        if (vassalage != null) {
+            int capped = Math.min(total, tributeRelationshipCeiling(vassalage.tributeRate()));
+            if (capped != total) parts.add(new RelationshipPart("tribute_cap", "Tribute relationship ceiling", capped - total,
+                    vassalage.tributeRate() + "% tribute limits the bilateral relationship."));
+            total = capped;
+        }
+        return new RelationshipBreakdown(total, List.copyOf(parts));
     }
+
+    private static CultureDefinition culture(CampaignData data, String faction) {
+        CampaignData.FactionProfile profile = data.factionProfileIfPresent(faction);
+        return profile == null ? null : CultureDefinition.get(profile.culture());
+    }
+
+    private static boolean isCulture(CultureDefinition value, String id) { return value != null && id.equals(value.id()); }
+    private static boolean christian(String faith) { return faith != null && faith.toLowerCase(Locale.ROOT).contains("christian"); }
+    private static boolean muslim(String faith) { return faith != null && faith.toLowerCase(Locale.ROOT).contains("islam"); }
+
+    private static double culturePenaltyMultiplier(CultureDefinition first, CultureDefinition second, String firstFaith, String secondFaith) {
+        double value = 1.0D;
+        if ((isCulture(first, "celtic") && isCulture(second, "anglian")) || (isCulture(second, "celtic") && isCulture(first, "anglian"))) value *= 1.85D;
+        if (isCulture(first, "anglian") && !christian(secondFaith)) value *= 1.15D;
+        if (isCulture(second, "anglian") && !christian(firstFaith)) value *= 1.15D;
+        if (isCulture(first, "byzantine")) value *= muslim(secondFaith) ? 1.075D : christian(secondFaith) && secondFaith.toLowerCase(Locale.ROOT).contains("catholic") ? 1.125D : 1.0D;
+        if (isCulture(second, "byzantine")) value *= muslim(firstFaith) ? 1.075D : christian(firstFaith) && firstFaith.toLowerCase(Locale.ROOT).contains("catholic") ? 1.125D : 1.0D;
+        if (isCulture(first, "finnic") && isCulture(second, "finnic")) value *= 1.10D;
+        if (isCulture(first, "baltic")) value *= christian(secondFaith) ? 1.15D : isCulture(second, "finnic") ? 1.05D : 1.0D;
+        if (isCulture(second, "baltic")) value *= christian(firstFaith) ? 1.15D : isCulture(first, "finnic") ? 1.05D : 1.0D;
+        if (isCulture(first, "slavic")) value *= isCulture(second, "finnic") ? 1.20D : isCulture(second, "byzantine") ? 1.25D : 1.0D;
+        if (isCulture(second, "slavic")) value *= isCulture(first, "finnic") ? 1.20D : isCulture(first, "byzantine") ? 1.25D : 1.0D;
+        return value;
+    }
+
+    private static String cultureLabel(CultureDefinition first, CultureDefinition second) {
+        return "Cultural modifier (" + (first == null ? "Undefined" : first.name()) + "–" + (second == null ? "Undefined" : second.name()) + ")";
+    }
+
+    public record RelationshipPart(String id, String label, int value, String explanation) {}
+    public record RelationshipBreakdown(int total, List<RelationshipPart> parts) {}
 
     private static SettlementData.CharacterRecord factionRulerCharacter(String factionId, SettlementData settlements) {
         if (FactionEvents.recruitsFactionManager == null || factionId == null || factionId.isBlank()) return null;
@@ -1452,6 +1624,8 @@ public final class CampaignManager {
             case MILITARY_ALLIANCE -> SettlementConfig.RELATION_MILITARY_ALLIANCE_MINIMUM.get();
             case VASSALAGE -> SettlementConfig.RELATION_VASSALAGE_MINIMUM.get();
             case CALL_TO_WAR -> SettlementConfig.RELATION_WAR_AID_MINIMUM.get();
+            case REQUEST_JOIN_WAR -> -100;
+            case REQUEST_INDEPENDENCE, REQUEST_TRIBUTE -> -100;
             default -> -100;
         };
     }
@@ -1498,17 +1672,6 @@ public final class CampaignManager {
         if (!data.releaseVassal(own, vassalFaction)) return "Vassalage could not be ended.";
         changeRelationship(player.getServer(), data, own, vassalFaction, restored);
         return factionName(vassalFaction) + " was released by " + factionName(own) + ".";
-    }
-
-    private static String seekIndependence(ServerPlayer player, CampaignData data, String own) {
-        if (!isFactionLeader(player, own)) return "Only the faction leader may seek independence.";
-        CampaignData.VassalageRecord record = data.vassalageFor(own);
-        if (record == null) return "Your faction is not a vassal.";
-        String overlord = record.overlord();
-        int restored = -tributePenalty(record.tributeRate());
-        if (!data.releaseVassal(overlord, own)) return "Independence could not be recorded.";
-        changeRelationship(player.getServer(), data, overlord, own, restored - 20);
-        return factionName(own) + " declared independence from " + factionName(overlord) + ".";
     }
 
     public static int tributePenalty(int rate) {
@@ -1607,7 +1770,7 @@ public final class CampaignManager {
         ItemStack held = player.getMainHandItem();
         if (!(held.getItem() instanceof BannerItem)) return "Faction creation failed: You are not holding a banner!";
         return createFactionInternal(player, rawName, teamColor, unitColor, foundingSeat, held.copy(),
-                CampaignData.GovernmentType.MONARCHY, "white", "white");
+                CampaignData.GovernmentType.MONARCHY, "white", "white", "");
     }
 
     public static void createFactionFromGui(ServerPlayer player, FactionCreatePacket packet) {
@@ -1643,13 +1806,13 @@ public final class CampaignManager {
         CampaignData.GovernmentType government = CampaignData.GovernmentType.parse(packet.government());
         String result = createFactionInternal(player, packet.name(), FactionColorUtil.closestChatFormatting(teamDye),
                 FactionColorUtil.closestRecruitsUnitColor(unitDye), foundingSeat, banner, government,
-                teamDye.getName(), unitDye.getName());
+                teamDye.getName(), unitDye.getName(), packet.culture());
         openFaction(player, result);
     }
 
     private static String createFactionInternal(ServerPlayer player, String rawName, ChatFormatting teamColor, byte unitColor,
                                                 SettlementData.SettlementRecord foundingSeat, ItemStack banner,
-                                                CampaignData.GovernmentType government, String teamDye, String unitDye) {
+                                                CampaignData.GovernmentType government, String teamDye, String unitDye, String cultureId) {
         if (player == null) return "No player supplied.";
         if (!SettlementConfig.FACTION_FOUNDING_ENABLED.get()) return "Faction founding is disabled by the server configuration.";
         String currentPoliticalFaction = factionId(player);
@@ -1702,6 +1865,7 @@ public final class CampaignManager {
         BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, newFactionId);
         CampaignData campaign = CampaignData.get(player.serverLevel());
         campaign.setFactionGovernment(newFactionId, government);
+        campaign.setFactionCulture(newFactionId, cultureId);
         campaign.setFactionColors(newFactionId, teamDye, unitDye);
         for (SettlementData.SettlementRecord settlement : settlementData.getSettlements()) {
             if (newFactionId.equals(settlement.getFactionTeam())) settlement.setCapital(settlement.getId().equals(foundingSeat.getId()));

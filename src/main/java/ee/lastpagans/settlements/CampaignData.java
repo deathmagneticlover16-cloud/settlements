@@ -291,6 +291,14 @@ public final class CampaignData extends SavedData {
         return proposal;
     }
 
+    public DiplomacyProposal createProposal(ProposalType type, String fromFaction, String toFaction,
+                                             UUID actor, UUID linkedWar, long day, int value) {
+        DiplomacyProposal proposal = new DiplomacyProposal(UUID.randomUUID(), type, fromFaction, toFaction, actor, linkedWar, day, value);
+        proposals.put(proposal.id, proposal);
+        setDirty();
+        return proposal;
+    }
+
     public DiplomacyProposal getProposal(UUID id) {
         return proposals.get(id);
     }
@@ -299,6 +307,14 @@ public final class CampaignData extends SavedData {
         return proposals.values().stream()
                 .filter(proposal -> proposal.status == ProposalStatus.PENDING)
                 .filter(proposal -> factionId.equals(proposal.toFaction))
+                .sorted(Comparator.comparingLong(DiplomacyProposal::createdDay).reversed())
+                .toList();
+    }
+
+    public List<DiplomacyProposal> proposalHistoryFor(String factionId) {
+        if (factionId == null || factionId.isBlank()) return List.of();
+        return proposals.values().stream()
+                .filter(proposal -> factionId.equals(proposal.fromFaction) || factionId.equals(proposal.toFaction))
                 .sorted(Comparator.comparingLong(DiplomacyProposal::createdDay).reversed())
                 .toList();
     }
@@ -355,6 +371,14 @@ public final class CampaignData extends SavedData {
         return true;
     }
 
+    public boolean setVassalageSuspended(String overlord, String vassal, boolean suspended) {
+        VassalageRecord record = vassalages.get(vassal);
+        if (record == null || !record.overlord.equals(overlord) || record.suspended == suspended) return false;
+        record.suspended = suspended;
+        setDirty();
+        return true;
+    }
+
     public boolean releaseVassal(String overlord, String vassal) {
         VassalageRecord record = vassalages.get(vassal);
         if (record == null || !record.overlord.equals(overlord)) return false;
@@ -403,7 +427,7 @@ public final class CampaignData extends SavedData {
                 day
         );
         wars.put(war.id, war);
-        if (type != WarType.SETTLEMENT_WAR && attackerFaction != null && defenderFaction != null
+        if (attackerFaction != null && defenderFaction != null
                 && !attackerFaction.isBlank() && !defenderFaction.isBlank() && !attackerFaction.equals(defenderFaction)) {
             DiplomacyRecord relation = relation(attackerFaction, defenderFaction);
             relation.state = TreatyState.WAR;
@@ -417,14 +441,14 @@ public final class CampaignData extends SavedData {
     public WarRecord createSettlementWar(String attackerSettlement, String defenderSettlement,
                                          String attackerFaction, String defenderFaction, WarGoal goal,
                                          String customCasusBelli, UUID declaredBy, long day) {
-        WarRecord war = new WarRecord(UUID.randomUUID(), WarType.SETTLEMENT_WAR,
-                goal == null || !goal.appliesTo(WarType.SETTLEMENT_WAR) ? WarGoal.CAPTURE_SETTLEMENT : goal,
+        WarRecord war = new WarRecord(UUID.randomUUID(), WarType.WAR,
+                goal == null || !goal.appliesTo(WarType.WAR) ? WarGoal.CAPTURE_SETTLEMENT : goal,
                 attackerFaction == null ? "" : attackerFaction, defenderFaction == null ? "" : defenderFaction,
                 SettlementData.normalizeId(defenderSettlement), declaredBy, day);
         war.attackerSettlement = SettlementData.normalizeId(attackerSettlement);
         war.customCasusBelli = SettlementData.cleanText(customCasusBelli, "", 100);
-        war.attackerFactionJoined = false;
-        war.defenderFactionJoined = false;
+        war.attackerFactionJoined = true;
+        war.defenderFactionJoined = true;
         wars.put(war.id, war);
         setDirty();
         return war;
@@ -457,8 +481,8 @@ public final class CampaignData extends SavedData {
         war.status = WarStatus.ENDED;
         war.endedDay = day;
         war.peaceTerms = SettlementData.cleanText(terms, "Peace agreed.", 180);
-        boolean parentFactionsWereBelligerents = war.type != WarType.SETTLEMENT_WAR
-                || (war.attackerFactionJoined && war.defenderFactionJoined);
+        if (war.goal == WarGoal.INDEPENDENCE_WAR) setVassalageSuspended(war.defenderFaction, war.attackerFaction, false);
+        boolean parentFactionsWereBelligerents = true;
         if (parentFactionsWereBelligerents && !war.attackerFaction.isBlank() && !war.defenderFaction.isBlank()
                 && !war.attackerFaction.equals(war.defenderFaction)) {
             relation(war.attackerFaction, war.defenderFaction).setState(TreatyState.NEUTRAL, day);
@@ -561,6 +585,13 @@ public final class CampaignData extends SavedData {
         setDirty();
     }
 
+    public void setFactionCulture(String factionId, String cultureId) {
+        if (factionId == null || factionId.isBlank()) return;
+        CultureDefinition definition = CultureDefinition.get(cultureId);
+        factionProfile(factionId).culture = definition == null ? "" : definition.id();
+        setDirty();
+    }
+
     public void setFactionColors(String factionId, String teamDye, String unitDye) {
         if (factionId == null || factionId.isBlank()) return;
         FactionProfile profile = factionProfile(factionId);
@@ -631,6 +662,15 @@ public final class CampaignData extends SavedData {
             return displayName;
         }
 
+        /** Shieldmen remain readable from old saves, but are no longer a player-selectable unit. */
+        public boolean selectable() {
+            return this != SHIELDMAN;
+        }
+
+        public static List<UnitType> selectableValues() {
+            return java.util.Arrays.stream(values()).filter(UnitType::selectable).toList();
+        }
+
         public static UnitType parse(String raw) {
             if (raw == null) return null;
             String normalized = raw.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
@@ -677,8 +717,11 @@ public final class CampaignData extends SavedData {
         DEFENSIVE_ALLIANCE,
         MILITARY_ALLIANCE,
         VASSALAGE,
+        REQUEST_INDEPENDENCE,
+        REQUEST_TRIBUTE,
         PEACE,
-        CALL_TO_WAR
+        CALL_TO_WAR,
+        REQUEST_JOIN_WAR
     }
 
     public enum ProposalStatus {
@@ -690,9 +733,7 @@ public final class CampaignData extends SavedData {
 
     public enum WarType {
         RAID("Raid"),
-        SKIRMISH("Skirmish"),
-        SETTLEMENT_WAR("Settlement War"),
-        FACTION_WAR("Faction War");
+        WAR("War");
 
         private final String displayName;
 
@@ -714,17 +755,19 @@ public final class CampaignData extends SavedData {
         SEIZE_TREASURY("Seize Treasury", WarType.RAID),
         STEAL_SUPPLIES("Steal Supplies", WarType.RAID),
         PUNITIVE_RAID("Punitive Raid", WarType.RAID),
-        BORDER_CLASH("Border Clash", WarType.SKIRMISH),
-        FORCE_WITHDRAWAL("Force Withdrawal", WarType.SKIRMISH),
-        CAPTURE_SETTLEMENT("Capture Settlement", WarType.SETTLEMENT_WAR),
-        FORCE_TRIBUTE("Force Tribute", WarType.SETTLEMENT_WAR),
-        LIBERATE_SETTLEMENT("Liberate Settlement", WarType.SETTLEMENT_WAR),
-        CONQUER_TERRITORY("Conquer Territory", WarType.FACTION_WAR),
-        RECOVER_TERRITORY("Recover Lost Territory", WarType.FACTION_WAR),
-        FORCE_VASSALAGE("Force Vassalage", WarType.FACTION_WAR),
-        PUNITIVE_WAR("Punitive War", WarType.FACTION_WAR),
-        HOLY_WAR("Holy War", WarType.FACTION_WAR),
-        CUSTOM("Custom Casus Belli", null);
+        BORDER_CLASH("Border Raid", WarType.RAID),
+        CUSTOM_RAID("Custom Casus Belli", WarType.RAID),
+        FORCE_WITHDRAWAL("Force Withdrawal", WarType.WAR),
+        CAPTURE_SETTLEMENT("Capture Settlement", WarType.WAR),
+        FORCE_TRIBUTE("Force Tribute", WarType.WAR),
+        LIBERATE_SETTLEMENT("Liberate Settlement", WarType.WAR),
+        CONQUER_TERRITORY("Conquer Territory", WarType.WAR),
+        RECOVER_TERRITORY("Recover Lost Territory", WarType.WAR),
+        FORCE_VASSALAGE("Force Vassalage", WarType.WAR),
+        INDEPENDENCE_WAR("Independence War", WarType.WAR),
+        PUNITIVE_WAR("Punitive War", WarType.WAR),
+        HOLY_WAR("Holy War", WarType.WAR),
+        CUSTOM("Custom Casus Belli", WarType.WAR);
 
         private final String displayName;
         private final WarType type;
@@ -736,11 +779,17 @@ public final class CampaignData extends SavedData {
 
         public String displayName() { return displayName; }
         public WarType type() { return type; }
-        public boolean appliesTo(WarType warType) { return this == CUSTOM || type == warType; }
+        public boolean appliesTo(WarType warType) { return type == warType; }
+        public boolean custom() { return this == CUSTOM || this == CUSTOM_RAID; }
+        public boolean requiresSettlement() { return switch (this) {
+            case SEIZE_TREASURY, STEAL_SUPPLIES, PUNITIVE_RAID, BORDER_CLASH, CUSTOM_RAID,
+                    FORCE_WITHDRAWAL, CAPTURE_SETTLEMENT, LIBERATE_SETTLEMENT, RECOVER_TERRITORY, CONQUER_TERRITORY -> true;
+            default -> false;
+        }; }
 
         public static WarGoal defaultFor(WarType type) {
             for (WarGoal goal : values()) if (goal.type == type) return goal;
-            return CONQUER_TERRITORY;
+            return type == WarType.RAID ? SEIZE_TREASURY : CONQUER_TERRITORY;
         }
     }
 
@@ -902,7 +951,7 @@ public final class CampaignData extends SavedData {
         }
 
         public List<UnitType> configuredTypes() {
-            return templates.keySet().stream().sorted(Comparator.comparingInt(UnitType::ordinal)).toList();
+            return templates.keySet().stream().filter(UnitType::selectable).sorted(Comparator.comparingInt(UnitType::ordinal)).toList();
         }
     }
 
@@ -968,6 +1017,7 @@ public final class CampaignData extends SavedData {
         private final String overlord;
         private final String vassal;
         private int tributeRate;
+        private boolean suspended;
         private final long establishedDay;
 
         private VassalageRecord(String overlord, String vassal, int tributeRate, long establishedDay) {
@@ -978,8 +1028,10 @@ public final class CampaignData extends SavedData {
         }
 
         private static VassalageRecord fromNBT(CompoundTag tag) {
-            return new VassalageRecord(tag.getString("Overlord"), tag.getString("Vassal"),
+            VassalageRecord record = new VassalageRecord(tag.getString("Overlord"), tag.getString("Vassal"),
                     tag.getInt("TributeRate"), tag.getLong("EstablishedDay"));
+            record.suspended = tag.getBoolean("Suspended");
+            return record;
         }
 
         private CompoundTag toNBT() {
@@ -987,6 +1039,7 @@ public final class CampaignData extends SavedData {
             tag.putString("Overlord", overlord);
             tag.putString("Vassal", vassal);
             tag.putInt("TributeRate", tributeRate);
+            tag.putBoolean("Suspended", suspended);
             tag.putLong("EstablishedDay", establishedDay);
             return tag;
         }
@@ -995,6 +1048,7 @@ public final class CampaignData extends SavedData {
         public String overlord() { return overlord; }
         public String vassal() { return vassal; }
         public int tributeRate() { return tributeRate; }
+        public boolean suspended() { return suspended; }
         public long establishedDay() { return establishedDay; }
     }
 
@@ -1006,9 +1060,14 @@ public final class CampaignData extends SavedData {
         private final UUID actor;
         private final UUID linkedWar;
         private final long createdDay;
+        private final int value;
         private ProposalStatus status = ProposalStatus.PENDING;
 
         private DiplomacyProposal(UUID id, ProposalType type, String fromFaction, String toFaction, UUID actor, UUID linkedWar, long createdDay) {
+            this(id, type, fromFaction, toFaction, actor, linkedWar, createdDay, 0);
+        }
+
+        private DiplomacyProposal(UUID id, ProposalType type, String fromFaction, String toFaction, UUID actor, UUID linkedWar, long createdDay, int value) {
             this.id = id;
             this.type = type;
             this.fromFaction = fromFaction;
@@ -1016,6 +1075,7 @@ public final class CampaignData extends SavedData {
             this.actor = actor;
             this.linkedWar = linkedWar;
             this.createdDay = createdDay;
+            this.value = value;
         }
 
         private static DiplomacyProposal fromNBT(CompoundTag tag) {
@@ -1031,7 +1091,7 @@ public final class CampaignData extends SavedData {
                     tag.getString("To"),
                     tag.hasUUID("Actor") ? tag.getUUID("Actor") : null,
                     tag.hasUUID("War") ? tag.getUUID("War") : null,
-                    tag.getLong("CreatedDay")
+                    tag.getLong("CreatedDay"), tag.getInt("Value")
             );
             proposal.status = status;
             return proposal;
@@ -1046,6 +1106,7 @@ public final class CampaignData extends SavedData {
             if (actor != null) tag.putUUID("Actor", actor);
             if (linkedWar != null) tag.putUUID("War", linkedWar);
             tag.putLong("CreatedDay", createdDay);
+            tag.putInt("Value", value);
             tag.putString("Status", status.name());
             return tag;
         }
@@ -1058,6 +1119,7 @@ public final class CampaignData extends SavedData {
         public UUID linkedWar() { return linkedWar; }
         public long createdDay() { return createdDay; }
         public ProposalStatus status() { return status; }
+        public int value() { return value; }
     }
 
     public static final class WarRecord {
@@ -1086,8 +1148,8 @@ public final class CampaignData extends SavedData {
             this.attackerFaction = attackerFaction;
             this.defenderFaction = defenderFaction;
             this.targetSettlement = targetSettlement;
-            this.attackerFactionJoined = type != WarType.SETTLEMENT_WAR;
-            this.defenderFactionJoined = type != WarType.SETTLEMENT_WAR;
+            this.attackerFactionJoined = true;
+            this.defenderFactionJoined = true;
             this.declaredBy = declaredBy;
             this.startedDay = startedDay;
         }
@@ -1096,8 +1158,10 @@ public final class CampaignData extends SavedData {
             WarType type;
             WarGoal goal;
             WarStatus status;
-            try { type = WarType.valueOf(tag.getString("Type")); } catch (IllegalArgumentException ignored) { type = WarType.FACTION_WAR; }
+            String savedType = tag.getString("Type");
+            type = "RAID".equals(savedType) || "SKIRMISH".equals(savedType) ? WarType.RAID : WarType.WAR;
             try { goal = WarGoal.valueOf(tag.getString("Goal")); } catch (IllegalArgumentException ignored) { goal = WarGoal.defaultFor(type); }
+            if (type == WarType.RAID && goal == WarGoal.CUSTOM) goal = WarGoal.CUSTOM_RAID;
             if (!goal.appliesTo(type)) goal = WarGoal.defaultFor(type);
             try { status = WarStatus.valueOf(tag.getString("Status")); } catch (IllegalArgumentException ignored) { status = WarStatus.ACTIVE; }
             WarRecord war = new WarRecord(
@@ -1112,8 +1176,8 @@ public final class CampaignData extends SavedData {
             );
             war.attackerSettlement = SettlementData.normalizeId(tag.getString("AttackerSettlement"));
             war.customCasusBelli = SettlementData.cleanText(tag.getString("CustomCasusBelli"), "", 100);
-            war.attackerFactionJoined = tag.contains("AttackerFactionJoined", Tag.TAG_BYTE) ? tag.getBoolean("AttackerFactionJoined") : type != WarType.SETTLEMENT_WAR;
-            war.defenderFactionJoined = tag.contains("DefenderFactionJoined", Tag.TAG_BYTE) ? tag.getBoolean("DefenderFactionJoined") : type != WarType.SETTLEMENT_WAR;
+            war.attackerFactionJoined = true;
+            war.defenderFactionJoined = true;
             war.status = status;
             war.endedDay = tag.getLong("EndedDay");
             war.peaceTerms = tag.getString("PeaceTerms");
@@ -1157,11 +1221,7 @@ public final class CampaignData extends SavedData {
         public boolean attackerFactionJoined() { return attackerFactionJoined; }
         public boolean defenderFactionJoined() { return defenderFactionJoined; }
         public String escalationName() {
-            if (type != WarType.SETTLEMENT_WAR) return type.displayName();
-            if (attackerFactionJoined && defenderFactionJoined) return "Faction vs Faction";
-            if (attackerFactionJoined) return "Faction vs Settlement";
-            if (defenderFactionJoined) return "Settlement vs Faction";
-            return "Settlement vs Settlement";
+            return type.displayName();
         }
         public void joinParentFaction(boolean attackerSide) { if (attackerSide) attackerFactionJoined = true; else defenderFactionJoined = true; }
         public UUID declaredBy() { return declaredBy; }
@@ -1249,6 +1309,7 @@ public final class CampaignData extends SavedData {
         private final Map<Integer, String> rankTitles = new HashMap<>();
         private final Map<UUID, Integer> memberRanks = new HashMap<>();
         private GovernmentType government = GovernmentType.MONARCHY;
+        private String culture = "";
         private String teamDye = "white";
         private String unitDye = "white";
 
@@ -1261,6 +1322,7 @@ public final class CampaignData extends SavedData {
             CompoundTag tag = new CompoundTag();
             tag.putString("Faction", factionId);
             tag.putString("Government", government.name());
+            tag.putString("Culture", culture);
             tag.putString("TeamDye", teamDye);
             tag.putString("UnitDye", unitDye);
             ListTag titles = new ListTag();
@@ -1285,6 +1347,8 @@ public final class CampaignData extends SavedData {
         private static FactionProfile fromNBT(CompoundTag tag) {
             FactionProfile profile = new FactionProfile(tag.getString("Faction"));
             profile.government = GovernmentType.parse(tag.getString("Government"));
+            CultureDefinition culture = CultureDefinition.get(tag.getString("Culture"));
+            profile.culture = culture == null ? "" : culture.id();
             String teamDye = tag.getString("TeamDye");
             String unitDye = tag.getString("UnitDye");
             if (!teamDye.isBlank()) profile.teamDye = teamDye;
@@ -1303,6 +1367,7 @@ public final class CampaignData extends SavedData {
 
         public String factionId() { return factionId; }
         public GovernmentType government() { return government; }
+        public String culture() { return culture; }
         public String teamDye() { return teamDye; }
         public String unitDye() { return unitDye; }
         public Map<Integer, String> rankTitles() { return Map.copyOf(rankTitles); }

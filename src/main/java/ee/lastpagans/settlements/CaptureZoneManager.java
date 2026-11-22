@@ -297,8 +297,8 @@ public final class CaptureZoneManager {
         SettlementData.SettlementRecord defender=data.getSettlement(war.defenderSettlement());
         String primaryAttacker=effectiveTeam(attacker); String primaryDefender=effectiveTeam(defender);
         add(attackers, primaryAttacker); add(defenders, primaryDefender);
-        if (war.type()!=CampaignData.WarType.SETTLEMENT_WAR || war.attackerFactionJoined()) add(attackers, war.attackerFaction());
-        if (war.type()!=CampaignData.WarType.SETTLEMENT_WAR || war.defenderFactionJoined()) add(defenders, war.defenderFaction());
+        add(attackers, war.attackerFaction());
+        add(defenders, war.defenderFaction());
         war.supportingAttackers().forEach(v -> add(attackers,v)); war.supportingDefenders().forEach(v -> add(defenders,v));
         return new TeamSets(attackers,defenders,primaryAttacker,primaryDefender);
     }
