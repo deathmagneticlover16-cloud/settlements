@@ -515,6 +515,7 @@ public final class CampaignManager {
             if (data.vassalageFor(own) != null) return "Your faction already has an overlord.";
             if (data.wouldCreateVassalCycle(target, own)) return "That vassalage would create a political cycle.";
         }
+        if (data.hasPendingProposal(type, own, target, war)) return "An identical proposal is already pending.";
         int required = relationshipMinimum(type);
         int relationship = effectiveRelationship(player.serverLevel(), own, target);
         if (relationship < required) return "Relationship " + relationship + " is below the required " + required + " for " + pretty(type.name()) + ".";
@@ -532,6 +533,8 @@ public final class CampaignManager {
         CampaignData.VassalageRecord record = data.vassalageFor(own);
         if (record == null || !record.overlord().equals(target)) return "Independence can be requested only from your current overlord.";
         if (record.suspended()) return "Resolve the active independence war first.";
+        if (data.hasPendingProposal(CampaignData.ProposalType.REQUEST_INDEPENDENCE, own, target, null))
+            return "An independence request is already pending.";
         data.createProposal(CampaignData.ProposalType.REQUEST_INDEPENDENCE, own, target, player.getUUID(), null, day);
         CampaignToastSender.faction(player.getServer(), target, "INDEPENDENCE REQUEST", factionName(own) + " requests peaceful independence.");
         return "Independence request sent to " + factionName(target) + ".";
@@ -545,6 +548,8 @@ public final class CampaignManager {
         try { rate = Integer.parseInt(rawRate == null ? "" : rawRate.trim()); }
         catch (NumberFormatException ignored) { return "Choose a tribute rate of 5%, 10%, 25%, or 50%."; }
         if (!CampaignData.VassalageRecord.validRate(rate) || rate >= record.tributeRate()) return "Choose a valid rate below the current " + record.tributeRate() + "%.";
+        if (data.hasPendingProposal(CampaignData.ProposalType.REQUEST_TRIBUTE, own, target, null))
+            return "A tribute request is already pending.";
         data.createProposal(CampaignData.ProposalType.REQUEST_TRIBUTE, own, target, player.getUUID(), null, day, rate);
         CampaignToastSender.faction(player.getServer(), target, "TRIBUTE REQUEST", factionName(own) + " requests " + rate + "% tribute.");
         return "Tribute request sent to " + factionName(target) + ".";
@@ -1333,6 +1338,8 @@ public final class CampaignManager {
         if (alliance == CampaignData.TreatyState.DEFENSIVE_ALLIANCE && ownOnAttackerSide) {
             return "A defensive ally can only be called when your side is defending.";
         }
+        if (data.hasPendingProposal(CampaignData.ProposalType.CALL_TO_WAR, own, target, war.id()))
+            return "That ally already has a pending call for this War.";
         data.createProposal(CampaignData.ProposalType.CALL_TO_WAR, own, target, player.getUUID(), war.id(), day);
         CampaignToastSender.faction(player.getServer(), target, "CALL TO WAR", factionName(own) + " requests your aid in " + war.escalationName() + ".");
         return "Call to war sent to " + factionName(target) + ".";
@@ -1350,6 +1357,8 @@ public final class CampaignManager {
         if (data.relation(own, enemy).state() == CampaignData.TreatyState.MILITARY_ALLIANCE
                 || data.relation(own, enemy).state() == CampaignData.TreatyState.DEFENSIVE_ALLIANCE)
             return "Your current alliance conflicts with joining that side.";
+        if (data.hasPendingProposal(CampaignData.ProposalType.REQUEST_JOIN_WAR, own, target, war.id()))
+            return "A request to join that side is already pending.";
         data.createProposal(CampaignData.ProposalType.REQUEST_JOIN_WAR, own, target, player.getUUID(), war.id(), day);
         CampaignToastSender.faction(player.getServer(), target, "WAR PARTICIPATION REQUEST", factionName(own) + " requests to join your side.");
         return "Request to join the War sent to " + factionName(target) + ".";
@@ -1409,6 +1418,9 @@ public final class CampaignManager {
             boolean attackerSide = own.equals(war.attackerFaction());
             if (!attackerSide && !own.equals(war.defenderFaction())) return "Only a War leader may approve this request.";
             String enemy = attackerSide ? war.defenderFaction() : war.attackerFaction();
+            CampaignData.TreatyState enemyRelation = data.relation(proposal.fromFaction(), enemy).state();
+            if (enemyRelation == CampaignData.TreatyState.DEFENSIVE_ALLIANCE || enemyRelation == CampaignData.TreatyState.MILITARY_ALLIANCE)
+                return "The requesting faction now has an incompatible alliance.";
             if (!syncRelation(player.serverLevel(), proposal.fromFaction(), enemy, CampaignData.TreatyState.WAR))
                 return "War participation could not be synchronized with Recruits.";
             war.addSupporter(proposal.fromFaction(), attackerSide);

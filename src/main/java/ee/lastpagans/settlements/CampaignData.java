@@ -319,6 +319,14 @@ public final class CampaignData extends SavedData {
                 .toList();
     }
 
+    public boolean hasPendingProposal(ProposalType type, String fromFaction, String toFaction, UUID linkedWar) {
+        return proposals.values().stream().anyMatch(proposal -> proposal.status == ProposalStatus.PENDING
+                && proposal.type == type
+                && java.util.Objects.equals(proposal.fromFaction, fromFaction)
+                && java.util.Objects.equals(proposal.toFaction, toFaction)
+                && java.util.Objects.equals(proposal.linkedWar, linkedWar));
+    }
+
     public void resolveProposal(UUID id, ProposalStatus status) {
         DiplomacyProposal proposal = proposals.get(id);
         if (proposal == null || proposal.status != ProposalStatus.PENDING) return;

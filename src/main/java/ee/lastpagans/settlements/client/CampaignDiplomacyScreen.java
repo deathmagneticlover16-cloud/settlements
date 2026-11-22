@@ -290,7 +290,6 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
     private void renderPoliticalMap(GuiGraphics g) {
         int right = selected() == null ? left + W - 14 : left + W - 294; drawCampaignPanel(g, left + 236, top + 48, right, top + H - 32);
         g.drawCenteredString(font, "POLITICAL MAP", (left + 236 + right) / 2, top + 60, 0xFFD8BA83);
-        g.drawCenteredString(font, "Authoritative settlement positions", (left + 236 + right) / 2, top + 72, 0xFF999999);
     }
 
     private void renderDossier(GuiGraphics g, DiplomacySnapshot.RelationEntry r) {
@@ -320,7 +319,6 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             case RELATIONSHIP -> renderRelationship(g); case AGREEMENTS -> renderAgreements(g); case NEGOTIATION -> renderNegotiation(g);
             case TERM_PICKER -> {
                 title(g, "ADD DIPLOMATIC TERM"); g.drawString(font, "Available terms", left + 290, top + 116, 0xFF493B2B, false);
-                g.drawString(font, "Trade Agreement unavailable: no authoritative province resource or route data", left + 290, top + 278, 0xFF79664C, false);
             }
             case WAR -> renderWar(g); case CORRESPONDENCE -> renderCorrespondence(g); default -> { }
         }
@@ -348,7 +346,18 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
     }
     private void renderRelationship(GuiGraphics g) {
         title(g, "FULL RELATIONSHIP BREAKDOWN"); DiplomacySnapshot.RelationEntry target = selected(); if (target == null) return; int y = top + 112;
-        for (int i = 0; i < target.factors().size(); i++) { DiplomacySnapshot.RelationshipFactor f = target.factors().get(i); g.drawString(font, f.label(), left + 105, y + i * 34, 0xFF493B2B, false); g.drawString(font, f.explanation(), left + 105, y + 12 + i * 34, 0xFF79664C, false); g.drawString(font, signed(f.value()), left + W - 120, y + i * 34, f.value() < 0 ? 0xFF9A4F43 : 0xFF55763D, false); }
+        for (int i = scroll; i < target.factors().size() && y < top + H - 92; i++) {
+            DiplomacySnapshot.RelationshipFactor f = target.factors().get(i);
+            g.drawString(font, f.label(), left + 105, y, 0xFF493B2B, false);
+            g.drawString(font, signed(f.value()), left + W - 120, y, f.value() < 0 ? 0xFF9A4F43 : 0xFF55763D, false);
+            y += 12;
+            for (net.minecraft.util.FormattedCharSequence line : font.split(Component.literal(f.explanation()), W - 250)) {
+                if (y >= top + H - 92) break;
+                g.drawString(font, line, left + 105, y, 0xFF79664C, false);
+                y += 10;
+            }
+            y += 8;
+        }
         g.drawString(font, "TOTAL  " + signed(target.relationship()), left + W - 200, top + H - 78, 0xFF493B2B, false);
     }
     private void renderAgreements(GuiGraphics g) {
@@ -374,7 +383,7 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
         for (int i = 0; i < Math.min(9, snapshot.proposals().size()); i++) { DiplomacySnapshot.ProposalEntry p = snapshot.proposals().get(i); int y = top + 144 + i * 30; String direction = p.incoming() ? "Received from " + p.fromFactionName() : "Sent to " + p.toFactionName(); g.drawString(font, pretty(p.type()) + " · " + direction + " · " + pretty(p.status()), left + 105, y, 0xFF493B2B, false); if (!p.summary().isBlank()) g.drawString(font, fitText(p.summary(), 390), left + 105, y + 11, 0xFF79664C, false); }
     }
 
-    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) { if (overlay == Overlay.OWN_CULTURE || overlay == Overlay.TARGET_CULTURE) { scroll = Math.max(0, scroll + (delta < 0 ? 1 : -1)); return true; } return super.mouseScrolled(mouseX, mouseY, delta); }
+    @Override public boolean mouseScrolled(double mouseX, double mouseY, double delta) { if (overlay == Overlay.OWN_CULTURE || overlay == Overlay.TARGET_CULTURE || overlay == Overlay.RELATIONSHIP) { scroll = Math.max(0, scroll + (delta < 0 ? 1 : -1)); return true; } return super.mouseScrolled(mouseX, mouseY, delta); }
     @Override public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (super.mouseClicked(mouseX, mouseY, button)) return true;
         if (overlay != Overlay.NONE) return false;
