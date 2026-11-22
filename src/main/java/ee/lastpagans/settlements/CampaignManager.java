@@ -1549,6 +1549,16 @@ public final class CampaignManager {
         return relationshipBreakdown(level, first, second).total();
     }
 
+    /** Relationship after ordinary range clamping but before an active tribute ceiling is applied. */
+    private static int uncappedEffectiveRelationship(ServerLevel level, String first, String second) {
+        RelationshipBreakdown breakdown = relationshipBreakdown(level, first, second);
+        int tributeAdjustment = breakdown.parts().stream()
+                .filter(part -> "tribute_cap".equals(part.id()))
+                .mapToInt(RelationshipPart::value)
+                .sum();
+        return breakdown.total() - tributeAdjustment;
+    }
+
     public static RelationshipBreakdown relationshipBreakdown(ServerLevel level, String first, String second) {
         if (level == null || first == null || second == null || first.isBlank() || second.isBlank())
             return new RelationshipBreakdown(0, List.of());

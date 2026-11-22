@@ -1,5 +1,9 @@
 # Changelog
 
+## 5.0.1
+
+- Restored the pre-tribute relationship calculation used when enforcing vassal tribute ceilings after the diplomacy relationship refactor.
+
 ## 5.0.0
 
 ### Diplomacy
