@@ -13,8 +13,10 @@ Settlements is a campaign-scale Minecraft Forge mod for settlement management, c
 
 Every political state uses one State Treasury. Development depends on population, Stability, housing, and capture objectives. The Town Square is the settlement's single Main objective. Settlements retain their founding faith through conquest and convert gradually where the rules permit it. Marriage is read-only for players and is officiated or dissolved by administrators after roleplay ceremonies.
 
-The campaign shell links Realm Overview, Character (including Marriage), Settlements, Military, Realm/Faction, Diplomacy, Research, and Chronicle. Diplomacy uses one bilateral relationship score. Player factions can form real vassalage contracts with 5/10/25/50% tribute taken once from actual post-stability tax receipts.
+The campaign shell links Realm Overview, Character (including Marriage), Settlements, Military, Realm/Faction, Diplomacy, Research, and Chronicle. Diplomacy uses one bilateral relationship score. Player factions can form real vassalage contracts with 5/10/25/50% tribute taken once from actual post-stability tax receipts. Press `M` to open the integrated province campaign map, manage persistent strategic armies, and inspect political ownership and control.
 
-Use `gradlew.bat build` on Windows or `./gradlew build` elsewhere when a build is needed. The output is `build/libs/settlements-5.0.1.jar`.
+The campaign map requires Icy's Better Horses `2.1.6` (and remains incompatible with `2.2.0+`). Immersive Paintings and Recruits RTS Camera integrations are optional. Remove the old standalone Campaign Map JAR when installing Settlements 6.0.0 because its code and saved-data support are now included here.
 
-Version 5.0.1 uses network protocol 48. Legacy conflict kinds load as War or Raid; clients and servers must use the same protocol.
+Use `gradlew.bat build` on Windows or `./gradlew build` elsewhere when a build is needed. The output is `build/libs/settlements-6.0.0.jar`.
+
+Version 6.0.0 uses Settlements network protocol 48 and integrated campaign-map protocol 7. Legacy conflict kinds load as War or Raid; clients and servers must use the same version.

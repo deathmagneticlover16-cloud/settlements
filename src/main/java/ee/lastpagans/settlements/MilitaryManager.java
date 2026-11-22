@@ -273,6 +273,16 @@ public final class MilitaryManager {
         if (level != null) MilitaryData.get(level).setDeployed(player, world, campaign);
     }
 
+    public static void transferDeployment(ServerLevel level, UUID player, int amount, boolean toCampaign) {
+        if (level == null || player == null || amount <= 0) return;
+        MilitaryData data = MilitaryData.get(level);
+        MilitaryData.DeploymentCount current = data.deployed(player);
+        int moved = Math.min(amount, toCampaign ? current.world() : current.campaign());
+        if (moved <= 0) return;
+        data.setDeployed(player, current.world() + (toCampaign ? -moved : moved),
+                current.campaign() + (toCampaign ? moved : -moved));
+    }
+
     public static int convertReservesToForeign(ServerLevel level, SettlementData.SettlementRecord settlement) {
         MilitaryData data = MilitaryData.get(level); long milli = 0L;
         for (CampaignData.UnitType type : CampaignData.UnitType.values()) {

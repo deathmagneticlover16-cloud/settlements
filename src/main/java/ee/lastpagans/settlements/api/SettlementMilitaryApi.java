@@ -24,4 +24,9 @@ public final class SettlementMilitaryApi {
     public static void reportDeployment(ServerLevel level, UUID player, int worldSoldiers, int campaignSoldiers) {
         MilitaryManager.reportDeployment(level, player, worldSoldiers, campaignSoldiers);
     }
+
+    /** Moves already-counted mustered soldiers between mutually exclusive world and campaign totals. */
+    public static void transferDeployment(ServerLevel level, UUID player, int soldiers, boolean toCampaign) {
+        MilitaryManager.transferDeployment(level, player, soldiers, toCampaign);
+    }
 }

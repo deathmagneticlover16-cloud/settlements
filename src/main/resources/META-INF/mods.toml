@@ -6,7 +6,7 @@ license="All Rights Reserved"
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-description='''A campaign-scale settlement, faction, character, military, diplomacy and world-news framework integrated with Villager Recruits.'''
+description='''A campaign-scale settlement, province-map, strategic-army, faction, character, military, diplomacy and world-news framework integrated with Villager Recruits.'''
 
 [[dependencies.${mod_id}]]
 modId="forge"
@@ -40,5 +40,26 @@ side="BOTH"
 modId="historystages"
 mandatory=false
 versionRange="[5.4.0,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="immersive_paintings"
+mandatory=false
+versionRange="[0.6.13,)"
+ordering="AFTER"
+side="CLIENT"
+
+[[dependencies.${mod_id}]]
+modId="recruits_rts_camera"
+mandatory=false
+versionRange="[0.17.0,)"
+ordering="AFTER"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="icys_better_horses"
+mandatory=true
+versionRange="[2.1.6,2.2.0)"
 ordering="AFTER"
 side="BOTH"

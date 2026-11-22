@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements.client;
 
+import com.lastpagans.campaignmap.client.CampaignMapScreen;
 import ee.lastpagans.settlements.CampaignData;
 import ee.lastpagans.settlements.CultureDefinition;
 import ee.lastpagans.settlements.DiplomacySnapshot;
@@ -42,6 +43,16 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
 
     private void rebuild() {
         clearWidgets(); customReason = null; declareButton = null;
+        // A diplomacy overlay is a real modal layer. Only its own controls may remain
+        // renderable/clickable; otherwise Screen renders the base widgets after the modal
+        // artwork and they visibly punch through culture and relationship pages.
+        if (overlay != Overlay.NONE) {
+            overlayWidgets();
+            return;
+        }
+        addRenderableWidget(Button.builder(Component.literal("CAMPAIGN MAP"), b -> {
+                    if (minecraft != null) minecraft.setScreen(new CampaignMapScreen(this));
+                }).bounds(left + W - 370, top + 14, 100, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Correspondence (" + snapshot.proposals().size() + ")"), b -> open(Overlay.CORRESPONDENCE))
                 .bounds(left + W - 260, top + 14, 142, 20).build());
         addRenderableWidget(Button.builder(Component.literal("Return"), b -> SettlementNetwork.CHANNEL.sendToServer(
@@ -75,7 +86,6 @@ public final class CampaignDiplomacyScreen extends ScaledCampaignScreen {
             addRenderableWidget(Button.builder(Component.literal("FULL RELATIONSHIP BREAKDOWN"), b -> { scroll = 0; open(Overlay.RELATIONSHIP); })
                     .bounds(left + W - 273, top + H - 56, 250, 20).build());
         }
-        if (overlay != Overlay.NONE) overlayWidgets();
     }
 
     private void overlayWidgets() {

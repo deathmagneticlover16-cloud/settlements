@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.0.0
+
+### Campaign map
+
+- Absorbed the Campaign Map mod into Settlements, including its province projection and registry, persistent ownership/control data, political and terrain layers, map controls, commands, public API, networking, and synchronized client cache.
+- Added persistent strategic armies backed by real Recruits commanders and groups, movement preparation, map orders, deployment, observer-dependent intelligence, formation management, flags, optional RTS/Immersive Paintings integration, and the required Icy's Better Horses 2.1.6 runtime integration.
+- Integrated strategic packing/deployment with Settlements' mutually exclusive world/campaign soldier counters so army movement does not silently free or double-count deployment capacity.
+- Added the bundled campaign geography, terrain, province key, language entries, and fallback army-banner resources.
+
+### Diplomacy
+
+- Made diplomacy overlays truly modal so culture information and other overlay pages render above, and receive input ahead of, all underlying screen controls.
+
 ## 5.0.1
 
 - Restored the pre-tribute relationship calculation used when enforcing vassal tribute ceilings after the diplomacy relationship refactor.

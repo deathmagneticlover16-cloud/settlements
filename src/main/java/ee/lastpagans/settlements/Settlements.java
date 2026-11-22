@@ -1,5 +1,6 @@
 package ee.lastpagans.settlements;
 
+import com.lastpagans.campaignmap.CampaignMapMod;
 import ee.lastpagans.settlements.client.ClientBootstrap;
 import ee.lastpagans.settlements.item.ModItems;
 import ee.lastpagans.settlements.network.SettlementNetwork;
@@ -19,6 +20,7 @@ public final class Settlements {
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, SettlementConfig.SPEC, "settlements-common.toml");
         ModItems.ITEMS.register(FMLJavaModLoadingContext.get().getModEventBus());
         SettlementNetwork.register();
+        new CampaignMapMod();
 
         MinecraftForge.EVENT_BUS.addListener(SettlementCommands::onRegisterCommands);
         MinecraftForge.EVENT_BUS.addListener(SettlementEvents::onLivingDeath);
