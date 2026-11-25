@@ -18,7 +18,6 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.scores.PlayerTeam;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -26,6 +25,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Server-authoritative settlement, economy, military and campaign systems. */
 public final class CampaignSystemsManager {
@@ -34,32 +34,29 @@ public final class CampaignSystemsManager {
     public static final int FACTION_LEVY_CAP = 500;
     public static final int LEVY_LEVEL_CAP = 3;
 
-    private static final Map<UUID, BlockPos> REGION_POS1 = new HashMap<>();
-    private static final Map<UUID, String> REGION_DIM = new HashMap<>();
+    private static final Map<UUID, RegionDraft> REGION_DRAFTS = new ConcurrentHashMap<>();
+    private record RegionDraft(BlockPos first, String dimension) {}
 
     private CampaignSystemsManager() {}
 
     public static void setRegionPos1(ServerPlayer player) {
-        REGION_POS1.put(player.getUUID(), player.blockPosition());
-        REGION_DIM.put(player.getUUID(), player.serverLevel().dimension().location().toString());
+        REGION_DRAFTS.put(player.getUUID(), new RegionDraft(player.blockPosition(),
+                player.serverLevel().dimension().location().toString()));
     }
 
     public static CampaignSystemsData.RegionRecord completeRegion(ServerPlayer player) {
-        BlockPos first = REGION_POS1.remove(player.getUUID());
-        String dimension = REGION_DIM.remove(player.getUUID());
-        if (first == null || dimension == null || !dimension.equals(player.serverLevel().dimension().location().toString())) return null;
-        return new CampaignSystemsData.RegionRecord(dimension, first, player.blockPosition());
+        RegionDraft draft = REGION_DRAFTS.remove(player.getUUID());
+        if (draft == null || !draft.dimension.equals(player.serverLevel().dimension().location().toString())) return null;
+        return new CampaignSystemsData.RegionRecord(draft.dimension, draft.first, player.blockPosition());
     }
 
     public static void clearPlayerState(UUID playerId) {
         if (playerId == null) return;
-        REGION_POS1.remove(playerId);
-        REGION_DIM.remove(playerId);
+        REGION_DRAFTS.remove(playerId);
     }
 
     public static void clearRuntimeState() {
-        REGION_POS1.clear();
-        REGION_DIM.clear();
+        REGION_DRAFTS.clear();
     }
 
     public static int recalculateHousing(ServerLevel level, SettlementData.SettlementRecord settlement) {

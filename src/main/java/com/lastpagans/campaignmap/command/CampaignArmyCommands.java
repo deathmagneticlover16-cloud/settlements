@@ -13,6 +13,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
+import ee.lastpagans.settlements.network.ClientActionLimiter;
 
 import java.util.UUID;
 
@@ -123,21 +124,31 @@ public final class CampaignArmyCommands {
 
     private static int create(CommandSourceStack source, UUID commanderId, UUID groupId, String name) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
+        requireRate(source, "campaign-command-create", 20);
         CampaignArmyData data = CampaignArmyData.get(source.getLevel());
-        if (data.isCommanderAssigned(commanderId)
-                || !com.lastpagans.campaignmap.api.army.CampaignGroupProviders.canCommand(
-                source.getLevel(), player.getUUID(), commanderId))
-            throw ARMY_ERROR.create("Select a living, owned Recruits commander who is not assigned to another army.");
-        if (data.isGroupAssigned(groupId)
-                || !com.lastpagans.campaignmap.api.army.CampaignGroupProviders.canManage(
-                source.getLevel(), player.getUUID(), groupId))
-            throw ARMY_ERROR.create("Select an owned Recruits group which is not assigned to another army.");
-        Vec3 commanderPosition = com.lastpagans.campaignmap.api.army.CampaignGroupProviders
-                .commanderPosition(source.getLevel(), commanderId).orElse(player.position());
-        CampaignArmySnapshot created = data.create(source.getLevel(), player.getUUID(),
-                name, commanderId, new Vec3(commanderPosition.x, 0.0, commanderPosition.z));
-        data.addGroup(source.getLevel(), created.armyId(), player.getUUID(), groupId, false);
-        CampaignArmySnapshot army = data.snapshot(source.getLevel(), created.armyId()).orElseThrow();
+        CampaignArmySnapshot army;
+        synchronized (data) {
+            if (data.countOwned(player.getUUID()) >= 64)
+                throw ARMY_ERROR.create("You already control the maximum of 64 strategic armies.");
+            if (data.isCommanderAssigned(commanderId)
+                    || !com.lastpagans.campaignmap.api.army.CampaignGroupProviders.canCommand(
+                    source.getLevel(), player.getUUID(), commanderId))
+                throw ARMY_ERROR.create("Select a living, owned Recruits commander who is not assigned to another army.");
+            if (data.isGroupAssigned(groupId)
+                    || !com.lastpagans.campaignmap.api.army.CampaignGroupProviders.canManage(
+                    source.getLevel(), player.getUUID(), groupId))
+                throw ARMY_ERROR.create("Select an owned Recruits group which is not assigned to another army.");
+            Vec3 commanderPosition = com.lastpagans.campaignmap.api.army.CampaignGroupProviders
+                    .commanderPosition(source.getLevel(), commanderId).orElse(player.position());
+            CampaignArmySnapshot created = data.create(source.getLevel(), player.getUUID(),
+                    name, commanderId, new Vec3(commanderPosition.x, 0.0, commanderPosition.z));
+            if (data.addGroup(source.getLevel(), created.armyId(), player.getUUID(), groupId, false)
+                    != CampaignArmyData.MembershipResult.SUCCESS) {
+                data.delete(created.armyId());
+                throw ARMY_ERROR.create("The selected group changed before army creation completed.");
+            }
+            army = data.snapshot(source.getLevel(), created.armyId()).orElseThrow();
+        }
         CampaignNetwork.sendArmyUpdate(army);
         source.sendSuccess(() -> Component.literal("Created " + army.armyName() + " [" + army.armyId() + "]."), true);
         return 1;
@@ -157,6 +168,7 @@ public final class CampaignArmyCommands {
     }
 
     private static int rename(CommandSourceStack source, UUID armyId, String name) throws CommandSyntaxException {
+        requireRate(source, "campaign-command-rename", 10);
         requireManage(source, armyId);
         CampaignArmyData data = CampaignArmyData.get(source.getLevel());
         data.rename(source.getLevel(), armyId, name);
@@ -168,6 +180,7 @@ public final class CampaignArmyCommands {
 
     private static int addGroup(CommandSourceStack source, UUID armyId, UUID groupId) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
+        requireRate(source, "campaign-command-group", 10);
         requireManage(source, armyId);
         CampaignArmyData data = CampaignArmyData.get(source.getLevel());
         var result = data.addGroup(source.getLevel(), armyId, player.getUUID(), groupId, source.hasPermission(2));
@@ -178,6 +191,7 @@ public final class CampaignArmyCommands {
     }
 
     private static int removeGroup(CommandSourceStack source, UUID armyId, UUID groupId) throws CommandSyntaxException {
+        requireRate(source, "campaign-command-group", 10);
         requireManage(source, armyId);
         CampaignArmyData data = CampaignArmyData.get(source.getLevel());
         if (!data.removeGroup(armyId, groupId)) throw ARMY_ERROR.create("Army does not contain that group.");
@@ -188,6 +202,7 @@ public final class CampaignArmyCommands {
 
     private static int appointCommander(CommandSourceStack source, UUID armyId, UUID commanderId) throws CommandSyntaxException {
         ServerPlayer player = source.getPlayerOrException();
+        requireRate(source, "campaign-command-commander", 20);
         requireManage(source, armyId);
         CampaignArmySnapshot army = CampaignArmyData.get(source.getLevel())
                 .appointCommander(source.getLevel(), armyId, player.getUUID(), commanderId)
@@ -198,8 +213,10 @@ public final class CampaignArmyCommands {
     }
 
     private static int move(CommandSourceStack source, UUID armyId, double x, double z) throws CommandSyntaxException {
+        requireRate(source, "campaign-command-move", 2);
         requireManage(source, armyId);
-        if (!com.lastpagans.campaignmap.geography.ProvinceRegistry.get().projection().isWorldInsideMap(x, z)) {
+        if (!Double.isFinite(x) || !Double.isFinite(z)
+                || !com.lastpagans.campaignmap.geography.ProvinceRegistry.get().projection().isWorldInsideMap(x, z)) {
             throw ARMY_ERROR.create("Destination is outside the configured campaign map.");
         }
         CampaignArmyData data = CampaignArmyData.get(source.getLevel());
@@ -210,6 +227,7 @@ public final class CampaignArmyCommands {
     }
 
     private static int delete(CommandSourceStack source, UUID armyId) throws CommandSyntaxException {
+        requireRate(source, "campaign-command-delete", 20);
         requireManage(source, armyId);
         if (!CampaignArmyData.get(source.getLevel()).delete(armyId)) throw ARMY_ERROR.create("Army not found.");
         CampaignNetwork.sendArmyRemoval(armyId);
@@ -232,6 +250,12 @@ public final class CampaignArmyCommands {
     private static UUID uuid(String value) throws CommandSyntaxException {
         try { return UUID.fromString(value); }
         catch (IllegalArgumentException exception) { throw INVALID_UUID.create(value); }
+    }
+
+    private static void requireRate(CommandSourceStack source, String route, int cooldownTicks) throws CommandSyntaxException {
+        if (source.getEntity() instanceof ServerPlayer player
+                && !ClientActionLimiter.allow(player, route, cooldownTicks))
+            throw ARMY_ERROR.create("That campaign action is being sent too quickly.");
     }
 
     private static String formatPosition(Vec3 position) {

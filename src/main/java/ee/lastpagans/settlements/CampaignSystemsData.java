@@ -28,6 +28,7 @@ public final class CampaignSystemsData extends SavedData {
     public static final int MAX_HOUSING_AREAS = 32;
     public static final long MAX_HOUSING_VOLUME = 32_768L;
     private static final int FORMAT_VERSION = 4;
+    private static final int MAX_PERSISTED_RECORDS = 10_000;
 
     private final Map<String, Integer> stateTreasuries = new HashMap<>();
     private final Map<String, Integer> marriageAlliances = new HashMap<>();
@@ -93,81 +94,86 @@ public final class CampaignSystemsData extends SavedData {
         readStringBooleanMap(tag, "ProtectedSettlements", data.protectedSettlements);
         readStringBooleanMap(tag, "ProtectedFactions", data.protectedFactions);
 
-        for (Tag raw : tag.getList("HousingAreas", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("HousingAreas", Tag.TAG_COMPOUND))) {
             CompoundTag entry = (CompoundTag) raw;
             String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
             if (settlement.isBlank()) continue;
             List<RegionRecord> regions = new ArrayList<>();
             for (Tag regionRaw : entry.getList("Regions", Tag.TAG_COMPOUND)) {
+                if (regions.size() >= MAX_HOUSING_AREAS) break;
                 RegionRecord region = RegionRecord.fromNBT((CompoundTag) regionRaw);
-                if (region.valid() && region.volume() <= MAX_HOUSING_VOLUME && regions.size() < MAX_HOUSING_AREAS) {
+                if (region.valid() && region.volume() <= MAX_HOUSING_VOLUME) {
                     regions.add(new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
                 }
             }
             if (!regions.isEmpty()) data.housingAreas.put(settlement, regions);
         }
-        for (Tag raw : tag.getList("MusterAreas", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("MusterAreas", Tag.TAG_COMPOUND))) {
             CompoundTag entry = (CompoundTag) raw;
             RegionRecord region = RegionRecord.fromNBT(entry.getCompound("Region"));
             String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
             if (!settlement.isBlank() && region.valid()) data.musterAreas.put(settlement,
                     new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
         }
-        for (Tag raw : tag.getList("PrayerSites", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("PrayerSites", Tag.TAG_COMPOUND))) {
             CompoundTag entry = (CompoundTag) raw;
             RegionRecord region = RegionRecord.fromNBT(entry.getCompound("Region"));
             String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
             if (!settlement.isBlank() && region.valid()) data.prayerSites.put(settlement,
                     new RegionRecord(region.dimension(), region.min(), region.max(), AreaSelection.Shape.BOX));
         }
-        for (Tag raw : tag.getList("HolySites", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("HolySites", Tag.TAG_COMPOUND))) {
             HolySiteRecord site = HolySiteRecord.fromNBT((CompoundTag) raw);
             if (site.region.valid() && !site.faith.isBlank()) data.holySites.add(site);
         }
         if (tag.getInt("FormatVersion") >= FORMAT_VERSION) {
-            for (Tag raw : tag.getList("Modifiers", Tag.TAG_COMPOUND)) {
+            for (Tag raw : limited(tag.getList("Modifiers", Tag.TAG_COMPOUND))) {
                 CompoundTag entry = (CompoundTag) raw;
                 String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
                 if (settlement.isBlank()) continue;
                 List<ModifierRecord> values = new ArrayList<>();
                 for (Tag modifierRaw : entry.getList("Values", Tag.TAG_COMPOUND)) {
+                    if (values.size() >= 256) break;
                     ModifierRecord value = ModifierRecord.fromNBT((CompoundTag) modifierRaw);
                     if (!value.id.isBlank()) values.add(value);
                 }
                 if (!values.isEmpty()) data.settlementModifiers.put(settlement, values);
             }
         }
-        for (Tag raw : tag.getList("LevyMobilizations", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("LevyMobilizations", Tag.TAG_COMPOUND))) {
             LevyMobilization value = LevyMobilization.fromNBT((CompoundTag) raw);
             if (value.id != null) data.levyMobilizations.put(value.id, value);
         }
-        for (Tag raw : tag.getList("LevyDeployments", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("LevyDeployments", Tag.TAG_COMPOUND))) {
             LevyDeployment value = LevyDeployment.fromNBT((CompoundTag) raw);
             if (value.batchId != null) data.levyDeployments.put(value.batchId, value);
         }
         readUuidLongMap(tag, "LevyCooldowns", data.levyCooldownUntil);
-        for (Tag raw : tag.getList("PeaceOffers", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("PeaceOffers", Tag.TAG_COMPOUND))) {
             PeaceOfferRecord value = PeaceOfferRecord.fromNBT((CompoundTag) raw);
             if (value.proposalId != null) data.peaceOffers.put(value.proposalId, value);
         }
         readUuidIntMap(tag, "WarScore", data.warScore);
-        for (Tag raw : tag.getList("IgnoredWarInterventions", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("IgnoredWarInterventions", Tag.TAG_COMPOUND))) {
             CompoundTag entry = (CompoundTag) raw;
             if (!entry.hasUUID("War")) continue;
             List<String> factions = new ArrayList<>();
-            for (Tag factionRaw : entry.getList("Factions", Tag.TAG_STRING)) factions.add(factionRaw.getAsString());
+            for (Tag factionRaw : entry.getList("Factions", Tag.TAG_STRING)) {
+                if (factions.size() >= 256) break;
+                factions.add(factionRaw.getAsString());
+            }
             if (!factions.isEmpty()) data.ignoredWarInterventions.put(entry.getUUID("War"), factions);
         }
         readStringLongMap(tag, "ForcedNapUntil", data.forcedNapUntilDay);
-        for (Tag raw : tag.getList("MercenaryContracts", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("MercenaryContracts", Tag.TAG_COMPOUND))) {
             MercenaryContractRecord value = MercenaryContractRecord.fromNBT((CompoundTag) raw);
             if (value.unitId() != null && !value.settlementId().isBlank()) data.mercenaryContracts.put(value.unitId(), value);
         }
-        for (Tag raw : tag.getList("FactionInvitations", Tag.TAG_COMPOUND)) {
+        for (Tag raw : limited(tag.getList("FactionInvitations", Tag.TAG_COMPOUND))) {
             FactionInvitationRecord value = FactionInvitationRecord.fromNBT((CompoundTag) raw);
             if (value.id() != null && value.targetPlayer() != null && !value.factionId().isBlank()) data.factionInvitations.add(value);
         }
-        for (Tag raw : tag.getList("RetiredLevyUnits", Tag.TAG_INT_ARRAY)) {
+        for (Tag raw : limited(tag.getList("RetiredLevyUnits", Tag.TAG_INT_ARRAY))) {
             try { data.retiredLevyUnits.add(net.minecraft.nbt.NbtUtils.loadUUID(raw)); }
             catch (IllegalArgumentException ignored) { }
         }
@@ -228,10 +234,10 @@ public final class CampaignSystemsData extends SavedData {
         return tag;
     }
 
-    public int treasuryBalance(String state) { return stateTreasuries.getOrDefault(state == null ? "" : state, 0); }
-    public void setTreasuryBalance(String state, int value) { if (state == null || state.isBlank()) return; stateTreasuries.put(state, Math.max(0, value)); setDirty(); }
-    public void changeTreasury(String state, int delta) { setTreasuryBalance(state, (int)Math.max(0L, Math.min(Integer.MAX_VALUE, (long)treasuryBalance(state) + delta))); }
-    public boolean spendTreasury(String state, int amount) { int cost = Math.max(0, amount); if (treasuryBalance(state) < cost) return false; setTreasuryBalance(state, treasuryBalance(state) - cost); return true; }
+    public synchronized int treasuryBalance(String state) { return stateTreasuries.getOrDefault(state == null ? "" : state, 0); }
+    public synchronized void setTreasuryBalance(String state, int value) { if (state == null || state.isBlank()) return; stateTreasuries.put(state, Math.max(0, value)); setDirty(); }
+    public synchronized void changeTreasury(String state, int delta) { setTreasuryBalance(state, (int)Math.max(0L, Math.min(Integer.MAX_VALUE, (long)treasuryBalance(state) + delta))); }
+    public synchronized boolean spendTreasury(String state, int amount) { if (amount < 0) return false; if (treasuryBalance(state) < amount) return false; setTreasuryBalance(state, treasuryBalance(state) - amount); return true; }
     public int marriageAllianceCount(String first, String second) { return marriageAlliances.getOrDefault(pairKey(first, second), 0); }
     public boolean marriageAlliance(String first, String second) { return marriageAllianceCount(first, second) > 0; }
     public void addMarriageAlliance(String first, String second) { String key = pairKey(first, second); if (key.isBlank()) return; marriageAlliances.put(key, marriageAlliances.getOrDefault(key, 0) + 1); setDirty(); }
@@ -321,10 +327,9 @@ public final class CampaignSystemsData extends SavedData {
         setDirty();
     }
     public void addForeignManpower(String settlement, int amount) { if (amount > 0) setForeignManpower(settlement, foreignManpower(settlement) + amount); }
-    public boolean spendForeignManpower(String settlement, int amount) {
-        int cost = Math.max(0, amount);
-        if (foreignManpower(settlement) < cost) return false;
-        setForeignManpower(settlement, foreignManpower(settlement) - cost);
+    public synchronized boolean spendForeignManpower(String settlement, int amount) {
+        if (amount < 0 || foreignManpower(settlement) < amount) return false;
+        setForeignManpower(settlement, foreignManpower(settlement) - amount);
         return true;
     }
 
@@ -605,9 +610,9 @@ public final class CampaignSystemsData extends SavedData {
 
     public record PeaceOfferRecord(UUID proposalId, UUID warId, String proposerFaction, String targetFaction,
                                    String proposerSettlement, String targetSettlement, List<PeaceTerm> terms, long createdAtMillis) {
-        public PeaceOfferRecord { proposerFaction = proposerFaction == null ? "" : proposerFaction; targetFaction = targetFaction == null ? "" : targetFaction; proposerSettlement = SettlementData.normalizeId(proposerSettlement); targetSettlement = SettlementData.normalizeId(targetSettlement); terms = terms == null ? List.of() : List.copyOf(terms); }
+        public PeaceOfferRecord { proposerFaction = proposerFaction == null ? "" : proposerFaction; targetFaction = targetFaction == null ? "" : targetFaction; proposerSettlement = SettlementData.normalizeId(proposerSettlement); targetSettlement = SettlementData.normalizeId(targetSettlement); terms = terms == null ? List.of() : List.copyOf(terms.subList(0, Math.min(64, terms.size()))); }
         private CompoundTag toNBT() { CompoundTag tag = new CompoundTag(); tag.putUUID("Proposal", proposalId); if (warId != null) tag.putUUID("War", warId); tag.putString("Proposer", proposerFaction); tag.putString("Target", targetFaction); tag.putString("ProposerSettlement", proposerSettlement); tag.putString("TargetSettlement", targetSettlement); tag.putLong("Created", createdAtMillis); ListTag list = new ListTag(); terms.forEach(term -> list.add(term.toNBT())); tag.put("Terms", list); return tag; }
-        private static PeaceOfferRecord fromNBT(CompoundTag tag) { List<PeaceTerm> terms = new ArrayList<>(); for (Tag raw : tag.getList("Terms", Tag.TAG_COMPOUND)) terms.add(PeaceTerm.fromNBT((CompoundTag) raw)); return new PeaceOfferRecord(tag.hasUUID("Proposal") ? tag.getUUID("Proposal") : null, tag.hasUUID("War") ? tag.getUUID("War") : null, tag.getString("Proposer"), tag.getString("Target"), tag.getString("ProposerSettlement"), tag.getString("TargetSettlement"), List.copyOf(terms), tag.getLong("Created")); }
+        private static PeaceOfferRecord fromNBT(CompoundTag tag) { List<PeaceTerm> terms = new ArrayList<>(); for (Tag raw : tag.getList("Terms", Tag.TAG_COMPOUND)) { if (terms.size() >= 64) break; terms.add(PeaceTerm.fromNBT((CompoundTag) raw)); } return new PeaceOfferRecord(tag.hasUUID("Proposal") ? tag.getUUID("Proposal") : null, tag.hasUUID("War") ? tag.getUUID("War") : null, tag.getString("Proposer"), tag.getString("Target"), tag.getString("ProposerSettlement"), tag.getString("TargetSettlement"), List.copyOf(terms), tag.getLong("Created")); }
     }
 
     public record PeaceTerm(String type, String targetId, int amount, int durationDays, String text) {
@@ -666,14 +671,20 @@ public final class CampaignSystemsData extends SavedData {
 
     private static String pairKey(String a, String b) { if (a == null || b == null || a.isBlank() || b.isBlank()) return ""; return a.compareToIgnoreCase(b) <= 0 ? a + "|" + b : b + "|" + a; }
     private static int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
-    private static void readStringIntMap(CompoundTag tag, String key, Map<String, Integer> output) { for (Tag raw : tag.getList(key, Tag.TAG_COMPOUND)) { CompoundTag e = (CompoundTag) raw; String id = e.getString("Id"); if (!id.isBlank()) output.put(id, e.getInt("Value")); } }
+    private static void readStringIntMap(CompoundTag tag, String key, Map<String, Integer> output) { for (Tag raw : limited(tag.getList(key, Tag.TAG_COMPOUND))) { CompoundTag e = (CompoundTag) raw; String id = e.getString("Id"); if (!id.isBlank()) output.put(id, e.getInt("Value")); } }
     private static void writeStringIntMap(CompoundTag tag, String key, Map<String, Integer> values) { ListTag list = new ListTag(); values.forEach((id, value) -> { CompoundTag e = new CompoundTag(); e.putString("Id", id); e.putInt("Value", value); list.add(e); }); tag.put(key, list); }
-    private static void readStringLongMap(CompoundTag tag, String key, Map<String, Long> output) { for (Tag raw : tag.getList(key, Tag.TAG_COMPOUND)) { CompoundTag e = (CompoundTag) raw; String id = e.getString("Id"); if (!id.isBlank()) output.put(id, e.getLong("Value")); } }
+    private static void readStringLongMap(CompoundTag tag, String key, Map<String, Long> output) { for (Tag raw : limited(tag.getList(key, Tag.TAG_COMPOUND))) { CompoundTag e = (CompoundTag) raw; String id = e.getString("Id"); if (!id.isBlank()) output.put(id, e.getLong("Value")); } }
     private static void writeStringLongMap(CompoundTag tag, String key, Map<String, Long> values) { ListTag list = new ListTag(); values.forEach((id, value) -> { CompoundTag e = new CompoundTag(); e.putString("Id", id); e.putLong("Value", value); list.add(e); }); tag.put(key, list); }
-    private static void readStringBooleanMap(CompoundTag tag, String key, Map<String, Boolean> output) { for (Tag raw : tag.getList(key, Tag.TAG_COMPOUND)) { CompoundTag e = (CompoundTag) raw; String id = e.getString("Id"); if (!id.isBlank()) output.put(id, e.getBoolean("Value")); } }
+    private static void readStringBooleanMap(CompoundTag tag, String key, Map<String, Boolean> output) { for (Tag raw : limited(tag.getList(key, Tag.TAG_COMPOUND))) { CompoundTag e = (CompoundTag) raw; String id = e.getString("Id"); if (!id.isBlank()) output.put(id, e.getBoolean("Value")); } }
     private static void writeStringBooleanMap(CompoundTag tag, String key, Map<String, Boolean> values) { ListTag list = new ListTag(); values.forEach((id, value) -> { CompoundTag e = new CompoundTag(); e.putString("Id", id); e.putBoolean("Value", value); list.add(e); }); tag.put(key, list); }
-    private static void readUuidIntMap(CompoundTag tag, String key, Map<UUID, Integer> output) { for (Tag raw : tag.getList(key, Tag.TAG_COMPOUND)) { CompoundTag e = (CompoundTag) raw; if (e.hasUUID("Id")) output.put(e.getUUID("Id"), e.getInt("Value")); } }
+    private static void readUuidIntMap(CompoundTag tag, String key, Map<UUID, Integer> output) { for (Tag raw : limited(tag.getList(key, Tag.TAG_COMPOUND))) { CompoundTag e = (CompoundTag) raw; if (e.hasUUID("Id")) output.put(e.getUUID("Id"), e.getInt("Value")); } }
     private static void writeUuidIntMap(CompoundTag tag, String key, Map<UUID, Integer> values) { ListTag list = new ListTag(); values.forEach((id, value) -> { CompoundTag e = new CompoundTag(); e.putUUID("Id", id); e.putInt("Value", value); list.add(e); }); tag.put(key, list); }
-    private static void readUuidLongMap(CompoundTag tag, String key, Map<UUID, Long> output) { for (Tag raw : tag.getList(key, Tag.TAG_COMPOUND)) { CompoundTag e = (CompoundTag) raw; if (e.hasUUID("Id")) output.put(e.getUUID("Id"), e.getLong("Value")); } }
+    private static void readUuidLongMap(CompoundTag tag, String key, Map<UUID, Long> output) { for (Tag raw : limited(tag.getList(key, Tag.TAG_COMPOUND))) { CompoundTag e = (CompoundTag) raw; if (e.hasUUID("Id")) output.put(e.getUUID("Id"), e.getLong("Value")); } }
     private static void writeUuidLongMap(CompoundTag tag, String key, Map<UUID, Long> values) { ListTag list = new ListTag(); values.forEach((id, value) -> { CompoundTag e = new CompoundTag(); e.putUUID("Id", id); e.putLong("Value", value); list.add(e); }); tag.put(key, list); }
+    private static Iterable<Tag> limited(ListTag values) {
+        int count = Math.min(MAX_PERSISTED_RECORDS, values.size());
+        List<Tag> result = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) result.add(values.get(i));
+        return result;
+    }
 }

@@ -13,6 +13,7 @@ import ee.lastpagans.settlements.character.CharacterBodyData;
 import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
 import ee.lastpagans.settlements.network.ProfileSyncPacket;
 import ee.lastpagans.settlements.network.SettlementNetwork;
+import ee.lastpagans.settlements.network.SecurityAudit;
 import ee.lastpagans.settlements.network.AreaSelectionPacket;
 import ee.lastpagans.settlements.network.HousingAreaActionPacket;
 import ee.lastpagans.settlements.network.HousingAreasPacket;
@@ -53,6 +54,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Set;
@@ -154,6 +156,7 @@ public final class SettlementManager {
             return;
         }
         if (!canView(player, settlement)) {
+            SecurityAudit.reject(player, "settlement-" + action.name().toLowerCase(Locale.ROOT), settlementId, "settlement is not accessible to sender");
             player.sendSystemMessage(Component.literal("You cannot access this settlement."));
             return;
         }
@@ -295,12 +298,15 @@ public final class SettlementManager {
     }
 
     private static String requireManager(ServerPlayer player, SettlementData.SettlementRecord settlement, ActionSupplier action) {
-        return canManage(player, settlement) ? action.get() : "Only the owner, a co-owner, or an administrator may do that.";
+        if (canManage(player, settlement)) return action.get();
+        SecurityAudit.reject(player, "settlement-manage", settlement.getId(), "sender is not a settlement manager");
+        return "Only the owner, a co-owner, or an administrator may do that.";
     }
 
     private static String requireOwner(ServerPlayer player, SettlementData.SettlementRecord settlement, ActionSupplier action) {
-        return player.createCommandSourceStack().hasPermission(2) || player.getUUID().equals(settlement.getOwnerId())
-                ? action.get() : "Only the settlement owner or an administrator may do that.";
+        if (player.createCommandSourceStack().hasPermission(2) || player.getUUID().equals(settlement.getOwnerId())) return action.get();
+        SecurityAudit.reject(player, "settlement-owner", settlement.getId(), "sender is not the owner or an administrator");
+        return "Only the settlement owner or an administrator may do that.";
     }
 
     static AbstractRecruitEntity spawnRecruit(ServerLevel level, ServerPlayer actor, SettlementData.SettlementRecord settlement,

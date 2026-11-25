@@ -113,7 +113,7 @@ public final class CampaignMapCommands {
         }
         CampaignOwnershipData data = CampaignOwnershipData.get(source.getLevel());
         ProvinceOwnerState.PoliticalIdentity identity = new ProvinceOwnerState.PoliticalIdentity(name, color);
-        ProvinceOwnerState state = owner ? data.setOwner(provinceId, identity) : data.setController(provinceId, identity);
+        ProvinceOwnerState state = owner ? data.setOwner(source, provinceId, identity) : data.setController(source, provinceId, identity);
         CampaignNetwork.sendUpdate(state);
         source.sendSuccess(() -> Component.literal((owner ? "Owner" : "Controller") + " for " + provinceId
                 + " set to " + name + " (#" + String.format("%06X", color) + ")."), true);
@@ -124,7 +124,7 @@ public final class CampaignMapCommands {
             throws CommandSyntaxException {
         requireProvince(source, provinceId);
         CampaignOwnershipData data = CampaignOwnershipData.get(source.getLevel());
-        ProvinceOwnerState state = owner ? data.setOwner(provinceId, null) : data.setController(provinceId, null);
+        ProvinceOwnerState state = owner ? data.setOwner(source, provinceId, null) : data.setController(source, provinceId, null);
         CampaignNetwork.sendUpdate(state);
         source.sendSuccess(() -> Component.literal((owner ? "Owner" : "Controller") + " cleared for " + provinceId + "."), true);
         return 1;

@@ -17,6 +17,7 @@ import java.util.UUID;
 /** Persistent tactical settlement objectives. Political ownership remains in Settlements diplomacy. */
 public final class CaptureZoneData extends SavedData {
     private static final String DATA_NAME = "settlements_capture_zones";
+    private static final int MAX_PERSISTED_RECORDS = 10_000;
     private final Map<UUID, CaptureZoneRecord> zones = new LinkedHashMap<>();
     private final Map<String, String> occupyingTeamBySettlement = new LinkedHashMap<>();
 
@@ -27,11 +28,15 @@ public final class CaptureZoneData extends SavedData {
 
     public static CaptureZoneData load(CompoundTag tag) {
         CaptureZoneData data = new CaptureZoneData();
+        int loaded = 0;
         for (Tag raw : tag.getList("Zones", Tag.TAG_COMPOUND)) {
+            if (loaded++ >= MAX_PERSISTED_RECORDS) break;
             CaptureZoneRecord record = CaptureZoneRecord.fromNBT((CompoundTag) raw);
             if (record != null) data.zones.put(record.id(), record);
         }
+        loaded = 0;
         for (Tag raw : tag.getList("Occupations", Tag.TAG_COMPOUND)) {
+            if (loaded++ >= MAX_PERSISTED_RECORDS) break;
             CompoundTag entry = (CompoundTag) raw;
             String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
             String team = entry.getString("Team");

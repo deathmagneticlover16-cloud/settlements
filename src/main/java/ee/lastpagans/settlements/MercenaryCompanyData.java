@@ -19,6 +19,7 @@ import java.util.UUID;
 /** Persistent company-level contracts and employer trust. */
 public final class MercenaryCompanyData extends SavedData {
     private static final String DATA_NAME = "settlements_mercenary_companies";
+    private static final int MAX_PERSISTED_RECORDS = 10_000;
     private final Map<String, CompanyContract> contracts = new LinkedHashMap<>();
     private final Collection<CompanyContract> contractsView = Collections.unmodifiableCollection(contracts.values());
     private final Map<String, Map<String, Integer>> trust = new HashMap<>();
@@ -31,18 +32,24 @@ public final class MercenaryCompanyData extends SavedData {
 
     public static MercenaryCompanyData load(CompoundTag tag) {
         MercenaryCompanyData data = new MercenaryCompanyData();
+        int loaded = 0;
         for (Tag raw : tag.getList("Contracts", Tag.TAG_COMPOUND)) {
+            if (loaded++ >= MAX_PERSISTED_RECORDS) break;
             CompanyContract contract = CompanyContract.fromNBT((CompoundTag) raw);
             if (!contract.companyId().isBlank()) data.contracts.put(contract.companyId(), contract);
         }
+        loaded = 0;
         for (Tag raw : tag.getList("Trust", Tag.TAG_COMPOUND)) {
+            if (loaded++ >= MAX_PERSISTED_RECORDS) break;
             CompoundTag entry = (CompoundTag) raw;
             String company = SettlementData.normalizeId(entry.getString("Company"));
             String employer = entry.getString("Employer");
             if (!company.isBlank() && !employer.isBlank()) data.trust.computeIfAbsent(company, ignored -> new HashMap<>())
                     .put(employer, clamp(entry.getInt("Value")));
         }
+        loaded = 0;
         for (Tag raw : tag.getList("RetiredUnits", Tag.TAG_COMPOUND)) {
+            if (loaded++ >= MAX_PERSISTED_RECORDS) break;
             CompoundTag entry = (CompoundTag) raw;
             if (entry.hasUUID("Unit")) data.retiredUnits.add(entry.getUUID("Unit"));
         }

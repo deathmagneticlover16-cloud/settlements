@@ -20,6 +20,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 final class CampaignArmy {
+    private static final int MAX_GROUPS = 128;
+    private static final int MAX_PATH_POINTS = 64;
+    private static final int MAX_PACKED_ENTITIES_PER_GROUP = 2048;
     static final ResourceLocation DEFAULT_FLAG = new ResourceLocation("recruits_rts_camera",
             "textures/misc/betsy_ross_group_marker.png");
 
@@ -113,15 +116,19 @@ final class CampaignArmy {
             if (type != null) commanderVisual = new CommanderVisualSnapshot(type,
                     visual.getString("displayName"), visual.getCompound("appearance"));
         }
+        Vec3 loadedPosition = getVec(tag, "position");
+        if (!Double.isFinite(loadedPosition.x) || !Double.isFinite(loadedPosition.y) || !Double.isFinite(loadedPosition.z))
+            loadedPosition = Vec3.ZERO;
         CampaignArmy army = new CampaignArmy(tag.getUUID("armyId"), tag.getUUID("ownerId"),
                 tag.getString("name"), tag.hasUUID("commanderId") ? tag.getUUID("commanderId") : null,
-                commanderVisual, getVec(tag, "position"));
+                commanderVisual, loadedPosition);
         army.commanderAvailable = tag.contains("commanderAvailable")
                 ? tag.getBoolean("commanderAvailable") : army.commanderId != null;
         if (army.commanderVisual == null) army.commanderAvailable = false;
         if (tag.contains("packedCommander", Tag.TAG_COMPOUND))
             army.packedCommander = tag.getCompound("packedCommander").copy();
         for (Tag groupTag : tag.getList("groups", Tag.TAG_STRING)) {
+            if (army.groupIds.size() >= MAX_GROUPS) break;
             try { army.groupIds.add(UUID.fromString(groupTag.getAsString())); }
             catch (IllegalArgumentException ignored) {}
         }
@@ -129,23 +136,30 @@ final class CampaignArmy {
         if (flag != null) army.flagTexture = flag;
         army.flagAspectRatio = clampAspect(tag.contains("flagAspectRatio") ? tag.getDouble("flagAspectRatio") : 1.5);
         for (Tag pathEntry : tag.getList("path", Tag.TAG_COMPOUND)) {
-            army.path.add(getVec((CompoundTag) pathEntry, "point"));
+            if (army.path.size() >= MAX_PATH_POINTS) break;
+            Vec3 point = getVec((CompoundTag) pathEntry, "point");
+            if (Double.isFinite(point.x) && Double.isFinite(point.y) && Double.isFinite(point.z)) army.path.add(point);
         }
         try { army.state = ArmyState.valueOf(tag.getString("state")); }
         catch (IllegalArgumentException ignored) { army.state = ArmyState.STATIONARY; }
         army.foodSupplies = Math.max(0, tag.getInt("foodSupplies"));
-        army.fatigue = Math.max(0.0, tag.getDouble("fatigue"));
+        double loadedFatigue = tag.getDouble("fatigue");
+        army.fatigue = Math.max(0.0, Math.min(100.0, Double.isFinite(loadedFatigue) ? loadedFatigue : 0.0));
         army.transitionTicks = Math.max(0, tag.getInt("transitionTicks"));
         army.transitionTicksTotal = Math.max(army.transitionTicks, tag.getInt("transitionTicksTotal"));
         for (Tag raw : tag.getList("packedEntities", Tag.TAG_COMPOUND)) {
             CompoundTag entry = (CompoundTag) raw;
-            if (entry.hasUUID("group")) army.packedEntities.put(entry.getUUID("group"),
-                    (ListTag) entry.getList("entities", Tag.TAG_COMPOUND).copy());
+            if (entry.hasUUID("group") && army.groupIds.contains(entry.getUUID("group"))) {
+                ListTag source = entry.getList("entities", Tag.TAG_COMPOUND), bounded = new ListTag();
+                for (int i = 0; i < Math.min(MAX_PACKED_ENTITIES_PER_GROUP, source.size()); i++) bounded.add(source.getCompound(i).copy());
+                army.packedEntities.put(entry.getUUID("group"), bounded);
+            }
         }
         return army;
     }
 
     static double clampAspect(double aspect) {
+        if (!Double.isFinite(aspect)) return 1.5D;
         return Math.max(0.5, Math.min(4.0, aspect));
     }
 

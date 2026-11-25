@@ -59,6 +59,13 @@ public final class RecruitsCampaignGroupProvider implements CampaignGroupProvide
         int[] restoredIndex = {0};
         for (Tag raw : packedEntities) {
             if (!(raw instanceof CompoundTag entityTag)) continue;
+            if (entityTag.hasUUID("UUID") && findEntity(level, entityTag.getUUID("UUID")) != null) {
+                // Save ordering across the entity region and SavedData is not atomic. If a crash left
+                // the original world entity alive, consume the packed copy and reconcile deployment
+                // accounting instead of attempting to clone the same recruit UUID.
+                transferDeployment(level, entityTag, false);
+                continue;
+            }
             Entity restored = EntityType.loadEntityRecursive(entityTag, level, entity -> {
                 place(level, entity, anchor, restoredIndex[0]++);
                 return entity;
@@ -213,6 +220,15 @@ public final class RecruitsCampaignGroupProvider implements CampaignGroupProvide
         for (ServerLevel candidate : level.getServer().getAllLevels()) {
             Entity entity = candidate.getEntity(commanderId);
             if (entity instanceof CommanderEntity commander) return commander;
+        }
+        return null;
+    }
+
+    private static Entity findEntity(ServerLevel level, UUID entityId) {
+        if (entityId == null) return null;
+        for (ServerLevel candidate : level.getServer().getAllLevels()) {
+            Entity entity = candidate.getEntity(entityId);
+            if (entity != null && entity.isAlive()) return entity;
         }
         return null;
     }

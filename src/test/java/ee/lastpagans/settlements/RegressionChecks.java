@@ -29,6 +29,7 @@ public final class RegressionChecks {
         researchTierColumns();
         bannerValidation();
         treasuryAccounting();
+        securityAccounting();
         dyeNames();
         researchTiers();
         capturePacket();
@@ -69,6 +70,35 @@ public final class RegressionChecks {
                 "one-group timed muster progress survives persistence");
         check(restored.deployed(owner).world() == 8 && restored.deployed(owner).campaign() == 5,
                 "world and campaign deployment counts persist separately");
+    }
+
+    private static void securityAccounting() {
+        CampaignSystemsData data = new CampaignSystemsData();
+        data.setTreasuryBalance("security_test", 1_000);
+        check(!data.spendTreasury("security_test", -1) && data.treasuryBalance("security_test") == 1_000,
+                "negative treasury spends are rejected without changing state");
+
+        java.util.concurrent.atomic.AtomicInteger successful = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.List<Thread> workers = new java.util.ArrayList<>();
+        for (int thread = 0; thread < 8; thread++) {
+            Thread worker = new Thread(() -> {
+                for (int attempt = 0; attempt < 250; attempt++) if (data.spendTreasury("security_test", 1)) successful.incrementAndGet();
+            });
+            workers.add(worker);
+            worker.start();
+        }
+        for (Thread worker : workers) {
+            try { worker.join(); }
+            catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new AssertionError(exception); }
+        }
+        check(successful.get() == 1_000 && data.treasuryBalance("security_test") == 0,
+                "concurrent treasury spends cannot double-spend a stale balance");
+
+        MilitaryData.ReservePool pool = new MilitaryData.ReservePool();
+        pool.set(Integer.MAX_VALUE, Integer.MAX_VALUE);
+        pool.addNative(1);
+        check(pool.total() == Integer.MAX_VALUE && pool.nativeCount() == Integer.MAX_VALUE,
+                "reserve arithmetic saturates instead of wrapping negative");
     }
 
     private static void capturePersistenceAndGeometry() {

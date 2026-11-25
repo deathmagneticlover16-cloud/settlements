@@ -3,6 +3,7 @@ package ee.lastpagans.settlements.mixin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
+import ee.lastpagans.settlements.network.ClientActionLimiter;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -20,7 +21,8 @@ public abstract class RecruitsDiplomacyPacketMixin {
     @Inject(method = "executeServerSide", at = @At("HEAD"), cancellable = true)
     private void settlements$blockOriginalDiplomacy(NetworkEvent.Context context, CallbackInfo ci) {
         ServerPlayer sender = context.getSender();
-        if (sender != null) sender.sendSystemMessage(Component.literal("Diplomacy is managed through the Campaign menu."));
+        if (sender != null && ClientActionLimiter.allow(sender, "blocked-recruits-diplomacy", 40))
+            sender.sendSystemMessage(Component.literal("Diplomacy is managed through the Campaign menu."));
         ci.cancel();
     }
 }

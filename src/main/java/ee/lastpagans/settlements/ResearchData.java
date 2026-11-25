@@ -18,6 +18,8 @@ import java.util.Set;
 /** Server-persistent technology progress for independent settlements and political factions. */
 public final class ResearchData extends SavedData {
     private static final String DATA_NAME = "settlements_research";
+    private static final int MAX_POLITIES = 10_000;
+    private static final int MAX_COMPLETED_STAGES = 10_000;
 
     /** One active project per political research polity. Progress is stored in 1/1000 ticks. */
     private final Map<String, ActiveResearch> active = new HashMap<>();
@@ -31,16 +33,21 @@ public final class ResearchData extends SavedData {
 
     public static ResearchData load(CompoundTag tag) {
         ResearchData data = new ResearchData();
+        int loaded = 0;
         for (Tag raw : tag.getList("Active", Tag.TAG_COMPOUND)) {
+            if (loaded++ >= MAX_POLITIES) break;
             ActiveResearch value = ActiveResearch.fromNBT((CompoundTag) raw);
             if (!value.polityKey().isBlank() && !value.stageId().isBlank()) data.active.put(value.polityKey(), value);
         }
+        loaded = 0;
         for (Tag raw : tag.getList("Completed", Tag.TAG_COMPOUND)) {
+            if (loaded++ >= MAX_POLITIES) break;
             CompoundTag entry = (CompoundTag) raw;
             String polity = entry.getString("Polity");
             if (polity.isBlank()) continue;
             Set<String> stages = new HashSet<>();
             for (Tag stage : entry.getList("Stages", Tag.TAG_STRING)) {
+                if (stages.size() >= MAX_COMPLETED_STAGES) break;
                 String id = stage.getAsString();
                 if (!id.isBlank()) stages.add(id);
             }
@@ -90,8 +97,11 @@ public final class ResearchData extends SavedData {
     public boolean progress(String polity, long scaledTicks) {
         ActiveResearch value = active(polity);
         if (value == null || scaledTicks <= 0) return false;
-        long next = Math.min(Long.MAX_VALUE / 2L, value.progressScaledTicks() + scaledTicks);
-        long required = Math.max(1L, value.baseTicks()) * 1000L;
+        long ceiling = Long.MAX_VALUE / 2L;
+        long next = scaledTicks >= ceiling - value.progressScaledTicks()
+                ? ceiling : value.progressScaledTicks() + scaledTicks;
+        long base = Math.max(1L, value.baseTicks());
+        long required = base > Long.MAX_VALUE / 1000L ? Long.MAX_VALUE : base * 1000L;
         if (next >= required) {
             active.remove(polity);
             completed.computeIfAbsent(polity, ignored -> new HashSet<>()).add(value.stageId());
@@ -143,9 +153,16 @@ public final class ResearchData extends SavedData {
     public Set<String> politiesWithActiveResearch() { return activePolitiesView; }
 
     public record ActiveResearch(String polityKey, String stageId, String stageName, long baseTicks, long progressScaledTicks) {
+        public ActiveResearch {
+            polityKey = SettlementData.cleanText(polityKey, "", 128);
+            stageId = SettlementData.cleanText(stageId, "", 128);
+            stageName = SettlementData.cleanText(stageName, "Technology", 128);
+            baseTicks = Math.max(1L, Math.min(Long.MAX_VALUE / 1000L, baseTicks));
+            progressScaledTicks = Math.max(0L, Math.min(Long.MAX_VALUE / 2L, progressScaledTicks));
+        }
         public ActiveResearch withProgress(long value) { return new ActiveResearch(polityKey, stageId, stageName, baseTicks, value); }
         public double progress() {
-            return Math.max(0.0D, Math.min(1.0D, progressScaledTicks / (double)(Math.max(1L, baseTicks) * 1000L)));
+            return Math.max(0.0D, Math.min(1.0D, progressScaledTicks / (double)(baseTicks * 1000L)));
         }
         private CompoundTag toNBT() {
             CompoundTag tag = new CompoundTag();

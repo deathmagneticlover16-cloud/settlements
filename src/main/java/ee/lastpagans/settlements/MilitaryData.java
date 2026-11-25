@@ -19,6 +19,9 @@ import java.util.UUID;
 /** Persistent, server-authoritative troop reserves and chronological military work queues. */
 public final class MilitaryData extends SavedData {
     private static final String DATA_NAME = "settlements_military";
+    private static final int MAX_PERSISTED_RECORDS = 10_000;
+    private static final int MAX_QUEUE_PER_SETTLEMENT = 256;
+    private static final int MAX_UNITS_PER_ORDER = 100_000;
     private final Map<String, EnumMap<CampaignData.UnitType, ReservePool>> reserves = new HashMap<>();
     private final Map<String, List<TrainingOrder>> training = new HashMap<>();
     private final Map<String, List<MusterOrder>> musters = new HashMap<>();
@@ -42,23 +45,33 @@ public final class MilitaryData extends SavedData {
         readCredits(tag.getList("NativeCredits", Tag.TAG_COMPOUND), data.nativeMpCredit);
         readCredits(tag.getList("CapturedForeignCredits", Tag.TAG_COMPOUND), data.capturedForeignCredit);
         readAmounts(tag.getList("IntegratedForeignMilli", Tag.TAG_COMPOUND), data.integratedForeignMilli);
+        int read = 0;
         for (Tag raw : tag.getList("Reserves", Tag.TAG_COMPOUND)) {
+            if (read++ >= MAX_PERSISTED_RECORDS) break;
             CompoundTag entry = (CompoundTag) raw;
             String settlement = SettlementData.normalizeId(entry.getString("Settlement"));
             CampaignData.UnitType type = CampaignData.UnitType.parse(entry.getString("Type"));
             if (!settlement.isBlank() && type != null) data.pool(settlement, type).set(entry.getInt("Native"), entry.getInt("Foreign"));
         }
+        read = 0;
         for (Tag raw : tag.getList("Training", Tag.TAG_COMPOUND)) {
+            if (read++ >= MAX_PERSISTED_RECORDS) break;
             TrainingOrder order = TrainingOrder.fromNBT((CompoundTag) raw);
-            if (order.valid()) data.training.computeIfAbsent(order.settlementId, ignored -> new ArrayList<>()).add(order);
+            List<TrainingOrder> queue = data.training.computeIfAbsent(order.settlementId, ignored -> new ArrayList<>());
+            if (order.valid() && queue.size() < MAX_QUEUE_PER_SETTLEMENT) queue.add(order);
         }
         data.training.values().forEach(values -> values.sort(Comparator.comparingLong(value -> value.sequence)));
+        read = 0;
         for (Tag raw : tag.getList("Musters", Tag.TAG_COMPOUND)) {
+            if (read++ >= MAX_PERSISTED_RECORDS) break;
             MusterOrder order = MusterOrder.fromNBT((CompoundTag) raw);
-            if (order.valid()) data.musters.computeIfAbsent(order.settlementId, ignored -> new ArrayList<>()).add(order);
+            List<MusterOrder> queue = data.musters.computeIfAbsent(order.settlementId, ignored -> new ArrayList<>());
+            if (order.valid() && queue.size() < MAX_QUEUE_PER_SETTLEMENT) queue.add(order);
         }
         data.musters.values().forEach(values -> values.sort(Comparator.comparingLong(value -> value.queueSequence)));
+        read = 0;
         for (Tag raw : tag.getList("Deployed", Tag.TAG_COMPOUND)) {
+            if (read++ >= MAX_PERSISTED_RECORDS) break;
             CompoundTag entry = (CompoundTag) raw;
             if (entry.hasUUID("Player")) data.deployed.put(entry.getUUID("Player"),
                     new DeploymentCount(entry.getInt("World"), entry.getInt("Campaign")));
@@ -134,7 +147,8 @@ public final class MilitaryData extends SavedData {
 
     public int pendingForPlayer(UUID player) {
         if (player == null) return 0;
-        return allMusters().stream().filter(value -> player.equals(value.ownerId)).mapToInt(MusterOrder::remaining).sum();
+        long pending = allMusters().stream().filter(value -> player.equals(value.ownerId)).mapToLong(MusterOrder::remaining).sum();
+        return (int)Math.min(Integer.MAX_VALUE, pending);
     }
 
     public boolean removeTraining(String settlement, UUID id) {
@@ -154,7 +168,8 @@ public final class MilitaryData extends SavedData {
     }
 
     private static void readCredits(ListTag list, Map<String, Integer> output) {
-        for (Tag raw : list) { CompoundTag entry = (CompoundTag) raw; String id = SettlementData.normalizeId(entry.getString("Settlement"));
+        int read = 0;
+        for (Tag raw : list) { if (read++ >= MAX_PERSISTED_RECORDS) break; CompoundTag entry = (CompoundTag) raw; String id = SettlementData.normalizeId(entry.getString("Settlement"));
             int value = Math.max(0, entry.getInt("Value")) % 1000; if (!id.isBlank() && value > 0) output.put(id, value); }
     }
     private static ListTag writeCredits(Map<String, Integer> values) {
@@ -162,7 +177,8 @@ public final class MilitaryData extends SavedData {
             entry.putString("Settlement", settlement); entry.putInt("Value", value); result.add(entry); }); return result;
     }
     private static void readAmounts(ListTag list, Map<String, Integer> output) {
-        for (Tag raw : list) { CompoundTag entry = (CompoundTag) raw; String id = SettlementData.normalizeId(entry.getString("Settlement"));
+        int read = 0;
+        for (Tag raw : list) { if (read++ >= MAX_PERSISTED_RECORDS) break; CompoundTag entry = (CompoundTag) raw; String id = SettlementData.normalizeId(entry.getString("Settlement"));
             int value = Math.max(0, entry.getInt("Value")); if (!id.isBlank() && value > 0) output.put(id, value); }
     }
     private static ListTag writeAmounts(Map<String, Integer> values) { return writeCredits(values); }
@@ -172,13 +188,16 @@ public final class MilitaryData extends SavedData {
         private int foreignCount;
         public int nativeCount() { return nativeCount; }
         public int foreignCount() { return foreignCount; }
-        public int total() { return nativeCount + foreignCount; }
-        public void addNative(int amount) { nativeCount = Math.max(0, nativeCount + amount); }
-        public void addForeign(int amount) { foreignCount = Math.max(0, foreignCount + amount); }
+        public int total() { return (int)Math.min(Integer.MAX_VALUE, (long)nativeCount + foreignCount); }
+        public void addNative(int amount) { nativeCount = boundedAdd(nativeCount, amount); }
+        public void addForeign(int amount) { foreignCount = boundedAdd(foreignCount, amount); }
         public void set(int nativeValue, int foreignValue) { nativeCount = Math.max(0, nativeValue); foreignCount = Math.max(0, foreignValue); }
         public int takeNativeFirst(int amount) {
             int safe = Math.max(0, Math.min(amount, total())); int nativeTaken = Math.min(nativeCount, safe);
             nativeCount -= nativeTaken; foreignCount -= safe - nativeTaken; return nativeTaken;
+        }
+        private static int boundedAdd(int current, int amount) {
+            return (int)Math.max(0L, Math.min(Integer.MAX_VALUE, (long)current + amount));
         }
     }
 
@@ -194,7 +213,7 @@ public final class MilitaryData extends SavedData {
                              int nativeTotal, int foreignTotal, int silverPerSoldier, int mpMilliPerSoldier,
                              int durationTicks, int completed, int progressTicks, long sequence) {
             this.id = id; this.ownerId = ownerId; this.settlementId = SettlementData.normalizeId(settlementId); this.type = type;
-            this.total = Math.max(1, total); this.nativeTotal = Math.max(0, Math.min(this.total, nativeTotal));
+            this.total = Math.max(1, Math.min(MAX_UNITS_PER_ORDER, total)); this.nativeTotal = Math.max(0, Math.min(this.total, nativeTotal));
             this.foreignTotal = Math.max(0, Math.min(this.total - this.nativeTotal, foreignTotal));
             this.silverPerSoldier = Math.max(0, silverPerSoldier); this.mpMilliPerSoldier = Math.max(1, mpMilliPerSoldier);
             this.durationTicks = Math.max(20, durationTicks); this.completed = Math.max(0, Math.min(this.total, completed));
@@ -232,7 +251,7 @@ public final class MilitaryData extends SavedData {
                            MusterPhase phase, int spawned, int acceptanceTicks, long queueSequence, long nextArrivalGameTime) {
             this.id = id; this.groupId = groupId; this.ownerId = ownerId; this.settlementId = SettlementData.normalizeId(settlementId);
             this.companyId = SettlementData.normalizeId(companyId); this.displayName = SettlementData.cleanText(displayName, "Troops", 64);
-            this.units = units == null ? List.of() : List.copyOf(units); this.nativeTotal = Math.max(0, nativeTotal);
+            this.units = units == null ? List.of() : List.copyOf(units.subList(0, Math.min(MAX_UNITS_PER_ORDER, units.size()))); this.nativeTotal = Math.max(0, nativeTotal);
             this.foreignTotal = Math.max(0, foreignTotal); this.mercenary = mercenary; this.phase = phase == null ? MusterPhase.MUSTERING : phase;
             this.spawned = Math.max(0, Math.min(this.units.size(), spawned)); this.acceptanceTicks = Math.max(0, acceptanceTicks);
             this.queueSequence = Math.max(0L, queueSequence); this.nextArrivalGameTime = nextArrivalGameTime;
@@ -248,7 +267,7 @@ public final class MilitaryData extends SavedData {
             tag.putInt("Acceptance", acceptanceTicks); tag.putLong("QueueSequence", queueSequence); tag.putLong("NextArrival", nextArrivalGameTime);
             ListTag unitTag = new ListTag(); units.forEach(value -> unitTag.add(StringTag.valueOf(value.name()))); tag.put("Units", unitTag); return tag; }
         static MusterOrder fromNBT(CompoundTag tag) { List<CampaignData.UnitType> units = new ArrayList<>();
-            for (Tag raw : tag.getList("Units", Tag.TAG_STRING)) { CampaignData.UnitType type = CampaignData.UnitType.parse(raw.getAsString()); if (type != null) units.add(type); }
+            for (Tag raw : tag.getList("Units", Tag.TAG_STRING)) { if (units.size() >= MAX_UNITS_PER_ORDER) break; CampaignData.UnitType type = CampaignData.UnitType.parse(raw.getAsString()); if (type != null) units.add(type); }
             MusterPhase phase; try { phase = MusterPhase.valueOf(tag.getString("Phase")); } catch (IllegalArgumentException exception) { phase = MusterPhase.MUSTERING; }
             return new MusterOrder(tag.hasUUID("Id") ? tag.getUUID("Id") : UUID.randomUUID(), tag.hasUUID("Group") ? tag.getUUID("Group") : UUID.randomUUID(),
                     tag.hasUUID("Owner") ? tag.getUUID("Owner") : null, tag.getString("Settlement"), tag.getString("Company"), tag.getString("Name"), units,
@@ -259,6 +278,6 @@ public final class MilitaryData extends SavedData {
     public record DeploymentCount(int world, int campaign) {
         public static final DeploymentCount ZERO = new DeploymentCount(0, 0);
         public DeploymentCount { world = Math.max(0, world); campaign = Math.max(0, campaign); }
-        public int total() { return world + campaign; }
+        public int total() { return (int)Math.min(Integer.MAX_VALUE, (long)world + campaign); }
     }
 }

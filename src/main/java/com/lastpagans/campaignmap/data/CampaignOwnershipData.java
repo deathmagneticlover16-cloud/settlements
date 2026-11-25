@@ -5,6 +5,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 
@@ -16,6 +17,7 @@ import java.util.Map;
 
 public final class CampaignOwnershipData extends SavedData {
     private static final String DATA_NAME = "campaignmap_ownership";
+    private static final int MAX_PERSISTED_PROVINCES = 100_000;
     private final Map<ResourceLocation, ProvinceOwnerState> states = new LinkedHashMap<>();
 
     public static CampaignOwnershipData get(ServerLevel level) {
@@ -27,7 +29,9 @@ public final class CampaignOwnershipData extends SavedData {
     public static CampaignOwnershipData load(CompoundTag root) {
         CampaignOwnershipData data = new CampaignOwnershipData();
         ListTag list = root.getList("provinces", Tag.TAG_COMPOUND);
+        int loaded = 0;
         for (Tag raw : list) {
+            if (loaded++ >= MAX_PERSISTED_PROVINCES) break;
             CompoundTag tag = (CompoundTag) raw;
             ResourceLocation provinceId = ResourceLocation.tryParse(tag.getString("province"));
             if (provinceId == null) continue;
@@ -41,7 +45,7 @@ public final class CampaignOwnershipData extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag root) {
+    public synchronized CompoundTag save(CompoundTag root) {
         ListTag list = new ListTag();
         for (ProvinceOwnerState state : states.values()) {
             CompoundTag tag = new CompoundTag();
@@ -54,21 +58,25 @@ public final class CampaignOwnershipData extends SavedData {
         return root;
     }
 
-    public ProvinceOwnerState state(ResourceLocation provinceId) {
+    public synchronized ProvinceOwnerState state(ResourceLocation provinceId) {
         return states.getOrDefault(provinceId, new ProvinceOwnerState(provinceId, null, null));
     }
 
-    public ProvinceOwnerState setOwner(ResourceLocation provinceId, @Nullable ProvinceOwnerState.PoliticalIdentity owner) {
+    public synchronized ProvinceOwnerState setOwner(CommandSourceStack source, ResourceLocation provinceId,
+                                                    @Nullable ProvinceOwnerState.PoliticalIdentity owner) {
         ProvinceOwnerState previous = state(provinceId);
+        if (source == null || !source.hasPermission(2)) return previous;
         return store(new ProvinceOwnerState(provinceId, owner, previous.controller()));
     }
 
-    public ProvinceOwnerState setController(ResourceLocation provinceId, @Nullable ProvinceOwnerState.PoliticalIdentity controller) {
+    public synchronized ProvinceOwnerState setController(CommandSourceStack source, ResourceLocation provinceId,
+                                                         @Nullable ProvinceOwnerState.PoliticalIdentity controller) {
         ProvinceOwnerState previous = state(provinceId);
+        if (source == null || !source.hasPermission(2)) return previous;
         return store(new ProvinceOwnerState(provinceId, previous.owner(), controller));
     }
 
-    public Collection<ProvinceOwnerState> states() {
+    public synchronized Collection<ProvinceOwnerState> states() {
         return List.copyOf(states.values());
     }
 

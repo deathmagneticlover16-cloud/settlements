@@ -17,24 +17,35 @@ public final class StateTreasury {
     public static int balance(ServerLevel level, SettlementData.SettlementRecord settlement) {
         if (level == null || settlement == null) return 0;
         String key = key(settlement);
-        return key.isBlank() ? 0 : CampaignSystemsData.get(level).treasuryBalance(key);
+        if (key.isBlank()) return 0;
+        CampaignSystemsData data = CampaignSystemsData.get(level);
+        synchronized (data) { return data.treasuryBalance(key); }
     }
 
     public static void set(ServerLevel level, SettlementData.SettlementRecord settlement, int amount) {
         if (level == null || settlement == null) return;
         String key = key(settlement);
-        if (!key.isBlank()) CampaignSystemsData.get(level).setTreasuryBalance(key, Math.max(0, amount));
+        if (!key.isBlank()) {
+            CampaignSystemsData data = CampaignSystemsData.get(level);
+            synchronized (data) { data.setTreasuryBalance(key, Math.max(0, amount)); }
+        }
     }
 
     public static void change(ServerLevel level, SettlementData.SettlementRecord settlement, int amount) {
         if (level == null || settlement == null || amount == 0) return;
         String key = key(settlement);
-        if (!key.isBlank()) CampaignSystemsData.get(level).changeTreasury(key, amount);
+        if (!key.isBlank()) {
+            CampaignSystemsData data = CampaignSystemsData.get(level);
+            synchronized (data) { data.changeTreasury(key, amount); }
+        }
     }
 
     public static boolean spend(ServerLevel level, SettlementData.SettlementRecord settlement, int amount) {
         if (level == null || settlement == null) return false;
+        if (amount < 0) return false;
         String key = key(settlement);
-        return !key.isBlank() && CampaignSystemsData.get(level).spendTreasury(key, Math.max(0, amount));
+        if (key.isBlank()) return false;
+        CampaignSystemsData data = CampaignSystemsData.get(level);
+        synchronized (data) { return data.spendTreasury(key, amount); }
     }
 }

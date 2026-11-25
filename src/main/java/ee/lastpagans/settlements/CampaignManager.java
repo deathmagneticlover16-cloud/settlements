@@ -105,7 +105,7 @@ public final class CampaignManager {
                 new MapMarkersPacket(currentMapMarkers(player.getServer())));
     }
 
-    public static void broadcastMapMarkers(MinecraftServer server) {
+    public static synchronized void broadcastMapMarkers(MinecraftServer server) {
         if (server == null) return;
         MapMarkerSnapshot next = MapMarkerSnapshot.from(server.overworld());
         if (markerServer == server && next.equals(markerCache)) return;
@@ -114,7 +114,7 @@ public final class CampaignManager {
         SettlementNetwork.CHANNEL.send(PacketDistributor.ALL.noArg(), new MapMarkersPacket(next));
     }
 
-    private static MapMarkerSnapshot currentMapMarkers(MinecraftServer server) {
+    private static synchronized MapMarkerSnapshot currentMapMarkers(MinecraftServer server) {
         if (server == null) return new MapMarkerSnapshot(List.of());
         if (markerServer != server || markerCache == null) {
             markerServer = server;
@@ -123,7 +123,7 @@ public final class CampaignManager {
         return markerCache;
     }
 
-    public static void clearRuntimeState() {
+    public static synchronized void clearRuntimeState() {
         markerServer = null;
         markerCache = null;
     }
@@ -762,29 +762,33 @@ public final class CampaignManager {
     }
 
     static String transferFactionAid(ServerLevel level, String faction, SettlementData.SettlementRecord target, int manpower, int treasury, int food) {
+        if (level == null || faction == null || faction.isBlank() || target == null
+                || manpower < 0 || treasury < 0 || food < 0) return "Invalid aid transaction.";
         CampaignSystemsData extra = CampaignSystemsData.get(level);
-        if (extra.treasuryBalance(faction) < treasury) return "Your State Treasury does not have enough funds.";
-        List<SettlementData.SettlementRecord> sources = SettlementData.get(level).settlementsForFaction(faction).stream()
-                .filter(source -> !source.getId().equals(target.getId())).toList();
-        int availableMp = sources.stream().mapToInt(SettlementData.SettlementRecord::getAvailableManpower).sum();
-        int availableFood = sources.stream().mapToInt(SettlementData.SettlementRecord::getFood).sum();
-        int recipientRoom = Math.max(0, target.getMaximumManpower() - target.getUsedManpower()
-                - target.getLevyReservedManpower() - target.getAvailableManpower());
-        if (availableMp < manpower) return "Your faction settlements do not have enough available manpower.";
-        if (manpower > recipientRoom) return "The aided settlement only has room for " + recipientRoom + " more manpower.";
-        if (availableFood < food) return "Your faction settlements do not have enough food.";
-        extra.spendTreasury(faction, treasury);
-        int mpLeft = manpower, foodLeft = food;
-        for (SettlementData.SettlementRecord source : sources) {
-            int mpTake = Math.min(mpLeft, source.getAvailableManpower());
-            if (mpTake > 0) { source.spendAvailableManpower(mpTake); mpLeft -= mpTake; }
-            int foodTake = Math.min(foodLeft, source.getFood());
-            if (foodTake > 0) { source.spendFood(foodTake); foodLeft -= foodTake; }
-            if (mpLeft <= 0 && foodLeft <= 0) break;
+        synchronized (extra) {
+            if (extra.treasuryBalance(faction) < treasury) return "Your State Treasury does not have enough funds.";
+            List<SettlementData.SettlementRecord> sources = SettlementData.get(level).settlementsForFaction(faction).stream()
+                    .filter(source -> !source.getId().equals(target.getId())).toList();
+            long availableMp = sources.stream().mapToLong(SettlementData.SettlementRecord::getAvailableManpower).sum();
+            long availableFood = sources.stream().mapToLong(SettlementData.SettlementRecord::getFood).sum();
+            long recipientRoom = Math.max(0L, (long)target.getMaximumManpower() - target.getUsedManpower()
+                    - target.getLevyReservedManpower() - target.getAvailableManpower());
+            if (availableMp < manpower) return "Your faction settlements do not have enough available manpower.";
+            if (manpower > recipientRoom) return "The aided settlement only has room for " + recipientRoom + " more manpower.";
+            if (availableFood < food) return "Your faction settlements do not have enough food.";
+            if (!extra.spendTreasury(faction, treasury)) return "Your State Treasury changed; no aid was transferred.";
+            int mpLeft = manpower, foodLeft = food;
+            for (SettlementData.SettlementRecord source : sources) {
+                int mpTake = Math.min(mpLeft, source.getAvailableManpower());
+                if (mpTake > 0) { source.spendAvailableManpower(mpTake); mpLeft -= mpTake; }
+                int foodTake = Math.min(foodLeft, source.getFood());
+                if (foodTake > 0) { source.spendFood(foodTake); foodLeft -= foodTake; }
+                if (mpLeft <= 0 && foodLeft <= 0) break;
+            }
+            target.changeAvailableManpower(manpower);
+            target.changeFood(food);
+            extra.changeTreasury(StateTreasury.key(target), treasury);
         }
-        target.changeAvailableManpower(manpower);
-        target.changeFood(food);
-        StateTreasury.change(level, target, treasury);
         return null;
     }
 
@@ -1873,16 +1877,26 @@ public final class CampaignManager {
             newFactionId = baseId + "_" + suffix++;
             if (suffix > 99) return "Too many factions already use that name.";
         }
+        if (!StateTreasury.spend(player.serverLevel(), foundingSeat, treasuryCost))
+            return "Faction creation aborted because the State Treasury changed before the transaction completed.";
+        RecruitsFaction created;
         try {
             FactionEvents.createTeam(true, player, player.serverLevel(), newFactionId, displayName,
                     player.getScoreboardName(), banner, teamColor == null ? ChatFormatting.WHITE : teamColor, unitColor);
+            created = FactionEvents.recruitsFactionManager.getFactionByStringID(newFactionId);
         } catch (RuntimeException exception) {
-            return "Faction creation failed: " + exception.getClass().getSimpleName();
+            created = FactionEvents.recruitsFactionManager.getFactionByStringID(newFactionId);
+            if (created == null) {
+                StateTreasury.change(player.serverLevel(), foundingSeat, treasuryCost);
+                return "Faction creation failed: " + exception.getClass().getSimpleName()
+                        + ". The reserved State Treasury cost was refunded.";
+            }
         }
-        RecruitsFaction created = FactionEvents.recruitsFactionManager.getFactionByStringID(newFactionId);
-        if (created == null) return "Faction creation failed: Recruits did not confirm creation. Check its configured creation requirements/cost and try again.";
+        if (created == null) {
+            StateTreasury.change(player.serverLevel(), foundingSeat, treasuryCost);
+            return "Faction creation failed: Recruits did not confirm creation. The reserved State Treasury cost was refunded.";
+        }
 
-        StateTreasury.spend(player.serverLevel(), foundingSeat, treasuryCost);
         foundingSeat.addChronicle("The State Treasury contributed " + treasuryCost + " to the founding of " + displayName + ".");
         BackingFactionManager.migrateOwnedSettlementsToPoliticalFaction(player, newFactionId);
         CampaignData campaign = CampaignData.get(player.serverLevel());

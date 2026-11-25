@@ -2,6 +2,7 @@ package ee.lastpagans.settlements.mixin;
 
 import com.wildfire.main.networking.PacketSendGenderInfo;
 import ee.lastpagans.settlements.compat.wildfire.SettlementsWildfireAuthority;
+import ee.lastpagans.settlements.network.ClientActionLimiter;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,7 +21,8 @@ public abstract class WildfireGenderPacketAuthorityMixin {
         NetworkEvent.Context context = supplier.get();
         ServerPlayer sender = context.getSender();
         if (!SettlementsWildfireAuthority.isManaged(sender)) return;
-        context.enqueueWork(() -> SettlementsWildfireAuthority.reassert(sender, true));
+        if (ClientActionLimiter.allow(sender, "blocked-wildfire-body-update", 20))
+            context.enqueueWork(() -> SettlementsWildfireAuthority.reassert(sender, true));
         context.setPacketHandled(true);
         ci.cancel();
     }

@@ -25,6 +25,7 @@ import java.util.UUID;
  */
 public final class CampaignData extends SavedData {
     private static final String DATA_NAME = "settlements_campaign";
+    private static final int MAX_PERSISTED_RECORDS = 10_000;
 
     private final Map<String, SettlementVisualRecord> settlementVisuals = new HashMap<>();
     private final Map<String, RosterRecord> rosters = new LinkedHashMap<>();
@@ -59,11 +60,11 @@ public final class CampaignData extends SavedData {
         CampaignData data = new CampaignData();
         data.rosters.clear();
 
-        for (Tag raw : tag.getList("SettlementVisuals", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("SettlementVisuals", Tag.TAG_COMPOUND))) {
             SettlementVisualRecord record = SettlementVisualRecord.fromNBT((CompoundTag) raw);
             if (!record.settlementId.isBlank()) data.settlementVisuals.put(record.settlementId, record);
         }
-        for (Tag raw : tag.getList("Rosters", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("Rosters", Tag.TAG_COMPOUND))) {
             RosterRecord roster = RosterRecord.fromNBT((CompoundTag) raw);
             if (!roster.id.isBlank()) data.rosters.put(roster.id, roster);
         }
@@ -71,50 +72,57 @@ public final class CampaignData extends SavedData {
         data.defaultRoster = SettlementData.normalizeId(tag.getString("DefaultRoster"));
         if (!data.rosters.containsKey(data.defaultRoster)) data.defaultRoster = data.rosters.keySet().iterator().next();
 
-        for (Tag raw : tag.getList("FactionRosters", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("FactionRosters", Tag.TAG_COMPOUND))) {
             CompoundTag entry = (CompoundTag) raw;
             String faction = entry.getString("Faction");
             String roster = SettlementData.normalizeId(entry.getString("Roster"));
             if (!faction.isBlank() && data.rosters.containsKey(roster)) data.factionRoster.put(faction, roster);
         }
-        for (Tag raw : tag.getList("Diplomacy", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("Diplomacy", Tag.TAG_COMPOUND))) {
             DiplomacyRecord record = DiplomacyRecord.fromNBT((CompoundTag) raw);
             if (!record.a.isBlank() && !record.b.isBlank()) data.diplomacy.put(FactionPair.of(record.a, record.b), record);
         }
-        for (Tag raw : tag.getList("Proposals", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("Proposals", Tag.TAG_COMPOUND))) {
             DiplomacyProposal proposal = DiplomacyProposal.fromNBT((CompoundTag) raw);
             data.proposals.put(proposal.id, proposal);
         }
-        for (Tag raw : tag.getList("Vassalages", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("Vassalages", Tag.TAG_COMPOUND))) {
             VassalageRecord record = VassalageRecord.fromNBT((CompoundTag) raw);
             if (!record.vassal.isBlank() && !record.overlord.isBlank() && !record.vassal.equals(record.overlord)) {
                 data.vassalages.put(record.vassal, record);
             }
         }
-        for (Tag raw : tag.getList("Wars", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("Wars", Tag.TAG_COMPOUND))) {
             WarRecord war = WarRecord.fromNBT((CompoundTag) raw);
             data.wars.put(war.id, war);
         }
-        for (Tag raw : tag.getList("Reliability", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("Reliability", Tag.TAG_COMPOUND))) {
             CompoundTag entry = (CompoundTag) raw;
             String faction = entry.getString("Faction");
             if (!faction.isBlank()) data.factionReliability.put(faction, clamp(entry.getInt("Value"), -100, 100));
         }
-        for (Tag raw : tag.getList("Marriages", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("Marriages", Tag.TAG_COMPOUND))) {
             MarriageRecord marriage = MarriageRecord.fromNBT((CompoundTag) raw);
             if (marriage.playerId != null && marriage.spousePlayerId != null)
                 data.marriages.put(marriage.playerId, marriage);
         }
-        for (Tag raw : tag.getList("FactionProfiles", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("FactionProfiles", Tag.TAG_COMPOUND))) {
             FactionProfile profile = FactionProfile.fromNBT((CompoundTag) raw);
             if (!profile.factionId.isBlank()) data.factionProfiles.put(profile.factionId, profile);
         }
-        for (Tag raw : tag.getList("WorldNews", Tag.TAG_COMPOUND)) {
+        for (Tag raw : bounded(tag.getList("WorldNews", Tag.TAG_COMPOUND))) {
             WorldNewsEntry entry = WorldNewsEntry.fromNBT((CompoundTag) raw);
             if (!entry.headline.isBlank()) data.worldNews.add(entry);
         }
         data.trimWorldNews();
         return data;
+    }
+
+    private static Iterable<Tag> bounded(ListTag values) {
+        int count = Math.min(MAX_PERSISTED_RECORDS, values.size());
+        List<Tag> bounded = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) bounded.add(values.get(i));
+        return bounded;
     }
 
     @Override

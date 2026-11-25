@@ -47,7 +47,7 @@ public final class MilitaryManager {
         MilitaryData data = MilitaryData.get(player.serverLevel());
         if (data.training(settlement.getId()).size() >= 256) return "This settlement's training queue is full.";
         MilitaryData.ReservePool pool = data.pool(settlement.getId(), type);
-        int queued = data.training(settlement.getId()).stream().filter(value -> value.type == type).mapToInt(MilitaryData.TrainingOrder::remaining).sum();
+        long queued = data.training(settlement.getId()).stream().filter(value -> value.type == type).mapToLong(MilitaryData.TrainingOrder::remaining).sum();
         int capacity = SettlementConfig.RESERVE_CAPACITY.get(type).get();
         if ((long)pool.total() + queued + quantity > capacity)
             return "Reserve capacity allows only " + Math.max(0, capacity - pool.total() - queued) + " more " + type.displayName() + ".";
@@ -84,10 +84,10 @@ public final class MilitaryManager {
         if (order == null) return "That training order is already complete or canceled.";
         int remaining = order.remaining();
         if (!data.removeTraining(settlement.getId(), order.id)) return "That training order was already canceled.";
-        setNativeMilli(data, settlement, nativeMilli(data, settlement) + order.remainingNative() * order.mpMilliPerSoldier);
+        setNativeMilli(data, settlement, saturatingAdd(nativeMilli(data, settlement), (long)order.remainingNative() * order.mpMilliPerSoldier));
         setForeignMilli(data, player.serverLevel(), settlement,
-                foreignMilli(data, player.serverLevel(), settlement) + order.remainingForeign() * order.mpMilliPerSoldier);
-        StateTreasury.change(player.serverLevel(), settlement, remaining * order.silverPerSoldier);
+                saturatingAdd(foreignMilli(data, player.serverLevel(), settlement), (long)order.remainingForeign() * order.mpMilliPerSoldier));
+        StateTreasury.change(player.serverLevel(), settlement, saturatingInt((long)remaining * order.silverPerSoldier));
         refreshForeignPressure(player.serverLevel(), settlement, data);
         settlement.addChronicle("Canceled the unfinished portion of a " + order.type.displayName() + " training order.");
         return "Canceled " + remaining + " untrained " + plural(order.type, remaining) + "; unused MP and Silver were refunded once.";
@@ -307,7 +307,9 @@ public final class MilitaryManager {
         }
     }
 
-    private static int nativeMilli(MilitaryData data, SettlementData.SettlementRecord settlement) { return settlement.getAvailableManpower() * 1000 + data.nativeCredit(settlement.getId()); }
+    private static int nativeMilli(MilitaryData data, SettlementData.SettlementRecord settlement) {
+        return saturatingInt((long)settlement.getAvailableManpower() * 1000L + data.nativeCredit(settlement.getId()));
+    }
     private static int foreignMilli(MilitaryData data, ServerLevel level, SettlementData.SettlementRecord settlement) {
         return data.integratedForeignMilli(settlement.getId());
     }
@@ -319,6 +321,8 @@ public final class MilitaryManager {
     private static void setNativeMilli(MilitaryData data, SettlementData.SettlementRecord settlement, int total) {
         int safe = Math.max(0, total); settlement.setAvailableManpower(safe / 1000); data.setNativeCredit(settlement.getId(), safe % 1000);
     }
+    private static int saturatingAdd(int current, long delta) { return saturatingInt((long)current + delta); }
+    private static int saturatingInt(long value) { return (int)Math.max(0L, Math.min(Integer.MAX_VALUE, value)); }
     private static void setForeignMilli(MilitaryData data, ServerLevel level, SettlementData.SettlementRecord settlement, int total) {
         data.setIntegratedForeignMilli(settlement.getId(), Math.max(0, total));
     }

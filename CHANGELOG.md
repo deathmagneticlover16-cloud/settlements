@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.0.1
+
+- Hardened every integrated campaign-map serverbound army route with authenticated ownership checks, per-player/per-action flood control, finite/range validation, and bounded formation sizes.
+- Made State Treasury spending atomic under concurrent callbacks, rejected negative spends, and protected war-aid transfers from stale-balance double spending and integer overflow.
+- Changed faction founding to reserve its treasury cost before the cross-mod Recruits operation and refund only when creation is confirmed not to have occurred.
+- Bounded campaign-army and military-queue save loading, packed entity counts, path sizes, group sizes, and per-settlement queues; malformed or non-finite records are skipped or sanitized.
+- Redacted enemy commander details, food, and fatigue outside their intended observation ranges and prevented cross-dimension coordinate matching from granting strategic intelligence.
+- Added rate-limited security audit logging and regression checks for negative spending, concurrent double-spend resistance, and saturating reserve arithmetic.
+- Bumped Settlements protocol to 49 and campaign-map protocol to 8. Icy's Better Horses remains a required dependency.
+
 ## 6.0.0
 
 ### Campaign map

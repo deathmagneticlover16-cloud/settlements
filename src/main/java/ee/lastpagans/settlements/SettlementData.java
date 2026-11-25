@@ -26,6 +26,8 @@ import java.util.UUID;
 
 public final class SettlementData extends SavedData {
     private static final String DATA_NAME = "settlements_core";
+    private static final int MAX_PERSISTED_SETTLEMENTS = 10_000;
+    private static final int MAX_PERSISTED_PLAYERS = 100_000;
 
     private final Map<String, SettlementRecord> settlements = new LinkedHashMap<>();
     private final Collection<SettlementRecord> settlementsView = Collections.unmodifiableCollection(settlements.values());
@@ -42,7 +44,9 @@ public final class SettlementData extends SavedData {
         SettlementData data = new SettlementData();
 
         if (tag.contains("Settlements", Tag.TAG_LIST)) {
+            int loaded = 0;
             for (Tag raw : tag.getList("Settlements", Tag.TAG_COMPOUND)) {
+                if (loaded++ >= MAX_PERSISTED_SETTLEMENTS) break;
                 SettlementRecord settlement = SettlementRecord.fromNBT((CompoundTag) raw, data);
                 if (!settlement.id.isBlank()) {
                     data.settlements.put(settlement.id, settlement);
@@ -51,7 +55,9 @@ public final class SettlementData extends SavedData {
         }
 
         if (tag.contains("Selections", Tag.TAG_LIST)) {
+            int loaded = 0;
             for (Tag raw : tag.getList("Selections", Tag.TAG_COMPOUND)) {
+                if (loaded++ >= MAX_PERSISTED_PLAYERS) break;
                 CompoundTag entry = (CompoundTag) raw;
                 if (entry.hasUUID("Player")) {
                     String id = normalizeId(entry.getString("Settlement"));
@@ -63,7 +69,9 @@ public final class SettlementData extends SavedData {
         }
 
         if (tag.contains("Characters", Tag.TAG_LIST)) {
+            int loaded = 0;
             for (Tag raw : tag.getList("Characters", Tag.TAG_COMPOUND)) {
+                if (loaded++ >= MAX_PERSISTED_PLAYERS) break;
                 CharacterRecord character = CharacterRecord.fromNBT((CompoundTag) raw);
                 if (character.playerId != null) {
                     data.characters.put(character.playerId, character);
